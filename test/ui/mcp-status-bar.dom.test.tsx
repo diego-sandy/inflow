@@ -29,7 +29,8 @@ it('shows the disconnected state and reveals setup instructions', () => {
   expect(screen.getByText(/Claude not connected/i)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
-  expect(screen.getByText(/inflow\/mcp-companion/)).toBeInTheDocument();
+  expect(screen.getByText(/Claude Desktop extension/i)).toBeInTheDocument();
+  expect(screen.getByText(/inflow\.mcpb/)).toBeInTheDocument();
   expect(screen.getByText(/copy config/i)).toBeInTheDocument();
   expect(screen.getByPlaceholderText(/Pairing code/i)).toBeInTheDocument();
 });

@@ -26,9 +26,8 @@ export function McpStatusBar() {
   const [code, setCode] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Not published to npm yet — the companion runs from the local inflow checkout.
   const CLAUDE_CONFIG = JSON.stringify(
-    { mcpServers: { inflow: { command: 'node', args: ['/absolute/path/to/inflow/mcp-companion/src/index.mjs'] } } },
+    { mcpServers: { inflow: { command: 'npx', args: ['-y', 'inflow-mcp'] } } },
     null,
     2,
   );
@@ -118,45 +117,58 @@ export function McpStatusBar() {
       )}
 
       {showSetup && !connected && (
-        <div className="border-t border-edge px-3 py-2.5 text-xs leading-relaxed text-fg-secondary">
-          <p className="font-medium text-fg-strong">Let Claude work with your network</p>
-          <p className="mt-1 text-[11px] text-fg-faint">
-            The inflow companion isn’t on npm yet, so for now it runs from your inflow checkout.
-          </p>
-          <ol className="mt-1.5 ml-4 list-decimal space-y-1.5 marker:text-fg-faint">
-            <li>
-              In <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow/mcp-companion</code>, run{' '}
-              <code className="rounded bg-surface px-1 py-0.5 font-mono">npm install</code> once.
-            </li>
-            <li>
-              Add inflow to Claude Desktop’s config (
-              <button
-                onClick={copyConfig}
-                className="cursor-pointer rounded bg-surface px-1 py-0.5 font-mono text-blue-600 hover:underline dark:text-blue-300"
-              >
-                {copied ? 'copied ✓' : 'copy config'}
-              </button>
-              ) — set the path to your checkout — then restart Claude.
-            </li>
-            <li>It connects automatically; if not, paste the companion’s pairing code below.</li>
-          </ol>
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void pairAndConnect(); }}
-              placeholder="Pairing code"
-              className="min-w-0 flex-1 rounded-md bg-surface-input px-2.5 py-1.5 text-xs text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
-            />
-            <button
-              onClick={() => void pairAndConnect()}
-              disabled={!code.trim()}
-              className="shrink-0 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:opacity-40 dark:text-blue-300"
-            >
-              Pair &amp; connect
-            </button>
+        <div className="space-y-3 border-t border-edge px-3 py-2.5 text-xs leading-relaxed text-fg-secondary">
+          <p className="font-medium text-fg-strong">Connect Claude to your network</p>
+
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+              Recommended · Claude Desktop extension
+            </p>
+            <ol className="mt-1 ml-4 list-decimal space-y-1 marker:text-fg-faint">
+              <li>Download <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow.mcpb</code> from the inflow releases page.</li>
+              <li>Open it in Claude Desktop → Settings → Extensions → Install, then restart Claude. No terminal or config editing.</li>
+            </ol>
           </div>
-          <p className="mt-2 text-[11px] text-fg-faint">
+
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">Advanced · npx / other MCP clients</p>
+            <ol className="mt-1 ml-4 list-decimal space-y-1 marker:text-fg-faint">
+              <li>
+                Add inflow to Claude Desktop’s config (
+                <button
+                  onClick={copyConfig}
+                  className="cursor-pointer rounded bg-surface px-1 py-0.5 font-mono text-blue-600 hover:underline dark:text-blue-300"
+                >
+                  {copied ? 'copied ✓' : 'copy config'}
+                </button>
+                ), then restart Claude. Uses <code className="rounded bg-surface px-1 py-0.5 font-mono">npx inflow-mcp</code>.
+              </li>
+            </ol>
+          </div>
+
+          <div>
+            <p className="text-[11px] text-fg-faint">
+              Then paste the companion’s pairing code (it prints one; run <code className="rounded bg-surface px-1 py-0.5 font-mono">npx inflow-mcp --config</code> to see it):
+            </p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void pairAndConnect(); }}
+                placeholder="Pairing code"
+                className="min-w-0 flex-1 rounded-md bg-surface-input px-2.5 py-1.5 text-xs text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+              />
+              <button
+                onClick={() => void pairAndConnect()}
+                disabled={!code.trim()}
+                className="shrink-0 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:opacity-40 dark:text-blue-300"
+              >
+                Pair &amp; connect
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-fg-faint">
             Claude only reads your network and drafts messages — it never sends. You always send from the Outbox.
           </p>
         </div>

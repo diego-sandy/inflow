@@ -9,12 +9,31 @@
   "files": [
     "src"
   ],
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "claude",
+    "linkedin",
+    "inflow"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grinich/inflow.git",
+    "directory": "mcp-companion"
+  },
+  "scripts": {
+    "validate": "mcpb validate manifest.json",
+    "pack": "mcpb pack . inflow.mcpb"
+  },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^1.0.0"
   },
   "license": "MIT"
 }

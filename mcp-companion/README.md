@@ -8,18 +8,6 @@ Local MCP companion for the [inflow](../) LinkedIn extension. It lets **Claude D
 
 Claude can **see** your network and **draft** messages into your Outbox — it can **never send**. Sending always stays a manual action inside inflow.
 
-## Setup
-
-1. Install deps and see your pairing code + config snippet:
-   ```bash
-   cd mcp-companion && npm install
-   npx inflow-mcp --config
-   ```
-2. Add the printed block to Claude Desktop's `claude_desktop_config.json`, then restart Claude Desktop. Claude will launch the companion itself.
-3. In inflow, open **Outbox → Connect Claude**, run `npx inflow-mcp` once to read the pairing code (printed to stderr), and paste it in. The status bar turns green when connected.
-
-The pairing code is generated once and persisted at `~/.inflow-mcp/token`, so Claude's launched instance and your inflow use the same code.
-
 ## How it works
 
 ```
@@ -27,12 +15,48 @@ Claude Desktop  ──stdio (MCP)──▶  inflow-mcp  ──ws://127.0.0.1:812
    (client)                        (relay)                               (tools + your data)
 ```
 
-- The extension sends `hello` with the pairing token and its tool descriptors.
-- The companion exposes those tools to Claude via `tools/list`.
-- Each `tools/call` is relayed to the extension and the result returned to Claude.
+The extension sends `hello` (pairing token + tool descriptors); the companion exposes those tools to Claude and relays each `tools/call`. It notifies Claude when tools appear/disappear, exits when Claude quits (no orphaned port holders), and retries the port if a stale instance is still up.
 
-Port override: `INFLOW_MCP_PORT` (default `8123`). Keep it in sync with the extension's default.
+---
 
-## Status
+## Distribution
 
-Authored alongside the extension bridge but **not yet run against a live Claude Desktop** — verify the MCP handshake and a `tools/call` round-trip once, then publish to npm as `inflow-mcp`.
+Two ways to ship this to users. Both end with the same experience in inflow: open **MCP connector**, and it connects.
+
+### 1. Claude Desktop Extension (`.mcpb`) — recommended, no terminal
+
+A one-click bundle users install from Claude Desktop (**Settings → Extensions**). It carries the server + bundled `node_modules` and auto-configures Claude — no npm, no config editing.
+
+```bash
+cd mcp-companion
+npm install
+npm run pack        # -> inflow.mcpb  (validate first with: npm run validate)
+```
+
+Attach `inflow.mcpb` to a GitHub Release. Users download it and open it in Claude Desktop to install.
+
+### 2. npm (`npx`) — for power users / other MCP clients (Codex, etc.)
+
+```bash
+cd mcp-companion
+npm publish         # publishes `inflow-mcp` (needs an npm account; name must be free)
+```
+
+Then users add this to Claude Desktop's `claude_desktop_config.json` and restart Claude:
+
+```json
+{ "mcpServers": { "inflow": { "command": "npx", "args": ["-y", "inflow-mcp"] } } }
+```
+
+### Local dev (no publish)
+
+```bash
+cd mcp-companion && npm install
+npx inflow-mcp --config   # prints your pairing code + a local config block (node + this path)
+```
+
+## Pairing
+
+The companion prints a pairing code (persisted at `~/.inflow-mcp/token`). Paste it into inflow → **MCP connector → Connect Claude**. After the first pair, inflow reconnects automatically. Run `npx inflow-mcp --config` (or `node src/index.mjs --config`) any time to see the code.
+
+Port override: `INFLOW_MCP_PORT` (default `8123`) — keep it in sync with the extension.

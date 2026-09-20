@@ -215,3 +215,11 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 printSetup();
 await server.connect(new StdioServerTransport());
 log('MCP server ready (stdio).');
+
+// Exit when Claude disconnects so we never orphan a process that keeps holding
+// the WS port (which would block the next launch from binding). Cover the MCP
+// transport close, a closed stdin, and the usual termination signals.
+server.onclose = () => { log('Claude disconnected — exiting'); process.exit(0); };
+process.stdin.on('close', () => process.exit(0));
+process.stdin.on('end', () => process.exit(0));
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => process.exit(0));

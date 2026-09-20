@@ -1,0 +1,10 @@
+# Trim dev-only weight from bundled deps
+**/*.map
+**/*.ts
+**/test/**
+**/tests/**
+**/__tests__/**
+**/.github/**
+**/docs/**
+**/*.md
+node_modules/**/src/**

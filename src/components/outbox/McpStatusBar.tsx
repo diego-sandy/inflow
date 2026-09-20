@@ -43,6 +43,15 @@ export function McpStatusBar() {
   const meta = STATUS_META[status];
   const connected = status === 'connected';
 
+  // The companion bundle ships inside the extension for a one-click download.
+  const mcpbUrl = (() => {
+    try {
+      return chrome.runtime.getURL('inflow.mcpb');
+    } catch {
+      return '#';
+    }
+  })();
+
   const pairAndConnect = async () => {
     const token = code.trim();
     if (!token) return;
@@ -125,9 +134,19 @@ export function McpStatusBar() {
               Recommended · Claude Desktop extension
             </p>
             <ol className="mt-1 ml-4 list-decimal space-y-1 marker:text-fg-faint">
-              <li>Download <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow.mcpb</code> from the inflow releases page.</li>
-              <li>Open it in Claude Desktop → Settings → Extensions → Install, then restart Claude. No terminal or config editing.</li>
+              <li>Download the inflow companion below.</li>
+              <li>In Claude Desktop → Settings → Extensions, install the downloaded <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow.mcpb</code>, then restart Claude.</li>
             </ol>
+            <a
+              href={mcpbUrl}
+              download="inflow.mcpb"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
+              </svg>
+              Download inflow.mcpb
+            </a>
           </div>
 
           <div>
@@ -148,7 +167,7 @@ export function McpStatusBar() {
 
           <div>
             <p className="text-[11px] text-fg-faint">
-              Then paste the companion’s pairing code (it prints one; run <code className="rounded bg-surface px-1 py-0.5 font-mono">npx inflow-mcp --config</code> to see it):
+              First time only — paste the companion’s pairing code, then it reconnects on its own. To see the code, run <code className="rounded bg-surface px-1 py-0.5 font-mono">npx inflow-mcp --config</code> once.
             </p>
             <div className="mt-1.5 flex items-center gap-2">
               <input

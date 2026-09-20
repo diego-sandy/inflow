@@ -9,6 +9,7 @@
     "dev": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
+    "pack:companion": "cd mcp-companion && npm install && npm run pack && cp inflow.mcpb ../public/inflow.mcpb",
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",

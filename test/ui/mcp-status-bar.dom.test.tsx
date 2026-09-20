@@ -30,7 +30,9 @@ it('shows the disconnected state and reveals setup instructions', () => {
 
   fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
   expect(screen.getByText(/Claude Desktop extension/i)).toBeInTheDocument();
-  expect(screen.getByText(/inflow\.mcpb/)).toBeInTheDocument();
+  // One-click download of the bundled companion.
+  const dl = screen.getByRole('link', { name: /Download inflow\.mcpb/i });
+  expect(dl).toHaveAttribute('download', 'inflow.mcpb');
   expect(screen.getByText(/copy config/i)).toBeInTheDocument();
   expect(screen.getByPlaceholderText(/Pairing code/i)).toBeInTheDocument();
 });

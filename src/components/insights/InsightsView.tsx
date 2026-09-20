@@ -130,7 +130,7 @@ export function InsightsView() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
-            <div className="mx-auto w-full max-w-[1600px]">
+            <div className="w-full">
               {tab === 'charts' && (
                 <div className="space-y-5">
                   {topRole && (
@@ -158,15 +158,11 @@ export function InsightsView() {
                       Categorize your connections to see charts here.
                     </p>
                   ) : (
-                    <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-1 items-start gap-x-10 gap-y-8 md:grid-cols-2 xl:grid-cols-3">
                       {charts.map((c) => (
-                        <div key={c.key} data-chart-card={c.key} className="overflow-hidden rounded-xl bg-surface-raised ring-1 ring-inset ring-edge">
-                          <div className="border-b border-edge px-5 py-3">
-                            <h3 className="text-sm font-semibold text-fg-strong">{c.title}</h3>
-                          </div>
-                          <div className="p-5">
-                            <ChartSection data={c.data} />
-                          </div>
+                        <div key={c.key} data-chart-card={c.key} className="min-w-0">
+                          <h3 className="mb-3 text-sm font-semibold text-fg-strong">{c.title}</h3>
+                          <ChartSection data={c.data} />
                         </div>
                       ))}
                     </div>
@@ -174,17 +170,9 @@ export function InsightsView() {
                 </div>
               )}
 
-              {tab === 'followups' && (
-                <div className="rounded-xl bg-surface-raised p-5 ring-1 ring-inset ring-edge">
-                  <FollowUpsSection />
-                </div>
-              )}
+              {tab === 'followups' && <FollowUpsSection />}
 
-              {tab === 'suggestions' && (
-                <div className="rounded-xl bg-surface-raised p-5 ring-1 ring-inset ring-edge">
-                  <AISuggestionsSection />
-                </div>
-              )}
+              {tab === 'suggestions' && <AISuggestionsSection />}
             </div>
           </div>
         </>

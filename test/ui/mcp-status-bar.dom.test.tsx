@@ -29,7 +29,7 @@ it('shows the disconnected state and reveals setup instructions', () => {
   expect(screen.getByText(/Claude not connected/i)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
-  expect(screen.getByText(/npx inflow-mcp/)).toBeInTheDocument();
+  expect(screen.getByText(/inflow\/mcp-companion/)).toBeInTheDocument();
   expect(screen.getByText(/copy config/i)).toBeInTheDocument();
   expect(screen.getByPlaceholderText(/Pairing code/i)).toBeInTheDocument();
 });
@@ -54,11 +54,14 @@ it('shows connected state and disconnects', async () => {
   await waitFor(() => expect(clearPairingToken).toHaveBeenCalled());
 });
 
-it('renders the live activity feed', () => {
+it('reveals the connection log when the status is clicked', () => {
   act(() => useUIStore.setState({
     mcpStatus: 'connected',
     mcpActivity: [{ id: '1', at: Date.now(), text: 'Claude searched your connections for “investors”' }],
   }));
   render(<McpStatusBar />);
+  // Hidden until the status is clicked (like the inbox "Up to date" popover).
+  expect(screen.queryByText(/searched your connections/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Claude connected/i }));
   expect(screen.getByText(/searched your connections/i)).toBeInTheDocument();
 });

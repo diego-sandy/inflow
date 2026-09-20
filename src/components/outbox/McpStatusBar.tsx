@@ -88,11 +88,16 @@ export function McpStatusBar() {
         <button
           onClick={() => setLogsOpen((v) => !v)}
           aria-expanded={logsOpen}
-          title="Show connection log"
+          title="Show activity log"
           className="flex items-center gap-1.5 text-sm font-medium text-fg-strong"
         >
           <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
           {meta.label}
+          {activity.length > 0 && (
+            <span className="rounded-full bg-surface-input px-1.5 text-[10px] font-semibold tabular-nums text-fg-muted">
+              {activity.length}
+            </span>
+          )}
           <svg className={`h-3 w-3 text-fg-faint transition-transform ${logsOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
         </button>
         <span className="flex-1" />
@@ -129,9 +134,9 @@ export function McpStatusBar() {
       {/* Inline log — connection events + what Claude did. */}
       {logsOpen && (
         <div className="border-t border-edge px-3 py-2">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">Connection log</p>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">Activity</p>
           {activity.length === 0 ? (
-            <p className="py-1 text-xs text-fg-faint">No activity yet.</p>
+            <p className="py-1 text-xs text-fg-faint">Connection events, Claude’s reads and drafts, and your sends show up here.</p>
           ) : (
             <ul className="max-h-48 space-y-1 overflow-y-auto">
               {activity.map((a) => (
@@ -224,7 +229,7 @@ export function McpStatusBar() {
           </div>
 
           <p className="text-[11px] text-fg-faint">
-            inflow connects automatically once Claude has the code. Claude only reads your network and drafts messages — it never sends. You always send from the Outbox.
+            inflow connects automatically once Claude has the code. Claude only reads your network and drafts messages — it never sends. You always send, from your Inbox.
           </p>
         </div>
       )}

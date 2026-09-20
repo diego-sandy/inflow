@@ -40,7 +40,7 @@ afterEach(async () => {
 
 it('shows an empty state when the outbox is empty', async () => {
   render(<OutboxView />);
-  expect(await screen.findByText(/Nothing here yet/i)).toBeInTheDocument();
+  expect(await screen.findByText(/No drafts or scheduled sends yet/i)).toBeInTheDocument();
 });
 
 it('lists a draft under Drafts and sends it now', async () => {

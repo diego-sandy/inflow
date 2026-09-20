@@ -96,6 +96,9 @@ export function OutboxRow({ msg, ready }: { msg: ScheduledMessage; ready?: boole
         : await sendBridgeMessage({ type: 'CREATE_CONVERSATION', recipientUrns: msg.recipientUrns, body: msg.body });
       if (res.success) {
         await save({ status: 'sent', sentAt: Date.now() });
+        // Sent items don't linger in the queue anymore — they surface in the
+        // connector's activity log instead.
+        useUIStore.getState().pushMcpActivity(`Sent to ${msg.recipientName || 'Unknown'}`);
         showToast({ message: `Message sent to ${msg.recipientName}` });
       } else {
         await save({ status: 'failed', error: res.error || 'Send failed' });

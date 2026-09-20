@@ -1,62 +1,106 @@
 # inflow-mcp
 
-Local MCP companion for the [inflow](../) LinkedIn extension. It lets **Claude Desktop** use your inflow data as a toolbox — searching your connections, reading network stats, and drafting messages into your Outbox.
+Local MCP companion for the [inflow](../) LinkedIn extension. It lets **Claude** (and other MCP clients) use your inflow data as a toolbox — searching your connections, reading network stats, and drafting messages into your Outbox.
 
-**inflow is the toolbox; Claude is the brain.** This companion is a thin relay: the real tools live in the inflow browser extension, which connects out to this process over `127.0.0.1`. Claude connects to this process over stdio (MCP).
+**inflow is the toolbox; the AI is the brain.** This companion is a thin relay: the real tools live in the inflow browser extension, which connects out to this process over `127.0.0.1`. The MCP client connects to this process over stdio.
 
 ## Safety
 
-Claude can **see** your network and **draft** messages into your Outbox — it can **never send**. Sending always stays a manual action inside inflow.
+The AI can **see** your network and **draft** messages into your Outbox — it can **never send**. Sending always stays a manual action inside inflow.
 
 ## How it works
 
 ```
-Claude Desktop  ──stdio (MCP)──▶  inflow-mcp  ──ws://127.0.0.1:8123──▶  inflow extension tab
-   (client)                        (relay)                               (tools + your data)
+MCP client  ──stdio (MCP)──▶  inflow-mcp  ──ws://127.0.0.1:8123──▶  inflow extension tab
+ (the brain)                   (relay)                                (tools + your data)
 ```
 
-The extension sends `hello` (pairing token + tool descriptors); the companion exposes those tools to Claude and relays each `tools/call`. It notifies Claude when tools appear/disappear, exits when Claude quits (no orphaned port holders), and retries the port if a stale instance is still up.
+inflow generates a **pairing code** and shows it in the app (MCP connector → Connect Claude). The client passes that code to the companion (`INFLOW_PAIRING_CODE`); the companion only accepts the extension's WebSocket handshake when the codes match. It notifies the client when tools appear/disappear, exits when the client quits (no orphaned port holders), and retries the port if a stale instance is still up.
 
 ---
 
-## Distribution
+## Install
 
-Two ways to ship this to users. Both end with the same experience in inflow: open **MCP connector**, and it connects.
+### A · Claude Desktop app — recommended, no terminal
 
-### 1. Claude Desktop Extension (`.mcpb`) — recommended, no terminal
+Use the bundled extension. This is the whole story for the desktop app — no npm, no config editing.
 
-A one-click bundle users install from Claude Desktop (**Settings → Extensions**). It carries the server + bundled `node_modules` and auto-configures Claude — no npm, no config editing.
+1. In inflow → **MCP connector → Connect Claude**, copy your **pairing code** and click **Download inflow.mcpb**.
+2. In Claude Desktop → **Settings → Extensions**, install the downloaded `inflow.mcpb`.
+3. When prompted, paste the pairing code, then restart Claude.
+
+inflow connects on its own.
+
+### B · CLI / other MCP clients (Claude Code CLI, Codex, Cline, …)
+
+These clients don't take a `.mcpb` — they run a **command**. Two ways:
+
+**B1 · From a clone (works today, no publish):**
+
+```bash
+git clone <inflow repo>
+cd inflow/mcp-companion
+npm install
+npm install -g .      # puts `inflow-mcp` on your PATH (or use `node <path>` below)
+```
+
+Then point the client at it, with your pairing code from inflow:
+
+```json
+{
+  "mcpServers": {
+    "inflow": {
+      "command": "inflow-mcp",
+      "env": { "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE" }
+    }
+  }
+}
+```
+
+If you skip the global install, use the file directly:
+
+```json
+{
+  "mcpServers": {
+    "inflow": {
+      "command": "node",
+      "args": ["/absolute/path/to/inflow/mcp-companion/src/index.mjs"],
+      "env": { "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE" }
+    }
+  }
+}
+```
+
+**B2 · Via npm (only after publishing — see below):** once `inflow-mcp` is on npm, the command becomes `npx -y inflow-mcp` (same `env`). No clone needed.
+
+Restart the client after editing its config.
+
+---
+
+## Building & releasing (maintainers)
+
+### Build the `.mcpb`
 
 ```bash
 cd mcp-companion
 npm install
-npm run pack        # -> inflow.mcpb  (validate first with: npm run validate)
+npm run validate      # check manifest.json
+npm run pack          # -> inflow.mcpb (bundles node_modules)
 ```
 
-Attach `inflow.mcpb` to a GitHub Release. Users download it and open it in Claude Desktop to install.
+From the repo root, `npm run pack:companion` packs it and copies it into `public/inflow.mcpb` so the extension serves the one-click download. Re-run it whenever the companion changes.
 
-### 2. npm (`npx`) — for power users / other MCP clients (Codex, etc.)
+### Publish to npm (optional — only to enable `npx inflow-mcp` for CLI clients)
 
 ```bash
 cd mcp-companion
-npm publish         # publishes `inflow-mcp` (needs an npm account; name must be free)
+npm login
+npm publish           # public registry; the name `inflow-mcp` must be free
 ```
 
-Then users add this to Claude Desktop's `claude_desktop_config.json` and restart Claude:
+Skip this unless you specifically want the `npx inflow-mcp` convenience for non-Desktop clients — the `.mcpb` and the from-a-clone path don't need it.
 
-```json
-{ "mcpServers": { "inflow": { "command": "npx", "args": ["-y", "inflow-mcp"] } } }
-```
+## Pairing & config
 
-### Local dev (no publish)
-
-```bash
-cd mcp-companion && npm install
-npx inflow-mcp --config   # prints your pairing code + a local config block (node + this path)
-```
-
-## Pairing
-
-The companion prints a pairing code (persisted at `~/.inflow-mcp/token`). Paste it into inflow → **MCP connector → Connect Claude**. After the first pair, inflow reconnects automatically. Run `npx inflow-mcp --config` (or `node src/index.mjs --config`) any time to see the code.
-
-Port override: `INFLOW_MCP_PORT` (default `8123`) — keep it in sync with the extension.
+- The code is generated by inflow and shown in **MCP connector → Connect Claude**. After the client has it once, inflow reconnects automatically.
+- Port override: `INFLOW_MCP_PORT` (default `8123`) — keep it in sync with the extension.

@@ -894,7 +894,7 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
               disabled={!hasContent}
               aria-label={cmdHeld && hasContent ? 'Send and archive' : 'Send'}
               title={cmdHeld && hasContent ? 'Send and archive (⌘↵)' : 'Send (↵) — hold ⌘ to send and archive'}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full btn-primary transition-colors hover:btn-primary disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full btn-send transition-colors disabled:cursor-not-allowed"
             >
               {cmdHeld && hasContent ? (
                 <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -903,9 +903,9 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                   <path d="M10 13h4" />
                 </svg>
               ) : (
-                <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 2 11 13" />
-                  <path d="M22 2 15 22l-4-9-9-4 20-7z" />
+                <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
                 </svg>
               )}
             </button>

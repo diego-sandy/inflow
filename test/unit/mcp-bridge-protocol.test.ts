@@ -73,5 +73,6 @@ it('ignores malformed frames', async () => {
 it('activityLabel describes known tools', () => {
   expect(activityLabel('list_connections', { role: 'Investor' })).toMatch(/Investor/);
   expect(activityLabel('get_network_stats')).toMatch(/network stats/i);
+  expect(activityLabel('create_draft')).toMatch(/drafted a message/i);
   expect(activityLabel('mystery')).toMatch(/mystery/);
 });

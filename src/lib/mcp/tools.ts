@@ -3,8 +3,9 @@
  *
  * These are transport-agnostic: pure async functions over the local database.
  * The bridge advertises {@link toolDescriptors} to the companion and routes
- * incoming calls through {@link callTool}. Phase 1 is read-only — nothing here
- * sends a message or writes to the account.
+ * incoming calls through {@link callTool}. Tools are read-only except for one
+ * write tool, `create_draft`, which only adds a draft to the local Outbox for
+ * the user to review — nothing here ever sends a message or touches the account.
  */
 import { db } from '@/db/database';
 import { computeInsights, parseCompany } from '@/lib/connection-insights';
@@ -153,6 +154,58 @@ export const MCP_TOOLS: McpTool[] = [
         hasConversation: !!c.conversationSummary,
         conversationSummary: c.conversationSummary || undefined,
       };
+    },
+  },
+  {
+    name: 'create_draft',
+    description:
+      "Create a draft message to one of the user's connections. It lands in the user's Outbox for them to review and send — this NEVER sends. Optionally schedule it for a time (still surfaced for the user to send with one click; never auto-sent). The recipient must be an existing connection (by profileUrn or publicId).",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        profileUrn: { type: 'string', description: 'Recipient connection profileUrn (preferred).' },
+        publicId: { type: 'string', description: 'Recipient publicId (alternative to profileUrn).' },
+        body: { type: 'string', description: 'The message text to draft.' },
+        scheduleAt: {
+          type: 'string',
+          description: 'Optional ISO 8601 time to schedule for. The user still sends it — nothing auto-sends.',
+        },
+      },
+      required: ['body'],
+      additionalProperties: false,
+    },
+    handler: async ({ profileUrn, publicId, body, scheduleAt }) => {
+      if (!db) throw new Error('Database unavailable');
+      const text = String(body || '').trim();
+      if (!text) throw new Error('body is required');
+      if (!profileUrn && !publicId) throw new Error('profileUrn or publicId is required');
+      const list = await allConnections();
+      const c = list.find(
+        (x) => (profileUrn && x.profileUrn === profileUrn) || (publicId && x.publicId === publicId),
+      );
+      if (!c) throw new Error('Recipient not found among your connections');
+
+      let status: 'draft' | 'scheduled' = 'draft';
+      let scheduledAt: number | undefined;
+      if (scheduleAt) {
+        const t = new Date(scheduleAt).getTime();
+        if (!Number.isFinite(t)) throw new Error('scheduleAt is not a valid date');
+        scheduledAt = t;
+        status = 'scheduled';
+      }
+      const now = Date.now();
+      const id = crypto.randomUUID();
+      await db.scheduledMessages.add({
+        id,
+        recipientUrns: [c.profileUrn],
+        recipientName: c.fullName || 'Unknown',
+        body: text,
+        status,
+        ...(scheduledAt ? { scheduledAt } : {}),
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { created: true, id, recipient: c.fullName, status };
     },
   },
 ];

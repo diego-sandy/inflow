@@ -1,12 +1,12 @@
 # inflow-mcp
 
-Local MCP companion for the [inflow](../) LinkedIn extension. It lets **Claude Desktop** use your inflow data as a toolbox — searching your connections, reading network stats, and (in a later version) drafting messages into your Outbox.
+Local MCP companion for the [inflow](../) LinkedIn extension. It lets **Claude Desktop** use your inflow data as a toolbox — searching your connections, reading network stats, and drafting messages into your Outbox.
 
 **inflow is the toolbox; Claude is the brain.** This companion is a thin relay: the real tools live in the inflow browser extension, which connects out to this process over `127.0.0.1`. Claude connects to this process over stdio (MCP).
 
 ## Safety
 
-Read-only in this version. Claude can **see** your network and **draft** (later) — it can **never send**. Sending always stays a manual action inside inflow.
+Claude can **see** your network and **draft** messages into your Outbox — it can **never send**. Sending always stays a manual action inside inflow.
 
 ## Setup
 

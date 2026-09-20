@@ -31,13 +31,16 @@ afterEach(async () => {
   await Dexie.delete('InflowDB_MEMBER_MCP').catch(() => {});
 });
 
-it('advertises the read tools with schemas and no send/write tool', () => {
+it('advertises the read tools plus create_draft, and never a send tool', () => {
   const names = toolDescriptors().map((t) => t.name);
   expect(names).toEqual(
-    expect.arrayContaining(['list_connections', 'search_connections', 'get_connection', 'get_network_stats', 'get_conversation_summary']),
+    expect.arrayContaining([
+      'list_connections', 'search_connections', 'get_connection',
+      'get_network_stats', 'get_conversation_summary', 'create_draft',
+    ]),
   );
-  // Phase 1 is read-only — nothing that sends or mutates the account.
-  expect(names.some((n) => /send|create|write|schedule/i.test(n))).toBe(false);
+  // The only write is create_draft (Outbox). Nothing may send on the user's behalf.
+  expect(names.some((n) => /send/i.test(n))).toBe(false);
   for (const t of toolDescriptors()) expect(t.inputSchema).toHaveProperty('type', 'object');
 });
 
@@ -92,6 +95,31 @@ it('get_network_stats summarizes roles and firms', async () => {
   const investor = res.roles.find((r: any) => r.role === 'Investor');
   expect(investor.count).toBe(2);
   expect(res.topFirms.find((f: any) => f.name === 'Acme').count).toBe(2);
+});
+
+it('create_draft adds a draft to the Outbox for an existing connection (never sends)', async () => {
+  await db!.connections.add(conn({ profileUrn: 'urn:li:fsd_profile:Z', publicId: 'zack', fullName: 'Zack Allen' }));
+  const res: any = await callTool('create_draft', { profileUrn: 'urn:li:fsd_profile:Z', body: 'Hi Zack' });
+  expect(res).toMatchObject({ created: true, recipient: 'Zack Allen', status: 'draft' });
+
+  const rows = await db!.scheduledMessages.toArray();
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ recipientUrns: ['urn:li:fsd_profile:Z'], body: 'Hi Zack', status: 'draft' });
+  // Nothing is ever sent.
+  expect(rows[0].status).not.toBe('sent');
+});
+
+it('create_draft can schedule (still not sent) and validates input', async () => {
+  await db!.connections.add(conn({ profileUrn: 'urn:li:fsd_profile:Z', publicId: 'zack', fullName: 'Zack Allen' }));
+
+  const when = new Date(Date.now() + 3600_000).toISOString();
+  const res: any = await callTool('create_draft', { publicId: 'zack', body: 'Later', scheduleAt: when });
+  expect(res.status).toBe('scheduled');
+  const row = (await db!.scheduledMessages.toArray()).find((r) => r.body === 'Later')!;
+  expect(row.scheduledAt).toBe(new Date(when).getTime());
+
+  await expect(callTool('create_draft', { profileUrn: 'urn:li:fsd_profile:Z', body: '' })).rejects.toThrow(/body/i);
+  await expect(callTool('create_draft', { profileUrn: 'nope', body: 'hi' })).rejects.toThrow(/not found/i);
 });
 
 it('throws on an unknown tool', async () => {

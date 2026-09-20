@@ -42,6 +42,8 @@ export function activityLabel(name: string, args: Record<string, any> = {}): str
       return 'Claude reviewed your network stats';
     case 'get_conversation_summary':
       return 'Claude read a conversation summary';
+    case 'create_draft':
+      return 'Claude drafted a message → Outbox';
     default:
       return `Claude used ${name}`;
   }

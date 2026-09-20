@@ -33,6 +33,16 @@ it('shows the disconnected state and reveals setup with the pairing code + downl
   expect(screen.queryByPlaceholderText(/Pairing code/i)).not.toBeInTheDocument();
 });
 
+it('reveals CLI-client instructions under the Advanced toggle', () => {
+  render(<McpStatusBar />);
+  fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
+  // Hidden until expanded.
+  expect(screen.queryByText(/copy config/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Advanced · CLI/i }));
+  expect(screen.getByText(/copy config/i)).toBeInTheDocument();
+  expect(screen.getByText(/npx -y inflow-mcp/)).toBeInTheDocument();
+});
+
 it('shows connected state and disconnects (keeps the code)', () => {
   act(() => useUIStore.setState({ mcpStatus: 'connected' }));
   render(<McpStatusBar />);

@@ -24,7 +24,8 @@ export function McpStatusBar() {
   const [showSetup, setShowSetup] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [pairCode, setPairCode] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [copied, setCopied] = useState<null | 'code' | 'config'>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,11 +45,26 @@ export function McpStatusBar() {
     }
   })();
 
-  const copyCode = async () => {
+  // Config for CLI / other MCP clients that run a command (not the .mcpb).
+  const cliConfig = JSON.stringify(
+    {
+      mcpServers: {
+        inflow: {
+          command: 'node',
+          args: ['/absolute/path/to/inflow/mcp-companion/src/index.mjs'],
+          env: { INFLOW_PAIRING_CODE: pairCode },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const copy = async (what: 'code' | 'config') => {
     try {
-      await navigator.clipboard.writeText(pairCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(what === 'code' ? pairCode : cliConfig);
+      setCopied(what);
+      setTimeout(() => setCopied(null), 2000);
     } catch {}
   };
 
@@ -120,10 +136,10 @@ export function McpStatusBar() {
             <div className="mt-1 flex items-center gap-2">
               <code className="font-mono text-sm font-semibold tracking-widest text-fg-strong">{pairCode || '····-····'}</code>
               <button
-                onClick={copyCode}
+                onClick={() => copy('code')}
                 className="ml-auto rounded-md bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
               >
-                {copied ? 'copied ✓' : 'Copy'}
+                {copied === 'code' ? 'copied ✓' : 'Copy'}
               </button>
             </div>
           </div>
@@ -147,6 +163,43 @@ export function McpStatusBar() {
               </svg>
               Download inflow.mcpb
             </a>
+          </div>
+
+          {/* Advanced: CLI / other MCP clients run a command instead of a .mcpb. */}
+          <div className="border-t border-edge pt-2.5">
+            <button
+              onClick={() => setAdvancedOpen((v) => !v)}
+              aria-expanded={advancedOpen}
+              className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-fg-muted transition-colors hover:text-fg-secondary"
+            >
+              <svg className={`h-3 w-3 transition-transform ${advancedOpen ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+              Advanced · CLI / other MCP clients
+            </button>
+            {advancedOpen && (
+              <div className="mt-1.5 space-y-1.5">
+                <p className="text-[11px] text-fg-faint">
+                  Claude Code, Codex, and other CLI clients run a command instead of installing a bundle. From a clone:
+                </p>
+                <ol className="ml-4 list-decimal space-y-1 text-[11px] marker:text-fg-faint">
+                  <li>
+                    <code className="rounded bg-surface px-1 py-0.5 font-mono">cd inflow/mcp-companion &amp;&amp; npm install</code>
+                  </li>
+                  <li>
+                    Add this to the client’s MCP config (
+                    <button
+                      onClick={() => copy('config')}
+                      className="cursor-pointer rounded bg-surface px-1 py-0.5 font-mono text-blue-600 hover:underline dark:text-blue-300"
+                    >
+                      {copied === 'config' ? 'copied ✓' : 'copy config'}
+                    </button>
+                    ) — set the path to your checkout — then restart it.
+                  </li>
+                </ol>
+                <p className="text-[11px] text-fg-faint">
+                  It carries your pairing code. (If you later publish <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow-mcp</code> to npm, the command becomes <code className="rounded bg-surface px-1 py-0.5 font-mono">npx -y inflow-mcp</code>.)
+                </p>
+              </div>
+            )}
           </div>
 
           <p className="text-[11px] text-fg-faint">

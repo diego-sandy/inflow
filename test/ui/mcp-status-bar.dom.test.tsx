@@ -1,55 +1,62 @@
 // @vitest-environment jsdom
-// The Outbox MCP status bar: connection state, a click-to-reveal log, and setup
-// instructions where inflow shows the pairing code + a one-click .mcpb download.
+// The Outbox MCP status bar: a real on/off toggle (persisted), a click-to-reveal
+// connection log, and setup instructions (code + .mcpb download + advanced CLI).
 import '../dom-setup';
 
-const { stopMcpBridge } = vi.hoisted(() => ({ stopMcpBridge: vi.fn() }));
-vi.mock('@/lib/mcp/bridge-client', () => ({ startMcpBridge: vi.fn(), stopMcpBridge }));
+const { startMcpBridge, stopMcpBridge } = vi.hoisted(() => ({ startMcpBridge: vi.fn(), stopMcpBridge: vi.fn() }));
+vi.mock('@/lib/mcp/bridge-client', () => ({ startMcpBridge, stopMcpBridge }));
 
-const { getOrCreatePairingCode } = vi.hoisted(() => ({ getOrCreatePairingCode: vi.fn(async () => 'A1B2-C3D4') }));
-vi.mock('@/lib/mcp/pairing', () => ({ getOrCreatePairingCode }));
+const { getOrCreatePairingCode, getMcpEnabled, setMcpEnabled } = vi.hoisted(() => ({
+  getOrCreatePairingCode: vi.fn(async () => 'A1B2-C3D4'),
+  getMcpEnabled: vi.fn(async () => true),
+  setMcpEnabled: vi.fn(async () => {}),
+}));
+vi.mock('@/lib/mcp/pairing', () => ({ getOrCreatePairingCode, getMcpEnabled, setMcpEnabled }));
 
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { McpStatusBar } from '@/components/outbox/McpStatusBar';
 import { useUIStore } from '@/store/ui-store';
 
 beforeEach(() => {
+  startMcpBridge.mockClear();
   stopMcpBridge.mockClear();
+  setMcpEnabled.mockClear();
+  getMcpEnabled.mockResolvedValue(true);
   act(() => useUIStore.setState({ mcpStatus: 'disconnected', mcpError: null, mcpActivity: [] }));
 });
 
-it('shows the disconnected state and reveals setup with the pairing code + download', async () => {
+it('reveals setup (pairing code + download) via the Setup button', async () => {
   render(<McpStatusBar />);
-  expect(screen.getByText(/Claude not connected/i)).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^Setup$/ }));
   expect(screen.getByText(/Claude Desktop extension/i)).toBeInTheDocument();
-  // inflow owns and displays the pairing code.
   expect(await screen.findByText('A1B2-C3D4')).toBeInTheDocument();
-  // One-click download of the bundled companion.
   const dl = screen.getByRole('link', { name: /Download inflow\.mcpb/i });
   expect(dl).toHaveAttribute('download', 'inflow.mcpb');
-  // No manual paste-a-code step anymore.
-  expect(screen.queryByPlaceholderText(/Pairing code/i)).not.toBeInTheDocument();
 });
 
 it('reveals CLI-client instructions under the Advanced toggle', () => {
   render(<McpStatusBar />);
-  fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
-  // Hidden until expanded.
+  fireEvent.click(screen.getByRole('button', { name: /^Setup$/ }));
   expect(screen.queryByText(/copy config/i)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /Advanced · CLI/i }));
   expect(screen.getByText(/copy config/i)).toBeInTheDocument();
   expect(screen.getByText(/npx -y inflow-mcp/)).toBeInTheDocument();
 });
 
-it('shows connected state and disconnects (keeps the code)', () => {
-  act(() => useUIStore.setState({ mcpStatus: 'connected' }));
+it('Disconnect turns the bridge off and persists it', async () => {
   render(<McpStatusBar />);
-  expect(screen.getByText(/Claude connected/i)).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole('button', { name: /Disconnect/i }));
+  // Enabled by default → the toggle reads "Disconnect".
+  fireEvent.click(await screen.findByRole('button', { name: /^Disconnect$/ }));
+  await waitFor(() => expect(setMcpEnabled).toHaveBeenCalledWith(false));
   expect(stopMcpBridge).toHaveBeenCalled();
+});
+
+it('Connect turns the bridge on and persists it', async () => {
+  getMcpEnabled.mockResolvedValue(false); // came back from a prior Disconnect
+  render(<McpStatusBar />);
+  fireEvent.click(await screen.findByRole('button', { name: /^Connect$/ }));
+  await waitFor(() => expect(setMcpEnabled).toHaveBeenCalledWith(true));
+  expect(startMcpBridge).toHaveBeenCalledWith('A1B2-C3D4');
 });
 
 it('reveals the connection log when the status is clicked', () => {

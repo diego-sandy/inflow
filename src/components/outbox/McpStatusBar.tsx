@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { useUIStore, type McpStatus } from '@/store/ui-store';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
-import { getOrCreatePairingCode } from '@/lib/mcp/pairing';
-import { stopMcpBridge } from '@/lib/mcp/bridge-client';
+import { getOrCreatePairingCode, getMcpEnabled, setMcpEnabled } from '@/lib/mcp/pairing';
+import { startMcpBridge, stopMcpBridge } from '@/lib/mcp/bridge-client';
 
 const STATUS_META: Record<McpStatus, { label: string; dot: string }> = {
   disconnected: { label: 'Claude not connected', dot: 'bg-fg-faint' },
@@ -24,17 +24,30 @@ export function McpStatusBar() {
   const [showSetup, setShowSetup] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [pairCode, setPairCode] = useState('');
+  const [enabled, setEnabled] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [copied, setCopied] = useState<null | 'code' | 'config'>(null);
 
   useEffect(() => {
     let cancelled = false;
     getOrCreatePairingCode().then((c) => { if (!cancelled) setPairCode(c); });
+    getMcpEnabled().then((e) => { if (!cancelled) setEnabled(e); });
     return () => { cancelled = true; };
   }, []);
 
   const meta = STATUS_META[status];
   const connected = status === 'connected';
+
+  const turnOn = async () => {
+    setEnabled(true);
+    await setMcpEnabled(true);
+    startMcpBridge(await getOrCreatePairingCode());
+  };
+  const turnOff = async () => {
+    setEnabled(false);
+    await setMcpEnabled(false);
+    stopMcpBridge();
+  };
 
   // The companion bundle ships inside the extension for a one-click download.
   const mcpbUrl = (() => {
@@ -83,20 +96,28 @@ export function McpStatusBar() {
           <svg className={`h-3 w-3 text-fg-faint transition-transform ${logsOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
         </button>
         <span className="flex-1" />
-        {connected ? (
+        {!connected && (
           <button
-            onClick={() => stopMcpBridge()}
+            onClick={() => setShowSetup((v) => !v)}
+            aria-expanded={showSetup}
+            className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
+          >
+            Setup
+          </button>
+        )}
+        {enabled ? (
+          <button
+            onClick={turnOff}
             className="rounded-md px-2.5 py-1 text-xs font-medium text-fg-muted ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
           >
             Disconnect
           </button>
         ) : (
           <button
-            onClick={() => setShowSetup((v) => !v)}
-            aria-expanded={showSetup}
+            onClick={turnOn}
             className="rounded-md bg-blue-500/15 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
           >
-            Connect Claude
+            Connect
           </button>
         )}
       </div>

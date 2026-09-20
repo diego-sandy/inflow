@@ -1,9 +1,23 @@
 import { readLocal } from '@/lib/storage';
 
 const TOKEN_KEY = 'mcpPairingToken';
+const ENABLED_KEY = 'mcpEnabled';
 
 /** Default localhost endpoint the companion listens on. */
 export const DEFAULT_MCP_URL = 'ws://127.0.0.1:8123';
+
+/**
+ * Whether the user wants the bridge on. A real on/off toggle: Disconnect turns
+ * it off and it stays off across refreshes until Connect turns it back on.
+ * Defaults to on when unset.
+ */
+export async function getMcpEnabled(): Promise<boolean> {
+  return (await readLocal<boolean>(ENABLED_KEY)) !== false;
+}
+
+export async function setMcpEnabled(enabled: boolean): Promise<void> {
+  await chrome.storage.local.set({ [ENABLED_KEY]: enabled });
+}
 
 /** The extension's pairing code (its identity to the companion), if set. */
 export async function getPairingToken(): Promise<string | null> {

@@ -6,7 +6,7 @@ import { isDemoMode as checkDemoMode } from '@/lib/demo-mode';
 export type ViewMode = 'list' | 'thread';
 export type Theme = 'light' | 'dark' | 'system' | 'purple';
 export type InboxTab = 'focused' | 'other' | 'archived' | 'spam';
-export type AppSection = 'inbox' | 'connections' | 'insights' | 'chat' | 'outbox';
+export type AppSection = 'inbox' | 'connections' | 'invitations' | 'insights' | 'chat' | 'outbox';
 export type SettingsSection = 'ai' | 'appearance' | 'backup' | 'advanced' | 'about';
 
 /**

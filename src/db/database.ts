@@ -5,6 +5,7 @@ import type { Profile } from '@/types/profile';
 import type { Connection } from '@/types/connection';
 import type { InsightChat } from '@/types/insight-chat';
 import type { ScheduledMessage } from '@/types/scheduled-message';
+import type { Invitation } from '@/types/network';
 
 export interface PendingAction {
   id: string;
@@ -93,6 +94,7 @@ type InflowDatabase = Dexie & {
   connections: EntityTable<Connection, 'profileUrn'>;
   insightChats: EntityTable<InsightChat, 'id'>;
   scheduledMessages: EntityTable<ScheduledMessage, 'id'>;
+  invitations: EntityTable<Invitation, 'id'>;
 };
 
 export function applySchema(database: Dexie): void {
@@ -289,6 +291,11 @@ export function applySchema(database: Dexie): void {
   // v16: drafted / scheduled outbound messages (the Inbox → Scheduled queue).
   database.version(16).stores({
     scheduledMessages: 'id, status, scheduledAt, updatedAt, [status+scheduledAt]',
+  });
+
+  // v17: received connection invitations (My Network requests).
+  database.version(17).stores({
+    invitations: 'id, sentAt, status',
   });
 }
 

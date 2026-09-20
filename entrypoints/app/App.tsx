@@ -23,6 +23,8 @@ import { ChatView } from '@/components/chat/ChatView';
 import { OutboxView } from '@/components/outbox/OutboxView';
 import { useOutbox } from '@/hooks/useOutbox';
 import { useMcpBridge } from '@/hooks/useMcpBridge';
+import { InvitationsView } from '@/components/network/InvitationsView';
+import { useInvitations } from '@/hooks/useInvitations';
 import { useConversations } from '@/hooks/useConversations';
 import { useConnections } from '@/hooks/useConnections';
 import { useRemoteSearch } from '@/hooks/useRemoteSearch';
@@ -43,7 +45,14 @@ export function App() {
   const activeSection = useUIStore((s) => s.activeSection);
   const { connections } = useConnections();
   const { attention: outboxAttention } = useOutbox();
+  const { count: invitationsCount, refresh: refreshInvitations } = useInvitations();
   useMcpBridge();
+
+  // Pull pending invitations once on load so the nav badge is current.
+  useEffect(() => {
+    void refreshInvitations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const shortcutPanelOpen = useUIStore((s) => s.shortcutOverlayOpen);
   const deleteConfirmId = useUIStore((s) => s.deleteConfirmId);
   const setDeleteConfirmId = useUIStore((s) => s.setDeleteConfirmId);
@@ -245,12 +254,14 @@ export function App() {
       <UpdateBanner />
       <div className={`flex min-h-0 flex-1 overflow-hidden bg-surface text-fg transition-[padding-bottom] duration-200 ease-out ${shortcutPanelOpen ? SHORTCUT_PANEL_PADDING : 'pb-0'}`}>
         {/* Section nav rail — Inbox / Connections, collapsible */}
-        <NavRail connectionsCount={connections.length} outboxAttention={outboxAttention} />
+        <NavRail connectionsCount={connections.length} outboxAttention={outboxAttention} invitationsCount={invitationsCount} />
 
         {activeSection === 'chat' ? (
           <ChatView />
         ) : activeSection === 'outbox' ? (
           <OutboxView />
+        ) : activeSection === 'invitations' ? (
+          <InvitationsView />
         ) : activeSection === 'insights' ? (
           <div className="flex h-full min-w-0 flex-1 flex-col">
             <InsightsView />

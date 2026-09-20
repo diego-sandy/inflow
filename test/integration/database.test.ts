@@ -41,6 +41,7 @@ describe('applySchema', () => {
       'draftAttachments',
       'imageCache',
       'insightChats',
+      'invitations',
       'messages',
       'pendingActions',
       'postCache',

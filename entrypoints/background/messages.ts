@@ -17,6 +17,10 @@ import { enqueueSend } from './send-queue';
 import { searchTypeahead } from './api/typeahead';
 import { fetchAllConnections, MAX_CONNECTIONS } from './api/connections';
 import { normalizeConnections } from '@/lib/connections-normalizer';
+import { fetchInvitationsRaw, respondToInvitation } from './api/relationships';
+import { normalizeInvitations, invitationPaging } from '@/lib/invitation-normalizer';
+import type { Invitation } from '@/types/network';
+import type { Profile } from '@/types/profile';
 import { getSession, getMemberUrn } from './auth/session';
 import { syncConversations, syncCategory } from './sync/sync-engine';
 import { burstDiscover, toggleSyncPause, broadcastProgress } from './sync/sync-coordinator';
@@ -328,6 +332,38 @@ export async function handleMessage(msg: BridgeMessage): Promise<BridgeResponse>
       }, cap);
       debugLog('info', `[CONNECTIONS] Synced ${stored} connection(s)`);
       return { success: true, data: { count: stored } };
+    }
+    case 'FETCH_INVITATIONS': {
+      // Page through received invitations (LinkedIn caps each page at 40), then
+      // replace the stored pending set so accepted/ignored ones fall away.
+      const PAGE = 40;
+      const all: Invitation[] = [];
+      const allProfiles: Profile[] = [];
+      let start = 0;
+      let total = Infinity;
+      let guard = 0;
+      while (start < total && guard++ < 25) {
+        const raw = await fetchInvitationsRaw(start, PAGE);
+        const { invitations, profiles, rawCount } = normalizeInvitations(raw);
+        all.push(...invitations);
+        allProfiles.push(...profiles);
+        const paging = invitationPaging(raw);
+        if (paging) total = paging.total;
+        if (rawCount < PAGE) break;
+        start += PAGE;
+      }
+      await db.transaction('rw', [db.invitations, db.profiles], async () => {
+        await db.invitations.clear();
+        if (all.length) await db.invitations.bulkPut(all);
+        if (allProfiles.length) await mergeProfiles(allProfiles);
+      });
+      debugLog('info', `[INVITATIONS] Synced ${all.length} invitation(s)`);
+      return { success: true, data: { count: all.length } };
+    }
+    case 'RESPOND_INVITATION': {
+      await respondToInvitation(msg.invitationId, msg.sharedSecret, msg.action);
+      await db.invitations.delete(msg.invitationId).catch(() => {});
+      return { success: true };
     }
     case 'CHECK_FOR_UPDATE': {
       const status = await checkForUpdate();

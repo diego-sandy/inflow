@@ -18,6 +18,10 @@ let retry = 0;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
 let activeToken = '';
 let activeUrl = DEFAULT_MCP_URL;
+// Track transitions so the activity feed shows connection progress without
+// spamming a line on every backoff tick.
+let wasConnected = false;
+let loggedWaiting = false;
 
 function setStatus(status: BridgeStatus, error?: string) {
   useUIStore.getState().setMcpStatus(status, error ?? null);
@@ -62,7 +66,13 @@ function open() {
         /* socket closed mid-send */
       }
     },
-    onStatus: (s, e) => setStatus(s, e),
+    onStatus: (s, e) => {
+      setStatus(s, e);
+      if (s === 'connected') {
+        wasConnected = true;
+        loggedWaiting = false;
+      }
+    },
     onActivity: (t) => pushActivity(t),
   });
 
@@ -86,6 +96,13 @@ function open() {
       return;
     }
     setStatus('connecting');
+    if (wasConnected) {
+      pushActivity('Connection to the companion lost — reconnecting…');
+      wasConnected = false;
+    } else if (!loggedWaiting) {
+      pushActivity('Waiting for the companion — run npx inflow-mcp, then keep this tab open.');
+      loggedWaiting = true;
+    }
     scheduleReconnect();
   };
 }
@@ -96,6 +113,9 @@ export function startMcpBridge(token: string, url: string = DEFAULT_MCP_URL) {
   activeUrl = url;
   stopped = false;
   retry = 0;
+  wasConnected = false;
+  loggedWaiting = false;
+  pushActivity('Connecting to the companion…');
   clearTimeout(retryTimer);
   try {
     ws?.close();

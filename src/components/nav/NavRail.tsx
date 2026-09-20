@@ -13,6 +13,8 @@ interface NavRailProps {
   inboxUnread?: number;
   /** Count of Outbox items needing attention (ready-to-send + failed). */
   outboxAttention?: number;
+  /** Count of pending received invitations. */
+  invitationsCount?: number;
 }
 
 function InboxIcon({ className }: { className?: string }) {
@@ -46,6 +48,18 @@ function InsightsIcon({ className }: { className?: string }) {
   );
 }
 
+function InvitationsIcon({ className }: { className?: string }) {
+  // Person with a plus — an incoming connection request.
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="16" y1="11" x2="22" y2="11" />
+    </svg>
+  );
+}
+
 function OutboxIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -58,10 +72,14 @@ function OutboxIcon({ className }: { className?: string }) {
 }
 
 function ChatIcon({ className }: { className?: string }) {
+  // Assistant / bot: a screen with an antenna and two eyes.
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <path d="M12 7.5l.9 2.6L15.5 11l-2.6.9L12 14.5l-.9-2.6L8.5 11l2.6-.9L12 7.5z" />
+      <rect x="4" y="8" width="16" height="11" rx="2.5" />
+      <path d="M12 8V5" />
+      <circle cx="12" cy="4" r="1.2" />
+      <circle cx="9" cy="13" r="1" />
+      <circle cx="15" cy="13" r="1" />
     </svg>
   );
 }
@@ -74,7 +92,7 @@ interface ItemDef {
   count?: number;
 }
 
-export function NavRail({ connectionsCount, inboxUnread, outboxAttention }: NavRailProps) {
+export function NavRail({ connectionsCount, inboxUnread, outboxAttention, invitationsCount }: NavRailProps) {
   const activeSection = useUIStore((s) => s.activeSection);
   const setActiveSection = useUIStore((s) => s.setActiveSection);
   const collapsed = useUIStore((s) => s.navRailCollapsed);
@@ -87,6 +105,7 @@ export function NavRail({ connectionsCount, inboxUnread, outboxAttention }: NavR
   const items: ItemDef[] = [
     { id: 'inbox', label: 'Inbox', desc: 'Read and reply to your LinkedIn messages.', Icon: InboxIcon, count: inboxUnread },
     { id: 'connections', label: 'Connections', desc: 'Your connections, auto-categorized by role and interest.', Icon: PeopleIcon, count: connectionsCount },
+    { id: 'invitations', label: 'Invitations', desc: 'Pending connection requests — accept or ignore.', Icon: InvitationsIcon, count: invitationsCount },
     { id: 'outbox', label: 'Outbox', desc: 'Drafts and scheduled messages — you always send.', Icon: OutboxIcon, count: outboxAttention },
     { id: 'insights', label: 'Insights', desc: 'Network composition, firm clusters, and AI suggestions.', Icon: InsightsIcon },
     { id: 'chat', label: 'AI Chat', desc: 'Ask AI anything about your network.', Icon: ChatIcon },
@@ -188,16 +207,23 @@ export function NavRail({ connectionsCount, inboxUnread, outboxAttention }: NavR
         {!collapsed && <span className="text-xs">Settings</span>}
       </button>
 
-      {/* Collapse / expand — a slim handle on the rail's right edge, revealed on
-          hover (appears faint when the whole rail is hovered, solid on its own hover). */}
+      {/* Collapse / expand — a clear toggle pinned at the bottom of the rail. */}
       <button
         onClick={toggleNavRail}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         aria-expanded={!collapsed}
-        className="absolute right-0 top-1/2 z-10 flex h-20 w-3 -translate-y-1/2 cursor-pointer items-center justify-center opacity-0 transition-opacity duration-150 hover:opacity-100 group-hover:opacity-60"
+        className={`mt-1 flex cursor-pointer items-center rounded-lg py-2 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary ${
+          collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5'
+        }`}
       >
-        <span className="h-12 w-[3px] rounded-full bg-fg-faint" />
+        <svg
+          className="h-[18px] w-[18px] shrink-0"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        >
+          <path d={collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} />
+        </svg>
+        {!collapsed && <span className="text-xs">Collapse</span>}
       </button>
     </nav>
   );

@@ -88,6 +88,11 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
     const fileInputRef = useReactRef<HTMLInputElement | null>(null);
     const photoInputRef = useReactRef<HTMLInputElement | null>(null);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+    // Outbox actions (Save draft / Schedule) — only on the new-message flow,
+    // where recipients are unambiguous (a draft-* conversation).
+    const [outboxMenuOpen, setOutboxMenuOpen] = useState(false);
+    const [scheduleWhen, setScheduleWhen] = useState('');
+    const isDraftConv = conversationId.startsWith('draft-');
 
     const [cursorAtEnd, setCursorAtEnd] = useState(true);
     const emojiOpen = emojiQuery !== null && emojiResults.length > 0;
@@ -316,6 +321,45 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
         } : undefined;
         await sendMessage(conversationId, text, filesToSend, replyTo);
       }
+    }
+
+    /**
+     * Save the current compose as an Outbox item (a deliberate draft, or a
+     * scheduled send) instead of sending now. Only used on the new-message flow,
+     * so recipients come straight from the draft conversation. Attachments are
+     * not carried into the Outbox yet — those still go out with an immediate send.
+     */
+    async function saveToOutbox(status: 'draft' | 'scheduled', scheduledAt?: number) {
+      const text = body.trim();
+      if (!text) return;
+      const draftConv = await db.conversations.get(conversationId);
+      if (!draftConv) {
+        useUIStore.getState().showToast({ message: 'Draft conversation not found' });
+        return;
+      }
+      const now = Date.now();
+      await db.scheduledMessages.add({
+        id: crypto.randomUUID(),
+        recipientUrns: draftConv.participantUrns,
+        recipientName: draftConv.participantNames.filter(Boolean).join(', ') || 'Unknown',
+        body: text,
+        status,
+        ...(scheduledAt ? { scheduledAt } : {}),
+        createdAt: now,
+        updatedAt: now,
+      });
+      // Clear the composer and its transient thread draft.
+      setBody('');
+      setAttachments([]);
+      setOutboxMenuOpen(false);
+      setScheduleWhen('');
+      saveDraft(conversationId, '', []);
+      try { await db.conversations.delete(conversationId); } catch {}
+      const store = useUIStore.getState();
+      store.setSelectedConversationId(null);
+      store.setComposeNewActive(false);
+      store.setActiveSection('outbox');
+      store.showToast({ message: status === 'scheduled' ? 'Scheduled — find it in your Outbox' : 'Saved to Outbox drafts' });
     }
 
     /**
@@ -777,6 +821,60 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
             />
           )}
           </div>
+          {isDraftConv && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setOutboxMenuOpen((v) => !v)}
+                disabled={!body.trim()}
+                title="Save as draft or schedule for later"
+                aria-label="Save to Outbox"
+                className="flex h-full items-center gap-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {outboxMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setOutboxMenuOpen(false)} />
+                  <div className="absolute bottom-full right-0 z-50 mb-1.5 w-60 rounded-xl border border-edge bg-surface-raised p-1.5 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => saveToOutbox('draft')}
+                      className="block w-full rounded-md px-2.5 py-1.5 text-left text-sm text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
+                    >
+                      Save as draft
+                    </button>
+                    <div className="mt-1 border-t border-edge pt-1.5">
+                      <p className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-fg-faint">Schedule for later</p>
+                      <div className="px-1.5">
+                        <input
+                          type="datetime-local"
+                          value={scheduleWhen}
+                          onChange={(e) => setScheduleWhen(e.target.value)}
+                          className="w-full rounded-md bg-surface-input px-2 py-1 text-xs text-fg-strong ring-1 ring-inset ring-edge outline-none focus:ring-blue-500/40"
+                        />
+                        <button
+                          type="button"
+                          disabled={!scheduleWhen}
+                          onClick={() => {
+                            const at = new Date(scheduleWhen).getTime();
+                            if (Number.isFinite(at)) void saveToOutbox('scheduled', at);
+                          }}
+                          className="mt-1.5 w-full rounded-md bg-blue-500/15 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:opacity-40 dark:text-blue-300"
+                        >
+                          Schedule
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button
             onClick={() => {
               if (cmdHeld) {

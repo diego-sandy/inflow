@@ -33,7 +33,7 @@ beforeEach(() => {
 
 it('uses the Flow naming in the composer placeholder', () => {
   render(<ChatThread />);
-  expect(screen.getByPlaceholderText(/Ask Flow/i)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(/Ask anything/i)).toBeInTheDocument();
 });
 
 it('renders an assistant answer as plain text (no bubble) with a Copy button', () => {

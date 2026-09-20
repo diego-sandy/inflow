@@ -32,10 +32,10 @@ it('renders a 3D pie (top + side wedge paths) in pie mode', () => {
   expect(pie!.querySelectorAll('path').length).toBeGreaterThanOrEqual(2);
 });
 
-it('ChartSection switches chart type via icon buttons', () => {
+it('ChartSection defaults to pie and switches type via icon buttons', () => {
   const { container } = render(<ChartSection data={data} />);
-  // Defaults to bar (no pie svg).
-  expect(container.querySelector('[data-chart="pie"]')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: /pie chart/i }));
+  // Defaults to pie.
   expect(container.querySelector('[data-chart="pie"]')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: /bar chart/i }));
+  expect(container.querySelector('[data-chart="pie"]')).toBeNull();
 });

@@ -13,6 +13,11 @@ import {
   DEFAULT_ANTHROPIC_FAST_MODEL,
   DEFAULT_ANTHROPIC_QUALITY_MODEL,
   ANTHROPIC_MODELS,
+  getGeminiModel,
+  setGeminiModel,
+  DEFAULT_GEMINI_FAST_MODEL,
+  DEFAULT_GEMINI_QUALITY_MODEL,
+  GEMINI_MODELS,
 } from '@/lib/ai-settings';
 
 beforeEach(() => {
@@ -70,6 +75,38 @@ describe('Anthropic model tiers', () => {
       'claude-haiku-4-5',
       'claude-sonnet-5',
       'claude-opus-5',
+    ]);
+  });
+});
+
+describe('Gemini model tiers', () => {
+  it('defaults both tiers to Flash-Lite (unchanged from the original single model)', async () => {
+    expect(await getGeminiModel('fast')).toBe(DEFAULT_GEMINI_FAST_MODEL);
+    expect(await getGeminiModel('quality')).toBe(DEFAULT_GEMINI_QUALITY_MODEL);
+    expect(DEFAULT_GEMINI_FAST_MODEL).toBe('gemini-3.1-flash-lite');
+    expect(DEFAULT_GEMINI_QUALITY_MODEL).toBe('gemini-3.1-flash-lite');
+  });
+
+  it('persists a chosen model per tier independently', async () => {
+    await setGeminiModel('fast', 'gemini-3.5-flash');
+    await setGeminiModel('quality', 'gemini-3.5-flash');
+    expect(await getGeminiModel('fast')).toBe('gemini-3.5-flash');
+    expect(await getGeminiModel('quality')).toBe('gemini-3.5-flash');
+  });
+
+  it('ignores an unknown model id on write and falls back on read', async () => {
+    await setGeminiModel('fast', 'gpt-5' as any);
+    expect(await getGeminiModel('fast')).toBe(DEFAULT_GEMINI_FAST_MODEL);
+
+    await chrome.storage.local.set({ geminiQualityModel: 'bogus-model' });
+    expect(await getGeminiModel('quality')).toBe(DEFAULT_GEMINI_QUALITY_MODEL);
+  });
+
+  it('offers Flash-Lite, Flash, and Pro in the picker, cheapest first', () => {
+    expect(GEMINI_MODELS.map((m) => m.id)).toEqual([
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-3.1-pro-preview',
     ]);
   });
 });

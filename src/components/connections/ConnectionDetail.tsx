@@ -136,7 +136,7 @@ export function ConnectionDetail() {
               onClick={() => summarize(connection, existingConv)}
               disabled={summarizing}
               title="Summarize your message history with this person"
-              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary disabled:opacity-40"
+              className="flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-300 ring-1 ring-inset ring-blue-500/25 transition-colors hover:bg-blue-500/20 disabled:opacity-40"
             >
               {summarizing ? (
                 <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -210,7 +210,7 @@ export function ConnectionDetail() {
                 onClick={() => refresh(connection)}
                 disabled={refreshing || generating}
                 title="Re-fetch and re-analyze this connection"
-                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary disabled:opacity-40"
+                className="flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-300 ring-1 ring-inset ring-blue-500/25 transition-colors hover:bg-blue-500/20 disabled:opacity-40"
               >
                 <svg
                   className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`}

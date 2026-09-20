@@ -50,7 +50,7 @@ beforeEach(() => {
   sendBridgeMessage.mockResolvedValue({ success: true, data: { count: 0 } });
   mockConnections = [ada, alan, grace];
   localStorage.clear();
-  act(() => useUIStore.setState({ selectedConnectionUrn: null, connectionsFilter: { kind: 'all' }, connectionsSearch: '' }));
+  act(() => useUIStore.setState({ selectedConnectionUrn: null, connectionsFilter: { roles: [], interests: [] }, connectionsSearch: '' }));
 });
 
 it('defaults to most-recent-first order', () => {

@@ -4,6 +4,9 @@ import {
   getAIProvider,
   getAnthropicApiKey,
   getAnthropicModel,
+  getGeminiModel,
+  DEFAULT_GEMINI_FAST_MODEL,
+  DEFAULT_GEMINI_QUALITY_MODEL,
   type AIProvider,
   type AIModelTier,
 } from '@/lib/ai-settings';
@@ -12,8 +15,10 @@ import { predictAnthropic } from '@/lib/anthropic-client';
 const SYSTEM_PROMPT =
   'You are an autocomplete assistant. Given conversation history and a partial message, predict the next few words. Output ONLY the completion text. Keep it short (2-8 words). If unsure, output nothing.';
 
-const GEMINI_STREAM_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent';
+/** Build the Gemini streaming endpoint for a specific model id. */
+function geminiStreamUrl(model: string): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`;
+}
 
 interface PredictOptions {
   signal?: AbortSignal;
@@ -46,6 +51,8 @@ interface AIConfig {
   anthropicKey: string | null;
   fastModel: string;
   qualityModel: string;
+  geminiFastModel: string;
+  geminiQualityModel: string;
 }
 
 // Cache config in memory so we don't hit chrome.storage on every keystroke.
@@ -55,6 +62,8 @@ const config: AIConfig = {
   anthropicKey: null,
   fastModel: 'claude-haiku-4-5',
   qualityModel: 'claude-sonnet-5',
+  geminiFastModel: DEFAULT_GEMINI_FAST_MODEL,
+  geminiQualityModel: DEFAULT_GEMINI_QUALITY_MODEL,
 };
 let initialized = false;
 const availabilitySubscribers = new Set<(available: boolean) => void>();
@@ -71,18 +80,23 @@ function notifyAvailability(): void {
 
 /** Reload all AI settings into the in-memory cache, then notify subscribers. */
 async function reloadConfig(): Promise<void> {
-  const [provider, geminiKey, anthropicKey, fastModel, qualityModel] = await Promise.all([
-    getAIProvider(),
-    getGeminiApiKey(),
-    getAnthropicApiKey(),
-    getAnthropicModel('fast'),
-    getAnthropicModel('quality'),
-  ]);
+  const [provider, geminiKey, anthropicKey, fastModel, qualityModel, geminiFastModel, geminiQualityModel] =
+    await Promise.all([
+      getAIProvider(),
+      getGeminiApiKey(),
+      getAnthropicApiKey(),
+      getAnthropicModel('fast'),
+      getAnthropicModel('quality'),
+      getGeminiModel('fast'),
+      getGeminiModel('quality'),
+    ]);
   config.provider = provider;
   config.geminiKey = geminiKey;
   config.anthropicKey = anthropicKey;
   config.fastModel = fastModel;
   config.qualityModel = qualityModel;
+  config.geminiFastModel = geminiFastModel;
+  config.geminiQualityModel = geminiQualityModel;
   notifyAvailability();
 }
 
@@ -100,6 +114,8 @@ function ensureConfigSync(): void {
     'anthropicApiKey',
     'anthropicFastModel',
     'anthropicQualityModel',
+    'geminiFastModel',
+    'geminiQualityModel',
   ];
   chrome?.storage?.local?.onChanged?.addListener?.(
     (changes: Record<string, chrome.storage.StorageChange>) => {
@@ -145,7 +161,8 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
     return predictAnthropic(prompt, config.anthropicKey, model, { signal, maxTokens, systemPrompt });
   }
 
-  return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature });
+  const model = tier === 'quality' ? config.geminiQualityModel : config.geminiFastModel;
+  return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model });
 }
 
 /** Gemini streaming prediction (the original provider). */
@@ -157,13 +174,14 @@ async function predictGemini(
     maxTokens: number;
     systemPrompt: string;
     temperature: number;
+    model: string;
   },
 ): Promise<string | null> {
   try {
     const key = config.geminiKey;
     if (!key) return null;
 
-    const res = await fetch(`${GEMINI_STREAM_URL}?alt=sse&key=${key}`, {
+    const res = await fetch(`${geminiStreamUrl(opts.model)}?alt=sse&key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: opts.signal,

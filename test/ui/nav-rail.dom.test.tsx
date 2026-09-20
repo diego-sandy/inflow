@@ -33,13 +33,20 @@ it('collapse toggle flips state and persists', () => {
 
 it('shows the Flow section', () => {
   render(<NavRail connectionsCount={3} />);
-  expect(screen.getByRole('button', { name: 'Flow' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'AI Chat' })).toBeInTheDocument();
+});
+
+it('shows the Outbox section with an attention badge', () => {
+  render(<NavRail connectionsCount={3} outboxAttention={2} />);
+  const btn = screen.getByRole('button', { name: 'Outbox' });
+  expect(btn).toBeInTheDocument();
+  expect(within(btn).getByText('2')).toBeInTheDocument();
 });
 
 it('shows a hover description for each section', () => {
   render(<NavRail connectionsCount={3} />);
   expect(screen.getByText(/Read and reply to your LinkedIn messages/i)).toBeInTheDocument();
-  expect(screen.getByText(/Ask Flow anything about your network/i)).toBeInTheDocument();
+  expect(screen.getByText(/Ask AI anything about your network/i)).toBeInTheDocument();
 });
 
 it('back/forward arrows navigate section history', () => {

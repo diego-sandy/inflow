@@ -66,7 +66,7 @@ beforeEach(() => {
     uncategorized: 0, mode: 'manual', retry: vi.fn(), categorizeNow,
   };
   refreshState = { refreshing: false, available: true, refresh };
-  act(() => useUIStore.setState({ selectedConnectionUrn: null, toast: null, connectionsFilter: { kind: 'all' }, connectionsSearch: '' }));
+  act(() => useUIStore.setState({ selectedConnectionUrn: null, toast: null, connectionsFilter: { roles: [], interests: [] }, connectionsSearch: '' }));
 });
 
 it('shows the full categorization error, wrapped and with a hover title', () => {

@@ -12,6 +12,10 @@ vi.mock('@/lib/ai-settings', () => ({
   getAnthropicApiKey: async () => null,
   getAnthropicModel: async (tier: string) =>
     tier === 'quality' ? 'claude-sonnet-5' : 'claude-haiku-4-5',
+  getGeminiModel: async (tier: string) =>
+    tier === 'quality' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-lite',
+  DEFAULT_GEMINI_FAST_MODEL: 'gemini-3.1-flash-lite',
+  DEFAULT_GEMINI_QUALITY_MODEL: 'gemini-3.1-pro-preview',
 }));
 
 import { renderHook, waitFor } from '@testing-library/react';

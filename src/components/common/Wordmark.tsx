@@ -41,13 +41,8 @@ export function LogoMark({ size = 24 }: { size?: number }) {
   );
 }
 
-/** Full lockup: the ƒ monogram + the gradient wordmark. Collapsed = mark only. */
+/** Brand: the ƒ monogram when collapsed, the gradient wordmark when expanded. */
 export function Logo({ collapsed = false }: { collapsed?: boolean }) {
   if (collapsed) return <LogoMark size={26} />;
-  return (
-    <span className="flex items-center gap-2">
-      <LogoMark size={22} />
-      <Wordmark className="text-[19px]" />
-    </span>
-  );
+  return <Wordmark className="text-[19px]" />;
 }

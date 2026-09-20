@@ -27,10 +27,19 @@ vi.mock('@/lib/ai-settings', () => ({
     tier === 'quality' ? 'claude-sonnet-5' : 'claude-haiku-4-5',
   ),
   setAnthropicModel: vi.fn(),
+  getGeminiModel: vi.fn(async (tier: string) =>
+    tier === 'quality' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-lite',
+  ),
+  setGeminiModel: vi.fn(),
   ANTHROPIC_MODELS: [
     { id: 'claude-haiku-4-5', label: 'Haiku 4.5', blurb: 'cheap' },
     { id: 'claude-sonnet-5', label: 'Sonnet 5', blurb: 'balanced' },
     { id: 'claude-opus-5', label: 'Opus 5', blurb: 'best' },
+  ],
+  GEMINI_MODELS: [
+    { id: 'gemini-3.1-flash-lite', label: 'Flash-Lite', blurb: 'cheap' },
+    { id: 'gemini-3.1-flash', label: 'Flash', blurb: 'balanced' },
+    { id: 'gemini-3.1-pro-preview', label: 'Pro', blurb: 'best' },
   ],
 }));
 

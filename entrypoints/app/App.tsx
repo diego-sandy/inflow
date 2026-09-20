@@ -20,6 +20,8 @@ import { ConnectionsList } from '@/components/connections/ConnectionsList';
 import { ConnectionDetail } from '@/components/connections/ConnectionDetail';
 import { InsightsView } from '@/components/insights/InsightsView';
 import { ChatView } from '@/components/chat/ChatView';
+import { OutboxView } from '@/components/outbox/OutboxView';
+import { useOutbox } from '@/hooks/useOutbox';
 import { useConversations } from '@/hooks/useConversations';
 import { useConnections } from '@/hooks/useConnections';
 import { useRemoteSearch } from '@/hooks/useRemoteSearch';
@@ -39,6 +41,7 @@ export function App() {
   const composeNewActive = useUIStore((s) => s.composeNewActive);
   const activeSection = useUIStore((s) => s.activeSection);
   const { connections } = useConnections();
+  const { attention: outboxAttention } = useOutbox();
   const shortcutPanelOpen = useUIStore((s) => s.shortcutOverlayOpen);
   const deleteConfirmId = useUIStore((s) => s.deleteConfirmId);
   const setDeleteConfirmId = useUIStore((s) => s.setDeleteConfirmId);
@@ -240,10 +243,12 @@ export function App() {
       <UpdateBanner />
       <div className={`flex min-h-0 flex-1 overflow-hidden bg-surface text-fg transition-[padding-bottom] duration-200 ease-out ${shortcutPanelOpen ? SHORTCUT_PANEL_PADDING : 'pb-0'}`}>
         {/* Section nav rail — Inbox / Connections, collapsible */}
-        <NavRail connectionsCount={connections.length} />
+        <NavRail connectionsCount={connections.length} outboxAttention={outboxAttention} />
 
         {activeSection === 'chat' ? (
           <ChatView />
+        ) : activeSection === 'outbox' ? (
+          <OutboxView />
         ) : activeSection === 'insights' ? (
           <div className="flex h-full min-w-0 flex-1 flex-col">
             <InsightsView />

@@ -44,7 +44,7 @@ beforeEach(() => {
   sendBridgeMessage.mockReset();
   sendBridgeMessage.mockResolvedValue({ success: true, data: { count: 0 } });
   mockConnections = [];
-  act(() => useUIStore.setState({ selectedConnectionUrn: null, connectionsFilter: { kind: 'all' }, connectionsSearch: '' }));
+  act(() => useUIStore.setState({ selectedConnectionUrn: null, connectionsFilter: { roles: [], interests: [] }, connectionsSearch: '' }));
 });
 
 it('fetches a refresh on mount and lists connections', () => {

@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { formatDistanceToNowStrict } from 'date-fns';
 import { GroupAvatar } from '../common/GroupAvatar';
 import { useFollowUps } from '@/hooks/useFollowUps';
 import { useConnectionSuggestions } from '@/hooks/useConnectionSuggestions';
 import { useAISession } from '@/hooks/useAISession';
 import { useUIStore } from '@/store/ui-store';
 import { sendBridgeMessage } from '@/lib/bridge';
+import { db } from '@/db/database';
 import { draftFollowUpMessage } from '@/lib/connection-message';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
 import { roleBadgeClass, connectionProfileUrl } from '@/components/connections/connection-format';
@@ -20,10 +22,20 @@ function Section({ title, hint, children }: { title?: string; hint?: string; chi
   );
 }
 
+/** Human-readable "3 months ago" from a timestamp, falling back to a day count. */
+function humanAgo(ts: number | null | undefined, fallbackDays: number): string {
+  if (ts && ts > 0) {
+    try {
+      return formatDistanceToNowStrict(new Date(ts), { addSuffix: true });
+    } catch {}
+  }
+  return `${fallbackDays} day${fallbackDays === 1 ? '' : 's'} ago`;
+}
+
 function followUpReason(f: FollowUp): string {
   return f.reason === 'never'
-    ? `Connected ${f.days}d ago · never messaged`
-    : `Last talked ${f.days}d ago`;
+    ? `Connected ${humanAgo(f.connection.connectedAt, f.days)} · never messaged`
+    : `Last talked ${humanAgo(f.lastContactAt, f.days)}`;
 }
 
 function FollowUpRow({ f }: { f: FollowUp }) {
@@ -50,6 +62,24 @@ function FollowUpRow({ f }: { f: FollowUp }) {
     } finally {
       setDrafting(false);
     }
+  };
+
+  const scheduleDraft = async () => {
+    const body = text.trim();
+    if (!body || !db) return;
+    const now = Date.now();
+    await db.scheduledMessages.add({
+      id: crypto.randomUUID(),
+      recipientUrns: [c.profileUrn],
+      recipientName: name,
+      body,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+    });
+    showToast({ message: 'Saved to Outbox — schedule or send it there' });
+    setText('');
+    setComposing(false);
   };
 
   const send = async () => {
@@ -93,19 +123,19 @@ function FollowUpRow({ f }: { f: FollowUp }) {
         </div>
         <button
           onClick={() => setComposing((v) => !v)}
-          className="shrink-0 rounded-md btn-primary px-2.5 py-1 text-xs font-medium transition-colors"
+          className="shrink-0 rounded-md bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-800 ring-1 ring-inset ring-violet-500/25 transition-colors hover:bg-violet-500/20 dark:text-violet-200"
         >
           Message
         </button>
         <button
           onClick={openConnection}
-          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
+          className="shrink-0 rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-500/25 transition-colors hover:bg-emerald-500/20 dark:text-emerald-200"
         >
           Connection
         </button>
         <button
           onClick={() => window.open(connectionProfileUrl(c.publicId, name), '_blank', 'noopener,noreferrer')}
-          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-500/10"
+          className="shrink-0 rounded-md bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-800 ring-1 ring-inset ring-blue-500/25 transition-colors hover:bg-blue-500/20 dark:text-blue-200"
         >
           LinkedIn
         </button>
@@ -137,6 +167,14 @@ function FollowUpRow({ f }: { f: FollowUp }) {
               className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
             >
               Cancel
+            </button>
+            <button
+              onClick={scheduleDraft}
+              disabled={!text.trim()}
+              title="Save to the Outbox to schedule or send later"
+              className="rounded-md px-2.5 py-1 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:opacity-40"
+            >
+              Schedule
             </button>
             <button
               onClick={send}

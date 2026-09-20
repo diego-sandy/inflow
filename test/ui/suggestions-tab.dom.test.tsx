@@ -77,6 +77,13 @@ it('lists follow-ups and the Connection action opens the connection', () => {
   expect(useUIStore.getState().selectedConnectionUrn).toBe('a');
 });
 
+it('shows follow-up recency in human-readable form (not "90d ago")', () => {
+  followUps = [followUp({ connection: { connectedAt: Date.now() - 90 * 86400000 }, days: 90 })];
+  render(<FollowUpsSection />);
+  expect(screen.getByText(/months ago/i)).toBeInTheDocument();
+  expect(screen.queryByText(/90d ago/)).not.toBeInTheDocument();
+});
+
 it('opens LinkedIn from a follow-up', () => {
   followUps = [followUp()];
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);

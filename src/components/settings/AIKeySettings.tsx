@@ -11,11 +11,15 @@ import {
   setAIProvider,
   getAnthropicModel,
   setAnthropicModel,
+  getGeminiModel,
+  setGeminiModel,
   getAISuggestionsEnabled,
   setAISuggestionsEnabled,
   ANTHROPIC_MODELS,
+  GEMINI_MODELS,
   type AIProvider,
   type AIModelTier,
+  type ModelOption,
 } from '@/lib/ai-settings';
 import { ANTHROPIC_URL, anthropicErrorMessage } from '@/lib/anthropic-client';
 import { useCategorizeMode } from '@/hooks/useCategorizeMode';
@@ -48,16 +52,18 @@ function ToggleRow({
   );
 }
 
-/** A dropdown that picks a Claude model for one tier. */
+/** A dropdown that picks a model (for either provider) for one tier. */
 function ModelSelect({
   label,
   hint,
   value,
+  models,
   onChange,
 }: {
   label: string;
   hint: string;
   value: string;
+  models: ModelOption[];
   onChange: (id: string) => void;
 }) {
   return (
@@ -69,7 +75,7 @@ function ModelSelect({
         onChange={(e) => onChange(e.target.value)}
         className="mt-2 w-full rounded-md bg-surface px-3 py-2 text-sm text-fg ring-1 ring-ring focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        {ANTHROPIC_MODELS.map((m) => (
+        {models.map((m) => (
           <option key={m.id} value={m.id}>
             {m.label} — {m.blurb}
           </option>
@@ -97,6 +103,8 @@ export function AIKeySettings() {
   const [geminiShow, setGeminiShow] = useState(false);
   const [geminiStatus, setGeminiStatus] = useState<TestStatus>('idle');
   const [geminiError, setGeminiError] = useState('');
+  const [geminiFastModel, setGeminiFastModel] = useState('gemini-3.1-flash-lite');
+  const [geminiQualityModel, setGeminiQualityModel] = useState('gemini-3.1-flash-lite');
 
   // Anthropic key state
   const [anthInput, setAnthInput] = useState('');
@@ -116,6 +124,8 @@ export function AIKeySettings() {
     getAnthropicApiKey().then(setAnthSaved);
     getAnthropicModel('fast').then(setFastModel);
     getAnthropicModel('quality').then(setQualityModel);
+    getGeminiModel('fast').then(setGeminiFastModel);
+    getGeminiModel('quality').then(setGeminiQualityModel);
     getAISuggestionsEnabled().then(setSuggestionsOn);
   }, []);
 
@@ -132,7 +142,7 @@ export function AIKeySettings() {
     setGeminiError('');
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiFastModel}:generateContent?key=${key}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -216,6 +226,12 @@ export function AIKeySettings() {
     setAnthropicModel(tier, id);
   };
 
+  const changeGeminiModel = (tier: AIModelTier, id: string) => {
+    if (tier === 'quality') setGeminiQualityModel(id);
+    else setGeminiFastModel(id);
+    setGeminiModel(tier, id);
+  };
+
   const toggleSuggestions = (next: boolean) => {
     setSuggestionsOn(next);
     setAISuggestionsEnabled(next);
@@ -234,8 +250,8 @@ export function AIKeySettings() {
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {([
-            { id: 'anthropic', name: 'Claude', note: 'Anthropic — recommended' },
-            { id: 'gemini', name: 'Gemini', note: 'Google — free tier' },
+            { id: 'anthropic', name: 'Claude', note: 'Anthropic' },
+            { id: 'gemini', name: 'Gemini', note: 'Google — recommended' },
           ] as const).map((p) => (
             <button
               key={p.id}
@@ -350,12 +366,14 @@ export function AIKeySettings() {
               label="Fast model"
               hint="Categorization, summaries, autocomplete — pick the cheapest that works."
               value={fastModel}
+              models={ANTHROPIC_MODELS}
               onChange={(id) => changeModel('fast', id)}
             />
             <ModelSelect
               label="Quality model"
               hint="Drafting messages and the insights chat."
               value={qualityModel}
+              models={ANTHROPIC_MODELS}
               onChange={(id) => changeModel('quality', id)}
             />
           </div>
@@ -452,6 +470,27 @@ export function AIKeySettings() {
               </div>
             </div>
           )}
+
+          {/* Model tiers */}
+          <div className="mt-5 space-y-4">
+            <p className="text-xs text-fg-muted">
+              Route cheap, high-volume work to a small model and reserve a stronger one for writing.
+            </p>
+            <ModelSelect
+              label="Fast model"
+              hint="Categorization, summaries, autocomplete — pick the cheapest that works."
+              value={geminiFastModel}
+              models={GEMINI_MODELS}
+              onChange={(id) => changeGeminiModel('fast', id)}
+            />
+            <ModelSelect
+              label="Quality model"
+              hint="Drafting messages and the insights chat."
+              value={geminiQualityModel}
+              models={GEMINI_MODELS}
+              onChange={(id) => changeGeminiModel('quality', id)}
+            />
+          </div>
         </div>
       )}
 

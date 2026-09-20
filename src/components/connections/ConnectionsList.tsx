@@ -4,7 +4,7 @@ import { useConnections } from '@/hooks/useConnections';
 import { useAutoCategorize } from '@/hooks/useAutoCategorize';
 import { useAISession } from '@/hooks/useAISession';
 import { useCategorizeMode } from '@/hooks/useCategorizeMode';
-import { useUIStore, type ConnectionFilter } from '@/store/ui-store';
+import { useUIStore, EMPTY_CONNECTION_FILTER, type ConnectionFilter } from '@/store/ui-store';
 import { sendBridgeMessage } from '@/lib/bridge';
 import { maybeAutoBackup } from '@/lib/backup-service';
 import { db } from '@/db/database';
@@ -16,9 +16,10 @@ import { ConnectionContextMenu } from './ConnectionContextMenu';
 import type { Connection } from '@/types/connection';
 
 function filterMatches(c: Connection, f: ConnectionFilter): boolean {
-  if (f.kind === 'all') return true;
-  if (f.kind === 'role') return c.roleCategory === f.value;
-  return !!c.interestTags?.includes(f.value);
+  const roleOk = f.roles.length === 0 || (!!c.roleCategory && f.roles.includes(c.roleCategory));
+  const tags = c.interestTags ?? [];
+  const interestOk = f.interests.length === 0 || f.interests.some((t) => tags.includes(t));
+  return roleOk && interestOk;
 }
 
 type SortMode = 'recent' | 'first' | 'last';
@@ -129,34 +130,57 @@ function ConnectionRow({
   );
 }
 
-function FilterChip({
+/** A single checkbox row inside the Filter menu. */
+function FilterMenuRow({
   label,
   count,
-  active,
-  onClick,
-  accent,
+  checked,
+  onToggle,
 }: {
-  label: string;
+  label: React.ReactNode;
   count: number;
-  active: boolean;
-  onClick: () => void;
-  accent?: boolean;
+  checked: boolean;
+  onToggle: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset transition-colors ${
-        active
-          ? 'bg-blue-500/20 text-blue-200 ring-blue-500/40'
-          : accent
-            ? 'bg-blue-500/10 text-blue-300 ring-blue-500/20 hover:bg-blue-500/15'
-            : 'bg-surface-input text-fg-muted ring-edge hover:text-fg-secondary'
-      }`}
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      onClick={onToggle}
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-fg-secondary transition-colors hover:bg-surface-hover"
     >
-      <span>{label}</span>
-      <span className="tabular-nums opacity-70">{count}</span>
+      <span
+        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded ring-1 ring-inset ${
+          checked ? 'bg-blue-500/80 ring-blue-500/80 text-white' : 'ring-edge'
+        }`}
+      >
+        {checked && (
+          <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        )}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="shrink-0 tabular-nums text-fg-faint">{count}</span>
     </button>
+  );
+}
+
+/** A removable active-filter pill shown above the list. */
+function ActivePill({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1 rounded-full bg-blue-500/15 py-0.5 pl-2.5 pr-1 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-500/30 dark:text-blue-300">
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label} filter`}
+        className="flex h-4 w-4 items-center justify-center rounded-full text-blue-700/70 transition-colors hover:bg-blue-500/20 dark:text-blue-300/70"
+      >
+        ×
+      </button>
+    </span>
   );
 }
 
@@ -173,7 +197,18 @@ export function ConnectionsList() {
   const query = useUIStore((s) => s.connectionsSearch);
   const setQuery = useUIStore((s) => s.setConnectionsSearch);
   const [editingInterests, setEditingInterests] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [sort, setSort] = useState<SortMode>(getStoredSort);
+
+  const toggleRole = (r: ConnectionRole) => {
+    const has = filter.roles.includes(r);
+    setFilter({ ...filter, roles: has ? filter.roles.filter((x) => x !== r) : [...filter.roles, r] });
+  };
+  const toggleInterest = (t: string) => {
+    const has = filter.interests.includes(t);
+    setFilter({ ...filter, interests: has ? filter.interests.filter((x) => x !== t) : [...filter.interests, t] });
+  };
+  const activeCount = filter.roles.length + filter.interests.length;
   const [contextMenu, setContextMenu] = useState<{ connection: Connection; x: number; y: number } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -333,29 +368,11 @@ export function ConnectionsList() {
               type="button"
               onClick={categorizeNow}
               title={`Categorize ${uncategorized} uncategorized connection${uncategorized === 1 ? '' : 's'}`}
-              className="cursor-pointer rounded-md bg-blue-500/15 px-2 py-0.5 text-[11px] font-medium text-blue-300 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25"
+              className="cursor-pointer rounded-md bg-blue-500/15 px-2 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
             >
               Categorize {uncategorized}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setEditingInterests((v) => !v)}
-            title="Edit interest tags"
-            aria-label="Edit interest tags"
-            aria-expanded={editingInterests}
-            className={`flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset transition-colors ${
-              editingInterests
-                ? 'bg-blue-500/15 text-blue-300 ring-blue-500/30'
-                : 'text-fg-muted ring-edge hover:text-fg-secondary'
-            }`}
-          >
-            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-              <line x1="7" y1="7" x2="7.01" y2="7" />
-            </svg>
-            Tags
-          </button>
         </div>
       </div>
 
@@ -435,6 +452,89 @@ export function ConnectionsList() {
             className="w-full rounded-lg bg-surface-input py-1.5 pl-8 pr-2.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
           />
         </div>
+        {hasFilters && (
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setFilterMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={filterMenuOpen}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors ${
+                activeCount > 0 || filterMenuOpen
+                  ? 'bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300'
+                  : 'bg-surface-input text-fg-secondary ring-edge hover:text-fg-strong'
+              }`}
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+              </svg>
+              Filter
+              {activeCount > 0 && (
+                <span className="rounded-full bg-blue-500/80 px-1.5 text-[10px] font-semibold tabular-nums text-white">
+                  {activeCount}
+                </span>
+              )}
+            </button>
+
+            {filterMenuOpen && (
+              <>
+                {/* Backdrop closes the menu on any outside click. */}
+                <div className="fixed inset-0 z-40" onClick={() => setFilterMenuOpen(false)} />
+                <div
+                  role="menu"
+                  aria-label="Filter connections"
+                  className="absolute right-0 top-full z-50 mt-1.5 max-h-96 w-64 overflow-y-auto rounded-xl border border-edge bg-surface-raised py-1.5 shadow-lg"
+                >
+                  {rolesPresent.length > 0 && (
+                    <>
+                      <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">Roles</p>
+                      {rolesPresent.map((r) => (
+                        <FilterMenuRow
+                          key={`r:${r}`}
+                          label={r}
+                          count={roleCounts.get(r) ?? 0}
+                          checked={filter.roles.includes(r)}
+                          onToggle={() => toggleRole(r)}
+                        />
+                      ))}
+                    </>
+                  )}
+                  {interestsPresent.length > 0 && (
+                    <>
+                      <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">Interest tags</p>
+                      {interestsPresent.map((t) => (
+                        <FilterMenuRow
+                          key={`i:${t}`}
+                          label={`★ ${t}`}
+                          count={interestCounts.get(t) ?? 0}
+                          checked={filter.interests.includes(t)}
+                          onToggle={() => toggleInterest(t)}
+                        />
+                      ))}
+                    </>
+                  )}
+                  <div className="mt-1 border-t border-edge pt-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setEditingInterests(true);
+                        setFilterMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-blue-700 transition-colors hover:bg-surface-hover dark:text-blue-300"
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                      </svg>
+                      Manage tags…
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <label className="sr-only" htmlFor="connections-sort">Sort connections</label>
         <select
           id="connections-sort"
@@ -460,47 +560,25 @@ export function ConnectionsList() {
         />
       )}
 
-      {/* Filter chips */}
-      {hasFilters && (
+      {/* Active filter pills */}
+      {activeCount > 0 && (
         <div
           data-testid="connection-filters"
           className="flex items-center gap-1.5 overflow-x-auto border-b border-edge px-3 py-2"
         >
-          <FilterChip
-            label="All"
-            count={connections.length}
-            active={filter.kind === 'all'}
-            onClick={() => setFilter({ kind: 'all' })}
-          />
-          {interestsPresent.length > 0 && (
-            <span className="shrink-0 pl-1.5 text-[10px] font-medium uppercase tracking-wide text-fg-faint">
-              Tags
-            </span>
-          )}
-          {interestsPresent.map((t) => (
-            <FilterChip
-              key={`i:${t}`}
-              label={`★ ${t}`}
-              count={interestCounts.get(t) ?? 0}
-              active={filter.kind === 'interest' && filter.value === t}
-              accent
-              onClick={() => setFilter({ kind: 'interest', value: t })}
-            />
+          {filter.roles.map((r) => (
+            <ActivePill key={`r:${r}`} label={r} onRemove={() => toggleRole(r)} />
           ))}
-          {rolesPresent.length > 0 && (
-            <span className="shrink-0 pl-2 text-[10px] font-medium uppercase tracking-wide text-fg-faint">
-              Roles
-            </span>
-          )}
-          {rolesPresent.map((r) => (
-            <FilterChip
-              key={`r:${r}`}
-              label={r}
-              count={roleCounts.get(r) ?? 0}
-              active={filter.kind === 'role' && filter.value === r}
-              onClick={() => setFilter({ kind: 'role', value: r })}
-            />
+          {filter.interests.map((t) => (
+            <ActivePill key={`i:${t}`} label={`★ ${t}`} onRemove={() => toggleInterest(t)} />
           ))}
+          <button
+            type="button"
+            onClick={() => setFilter(EMPTY_CONNECTION_FILTER)}
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-fg-muted transition-colors hover:text-fg-secondary"
+          >
+            Clear all
+          </button>
         </div>
       )}
 

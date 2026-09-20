@@ -33,7 +33,7 @@ beforeEach(() => {
   try { localStorage.clear(); } catch {}
   useUIStore.setState({
     activeSection: 'insights',
-    connectionsFilter: { kind: 'all' },
+    connectionsFilter: { roles: [], interests: [] },
     connectionsSearch: '',
   });
 });
@@ -56,15 +56,17 @@ it('leads with the dominant-role composition stat', () => {
   expect(screen.getByText(/Clustered around Acme Ventures/i)).toBeInTheDocument();
 });
 
-it('shows composition and suggestions on one dashboard (no tabs); Ask lives in its own section', () => {
+it('organizes insights into tabs, with Charts as the default (pie)', () => {
   mockConnections = [c({ roleCategory: 'Investor', categorizedAt: 1, headline: 'Partner at Acme' })];
-  render(<InsightsView />);
-  // No tab buttons.
-  expect(screen.queryByRole('button', { name: 'Suggestions' })).not.toBeInTheDocument();
+  const { container } = render(<InsightsView />);
+  // Tabs exist.
+  expect(screen.getByRole('tab', { name: 'Charts' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'Follow up' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /AI suggestions/ })).toBeInTheDocument();
+  // Charts tab is active by default → composition chart shown, defaulting to pie.
+  expect(screen.getByRole('tab', { name: 'Charts' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByText('Composition by role')).toBeInTheDocument();
-  expect(screen.getByText('Follow up')).toBeInTheDocument();
-  // Ask moved out of Insights into the dedicated Chat section.
-  expect(screen.queryByText('Ask your network')).not.toBeInTheDocument();
+  expect(container.querySelector('[data-chart="pie"]')).toBeTruthy();
 });
 
 it('drills into Connections filtered by role when a composition bar is clicked', () => {
@@ -76,7 +78,7 @@ it('drills into Connections filtered by role when a composition bar is clicked',
   fireEvent.click(screen.getByRole('button', { name: /Show Investor/i }));
   const s = useUIStore.getState();
   expect(s.activeSection).toBe('connections');
-  expect(s.connectionsFilter).toEqual({ kind: 'role', value: 'Investor' });
+  expect(s.connectionsFilter).toEqual({ roles: ['Investor'], interests: [] });
 });
 
 it('drills into Connections filtered by interest tag when a tag bar is clicked', () => {
@@ -87,7 +89,7 @@ it('drills into Connections filtered by interest tag when a tag bar is clicked',
   fireEvent.click(screen.getByRole('button', { name: /Show ★ Investors/i }));
   const s = useUIStore.getState();
   expect(s.activeSection).toBe('connections');
-  expect(s.connectionsFilter).toEqual({ kind: 'interest', value: 'Investors' });
+  expect(s.connectionsFilter).toEqual({ roles: [], interests: ['Investors'] });
 });
 
 it('drills into Connections searched by firm when a firm bar is clicked', () => {
@@ -102,37 +104,16 @@ it('drills into Connections searched by firm when a firm bar is clicked', () => 
   expect(s.connectionsSearch).toBe('Acme Ventures');
 });
 
-it('Customize lets you hide a section and restore it from the tray', () => {
+it('switches to the Follow up tab, hiding the charts', () => {
   mockConnections = [c({ roleCategory: 'Investor', categorizedAt: 1, headline: 'Partner at Acme' })];
-  const { container } = render(<InsightsView />);
+  render(<InsightsView />);
+  expect(screen.getByText('Composition by role')).toBeInTheDocument();
 
-  // Composition is visible initially.
-  expect(container.querySelector('[data-section="composition"]')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Follow up' }));
 
-  fireEvent.click(screen.getByRole('button', { name: /Customize/i }));
-  fireEvent.click(screen.getByRole('button', { name: /Hide Composition by role/i }));
-
-  // Card gone from the grid; appears in the hidden tray as a restore button.
-  expect(container.querySelector('[data-section="composition"]')).not.toBeInTheDocument();
-  const restore = screen.getByRole('button', { name: 'Composition by role' });
-  fireEvent.click(restore);
-  expect(container.querySelector('[data-section="composition"]')).toBeInTheDocument();
-});
-
-it('Customize can move a section down past its sibling', () => {
-  mockConnections = [
-    c({ roleCategory: 'Investor', categorizedAt: 1, headline: 'Partner at Acme Ventures' }),
-    c({ roleCategory: 'Investor', categorizedAt: 1, headline: 'Principal at Acme Ventures' }),
-  ];
-  const { container } = render(<InsightsView />);
-  const order = () => Array.from(container.querySelectorAll('[data-section]')).map((el) => el.getAttribute('data-section'));
-  // AI suggestions leads the default order.
-  expect(order()[0]).toBe('aisuggestions');
-
-  fireEvent.click(screen.getByRole('button', { name: /Customize/i }));
-  // Move "AI suggestions" down one — it should no longer be first.
-  fireEvent.click(screen.getByRole('button', { name: /Move AI suggestions down/i }));
-  expect(order()[0]).not.toBe('aisuggestions');
+  expect(screen.getByRole('tab', { name: 'Follow up' })).toHaveAttribute('aria-selected', 'true');
+  // Charts are no longer rendered on the Follow up tab.
+  expect(screen.queryByText('Composition by role')).not.toBeInTheDocument();
 });
 
 it('nudges to categorize when some are uncategorized', () => {

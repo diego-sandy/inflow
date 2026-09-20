@@ -67,7 +67,7 @@ export function ChatView() {
         <div className="flex items-center gap-2 border-b border-edge px-6 py-3">
           <h2 className="flex items-center gap-1.5 text-base font-semibold text-fg-strong">
             <SparkleIcon className="h-4 w-4 text-blue-400" />
-            Flow
+            AI Chat
           </h2>
           <span className="text-[11px] text-fg-faint">Your network AI</span>
         </div>

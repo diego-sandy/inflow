@@ -17,43 +17,46 @@ export function isNamedConnection(c: Pick<Connection, 'fullName'>): boolean {
  * scannable at a glance. "Other" (and unknown) stays a muted neutral chip.
  */
 export function roleBadgeClass(role: ConnectionRole | undefined): string {
+  // Text uses the 700 stop in light mode (dark enough to read on the pale 15%
+  // fill) and the 300 stop in dark mode — mirroring the .btn-primary approach.
   switch (role) {
     case 'Investor':
-      return 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30';
+      return 'bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300';
     case 'Founder':
-      return 'bg-violet-500/15 text-violet-300 ring-violet-500/30';
+      return 'bg-violet-500/15 text-violet-700 ring-violet-500/30 dark:text-violet-300';
     case 'Executive':
-      return 'bg-amber-500/15 text-amber-300 ring-amber-500/30';
+      return 'bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300';
     case 'Engineering':
-      return 'bg-blue-500/15 text-blue-300 ring-blue-500/30';
+      return 'bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300';
     case 'Product':
-      return 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30';
+      return 'bg-cyan-500/15 text-cyan-700 ring-cyan-500/30 dark:text-cyan-300';
     case 'Design':
-      return 'bg-pink-500/15 text-pink-300 ring-pink-500/30';
+      return 'bg-pink-500/15 text-pink-700 ring-pink-500/30 dark:text-pink-300';
     case 'Sales & BD':
-      return 'bg-orange-500/15 text-orange-300 ring-orange-500/30';
+      return 'bg-orange-500/15 text-orange-700 ring-orange-500/30 dark:text-orange-300';
     case 'Marketing':
-      return 'bg-rose-500/15 text-rose-300 ring-rose-500/30';
+      return 'bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-300';
     case 'Recruiting':
-      return 'bg-teal-500/15 text-teal-300 ring-teal-500/30';
+      return 'bg-teal-500/15 text-teal-700 ring-teal-500/30 dark:text-teal-300';
     case 'Operations':
-      return 'bg-indigo-500/15 text-indigo-300 ring-indigo-500/30';
+      return 'bg-indigo-500/15 text-indigo-700 ring-indigo-500/30 dark:text-indigo-300';
     default:
       return 'bg-surface-input text-fg-muted ring-edge';
   }
 }
 
 // Palette for user-defined interest tags — assigned deterministically by name so
-// each tag keeps the same color everywhere it appears.
+// each tag keeps the same color everywhere it appears. Text is theme-aware
+// (700 in light mode, 300 in dark) so the chips read clearly in both.
 const TAG_PALETTE = [
-  'bg-blue-500/15 text-blue-300 ring-blue-500/30',
-  'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
-  'bg-violet-500/15 text-violet-300 ring-violet-500/30',
-  'bg-amber-500/15 text-amber-300 ring-amber-500/30',
-  'bg-pink-500/15 text-pink-300 ring-pink-500/30',
-  'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30',
-  'bg-orange-500/15 text-orange-300 ring-orange-500/30',
-  'bg-teal-500/15 text-teal-300 ring-teal-500/30',
+  'bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300',
+  'bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300',
+  'bg-violet-500/15 text-violet-700 ring-violet-500/30 dark:text-violet-300',
+  'bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300',
+  'bg-pink-500/15 text-pink-700 ring-pink-500/30 dark:text-pink-300',
+  'bg-cyan-500/15 text-cyan-700 ring-cyan-500/30 dark:text-cyan-300',
+  'bg-orange-500/15 text-orange-700 ring-orange-500/30 dark:text-orange-300',
+  'bg-teal-500/15 text-teal-700 ring-teal-500/30 dark:text-teal-300',
 ];
 
 /** Stable per-tag color classes (same tag → same color across the app). */

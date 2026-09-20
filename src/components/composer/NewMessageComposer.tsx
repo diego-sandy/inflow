@@ -3,15 +3,8 @@ import { sendBridgeMessage } from '@/lib/bridge';
 import { useUIStore } from '@/store/ui-store';
 import { db } from '@/db/database';
 import { useCachedImage } from '@/hooks/useCachedImage';
+import { makeDraftConversationId } from '@/lib/draft-conversation';
 import type { Conversation } from '@/types/conversation';
-
-function makeDraftConversationId(profileUrns: string[]): string {
-  const ids = profileUrns
-    .map((urn) => urn.split(':').pop()!)
-    .sort()
-    .join('+');
-  return `draft-${ids}`;
-}
 
 interface TypeaheadResult {
   name: string;

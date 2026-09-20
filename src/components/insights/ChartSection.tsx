@@ -33,7 +33,7 @@ const TYPES: { type: ChartType; label: string; icon: React.ReactNode }[] = [
 
 /** A chart with a small icon-only switcher (bar / column / pie). */
 export function ChartSection({ data }: { data: ChartDatum[] }) {
-  const [type, setType] = useState<ChartType>('bar');
+  const [type, setType] = useState<ChartType>('pie');
   return (
     <div>
       <div className="mb-2 flex justify-end gap-0.5">

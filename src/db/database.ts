@@ -4,6 +4,7 @@ import type { Message } from '@/types/message';
 import type { Profile } from '@/types/profile';
 import type { Connection } from '@/types/connection';
 import type { InsightChat } from '@/types/insight-chat';
+import type { ScheduledMessage } from '@/types/scheduled-message';
 
 export interface PendingAction {
   id: string;
@@ -91,6 +92,7 @@ type InflowDatabase = Dexie & {
   tombstones: EntityTable<Tombstone, 'conversationId'>;
   connections: EntityTable<Connection, 'profileUrn'>;
   insightChats: EntityTable<InsightChat, 'id'>;
+  scheduledMessages: EntityTable<ScheduledMessage, 'id'>;
 };
 
 export function applySchema(database: Dexie): void {
@@ -282,6 +284,11 @@ export function applySchema(database: Dexie): void {
   // history sidebar and can be resumed (like the Claude chat list).
   database.version(15).stores({
     insightChats: 'id, updatedAt',
+  });
+
+  // v16: drafted / scheduled outbound messages (the Inbox → Scheduled queue).
+  database.version(16).stores({
+    scheduledMessages: 'id, status, scheduledAt, updatedAt, [status+scheduledAt]',
   });
 }
 

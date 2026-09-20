@@ -6,14 +6,22 @@ import { isDemoMode as checkDemoMode } from '@/lib/demo-mode';
 export type ViewMode = 'list' | 'thread';
 export type Theme = 'light' | 'dark' | 'system' | 'purple';
 export type InboxTab = 'focused' | 'other' | 'archived' | 'spam';
-export type AppSection = 'inbox' | 'connections' | 'insights' | 'chat';
+export type AppSection = 'inbox' | 'connections' | 'insights' | 'chat' | 'outbox';
 export type SettingsSection = 'ai' | 'appearance' | 'backup' | 'advanced' | 'about';
 
-/** Active filter over the connections list (shared so Insights can drive it). */
-export type ConnectionFilter =
-  | { kind: 'all' }
-  | { kind: 'role'; value: ConnectionRole }
-  | { kind: 'interest'; value: string };
+/**
+ * Active filter over the connections list (shared so Insights can drive it).
+ * Multi-select: empty arrays mean "no constraint". A connection matches when its
+ * role is one of `roles` (or `roles` is empty) AND it has one of `interests`
+ * (or `interests` is empty) — OR within a facet, AND across facets.
+ */
+export interface ConnectionFilter {
+  roles: ConnectionRole[];
+  interests: string[];
+}
+
+/** The empty filter — everything shows. */
+export const EMPTY_CONNECTION_FILTER: ConnectionFilter = { roles: [], interests: [] };
 
 export interface Toast {
   id: string;
@@ -212,7 +220,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   sectionForward: [],
   navRailCollapsed: getStoredNavCollapsed(),
   selectedConnectionUrn: null,
-  connectionsFilter: { kind: 'all' },
+  connectionsFilter: { roles: [], interests: [] },
   connectionsSearch: '',
   tabMemory: {},
   _pendingRestore: null,
@@ -326,7 +334,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({
       activeSection: 'connections',
       composeNewActive: false,
-      connectionsFilter: opts?.filter ?? { kind: 'all' },
+      connectionsFilter: opts?.filter ?? { roles: [], interests: [] },
       connectionsSearch: opts?.search ?? '',
       // A fresh drill-in shouldn't keep a previously selected person highlighted.
       selectedConnectionUrn: null,

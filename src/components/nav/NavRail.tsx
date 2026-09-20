@@ -11,6 +11,8 @@ interface NavRailProps {
   connectionsCount?: number;
   /** Unread count for the Inbox item (omitted → no badge). */
   inboxUnread?: number;
+  /** Count of Outbox items needing attention (ready-to-send + failed). */
+  outboxAttention?: number;
 }
 
 function InboxIcon({ className }: { className?: string }) {
@@ -44,6 +46,17 @@ function InsightsIcon({ className }: { className?: string }) {
   );
 }
 
+function OutboxIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+      <path d="M12 7v6" />
+      <path d="M9.5 9.5 12 7l2.5 2.5" />
+    </svg>
+  );
+}
+
 function ChatIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -61,7 +74,7 @@ interface ItemDef {
   count?: number;
 }
 
-export function NavRail({ connectionsCount, inboxUnread }: NavRailProps) {
+export function NavRail({ connectionsCount, inboxUnread, outboxAttention }: NavRailProps) {
   const activeSection = useUIStore((s) => s.activeSection);
   const setActiveSection = useUIStore((s) => s.setActiveSection);
   const collapsed = useUIStore((s) => s.navRailCollapsed);
@@ -74,8 +87,9 @@ export function NavRail({ connectionsCount, inboxUnread }: NavRailProps) {
   const items: ItemDef[] = [
     { id: 'inbox', label: 'Inbox', desc: 'Read and reply to your LinkedIn messages.', Icon: InboxIcon, count: inboxUnread },
     { id: 'connections', label: 'Connections', desc: 'Your connections, auto-categorized by role and interest.', Icon: PeopleIcon, count: connectionsCount },
+    { id: 'outbox', label: 'Outbox', desc: 'Drafts and scheduled messages — you always send.', Icon: OutboxIcon, count: outboxAttention },
     { id: 'insights', label: 'Insights', desc: 'Network composition, firm clusters, and AI suggestions.', Icon: InsightsIcon },
-    { id: 'chat', label: 'Flow', desc: 'Ask Flow anything about your network.', Icon: ChatIcon },
+    { id: 'chat', label: 'AI Chat', desc: 'Ask AI anything about your network.', Icon: ChatIcon },
   ];
 
   return (

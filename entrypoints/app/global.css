@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/*
+ * Drive Tailwind's `dark:` variant off the app's own `.dark` class (toggled by
+ * applyTheme in ui-store) instead of the OS `prefers-color-scheme`. Without this,
+ * `dark:` utilities followed the operating system, so they could invert against
+ * the app's actual theme (e.g. light-mode app on a dark-mode OS). `.theme-purple`
+ * is always applied together with `.dark`, so purple counts as dark too.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Theme variables — light is default */
 :root {
   --surface: #ffffff;
@@ -80,9 +89,14 @@ html.theme-purple {
  */
 .btn-primary {
   background-color: rgb(59 130 246 / 0.15);
-  color: rgb(147 197 253);
-  box-shadow: inset 0 0 0 1px rgb(59 130 246 / 0.30);
+  color: rgb(29 78 216); /* blue-700 — readable on the pale fill in light mode */
+  box-shadow: inset 0 0 0 1px rgb(59 130 246 / 0.35);
   transition: background-color 150ms ease;
+}
+/* In dark / purple themes the pale fill sits on a dark ground, so use a light blue. */
+.dark .btn-primary,
+.theme-purple .btn-primary {
+  color: rgb(147 197 253); /* blue-300 */
 }
 .btn-primary:hover:not(:disabled) {
   background-color: rgb(59 130 246 / 0.28);

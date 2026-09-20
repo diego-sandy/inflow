@@ -50,11 +50,12 @@ it('refreshes on mount and shows an empty state', async () => {
 it('auto-selects the first invitation and shows its detail with the mutual line', async () => {
   await db!.invitations.add(inv({ id: 'i1', name: 'Ada Lovelace', message: 'Hi Diego', mutualCount: 3, mutualNames: ['Grace Hopper'] }));
   render(<InvitationsView />);
-  // The detail pane (only place the note + mutual line render) waits to mount.
-  expect(await screen.findByText(/Grace Hopper and 2 other shared connections/i)).toBeInTheDocument();
-  expect(screen.getByText('Hi Diego')).toBeInTheDocument();
-  // Name shows in both the list row and the detail pane.
-  expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThanOrEqual(2);
+  // The note pane renders once the first row is auto-selected.
+  expect(await screen.findByText('Hi Diego')).toBeInTheDocument();
+  // The mutual line renders on the profile row itself.
+  expect(screen.getByText(/Grace Hopper and 2 other shared connections/i)).toBeInTheDocument();
+  // The note pane is headed by the sender.
+  expect(screen.getByText(/Note from Ada Lovelace/i)).toBeInTheDocument();
 });
 
 it('accepts the selected invitation (optimistic remove + bridge call)', async () => {

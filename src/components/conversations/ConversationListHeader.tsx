@@ -53,6 +53,7 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const { drafts, scheduled, ready } = useOutbox();
   const queueCounts: Record<string, number> = { drafts: drafts.length, scheduled: ready.length + scheduled.length };
   const queueActive = inboxTab === 'drafts' || inboxTab === 'scheduled';
@@ -233,35 +234,43 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
           )}
         </div>
 
+        {/* Narrow width: one custom folder dropdown (no native OS popup). */}
         <div className="relative @min-[352px]:hidden">
-          <select
+          <button
+            onClick={() => setFolderMenuOpen((v) => !v)}
             aria-label="Folder"
-            value={inboxTab}
-            onChange={(e) => handleTabSelect(e.target.value as InboxTab)}
-            className="cursor-pointer appearance-none rounded-md bg-surface-input py-1 pl-2 pr-6 text-[11px] font-medium text-fg-strong outline-none ring-1 ring-transparent transition-colors focus:ring-blue-500/50"
+            aria-haspopup="menu"
+            aria-expanded={folderMenuOpen}
+            className="flex items-center gap-1 rounded-md bg-surface-input px-2 py-1 text-[11px] font-medium text-fg-strong transition-colors hover:bg-surface-hover"
           >
-            {TABS.map((tab) => (
-              <option key={tab.id} value={tab.id}>
-                {tab.label}
-              </option>
-            ))}
-            {QUEUE_TABS.map((tab) => (
-              <option key={tab.id} value={tab.id}>
-                {tab.label}{queueCounts[tab.id] > 0 ? ` (${queueCounts[tab.id]})` : ''}
-              </option>
-            ))}
-          </select>
-          <svg
-            className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-fg-muted"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+            {[...TABS, ...QUEUE_TABS].find((t) => t.id === inboxTab)?.label ?? 'Folder'}
+            <svg className={`h-3 w-3 text-fg-muted transition-transform ${folderMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+          </button>
+          {folderMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setFolderMenuOpen(false)} />
+              <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-edge bg-surface-raised py-1 shadow-lg">
+                {[...TABS, ...QUEUE_TABS].map((t) => {
+                  const active = inboxTab === t.id;
+                  const count = queueCounts[t.id];
+                  return (
+                    <button
+                      key={t.id}
+                      role="menuitemradio"
+                      aria-checked={active}
+                      onClick={() => { handleTabSelect(t.id); setFolderMenuOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
+                    >
+                      <span className="flex-1">{t.label}</span>
+                      {count > 0 && (
+                        <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${active ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-surface-input text-fg-muted'}`}>{count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Unread quick-filter — sets/clears the is:unread search filter */}

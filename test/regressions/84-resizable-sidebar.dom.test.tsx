@@ -157,16 +157,17 @@ describe('narrow-sidebar folder dropdown', () => {
     const segmented = screen.getByRole('button', { name: 'Focused' }).parentElement!;
     expect(segmented.className).toContain('hidden');
     expect(segmented.className).toContain('@min-[352px]:flex');
-    // Dropdown: the narrow-width replacement.
-    const select = screen.getByLabelText('Folder');
-    expect(select.parentElement!.className).toContain('@min-[352px]:hidden');
-    expect((select as HTMLSelectElement).value).toBe('focused');
+    // Narrow-width custom dropdown (a button, not a native select).
+    const folder = screen.getByRole('button', { name: 'Folder' });
+    expect(folder.parentElement!.className).toContain('@min-[352px]:hidden');
+    expect(folder.textContent).toContain('Focused');
   });
 
-  it('changing the dropdown switches folders and triggers the category sync', () => {
+  it('choosing a folder in the dropdown switches folders and triggers the category sync', () => {
     render(<ConversationListHeader />);
 
-    fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'archived' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Folder' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Archive/i }));
 
     expect(useUIStore.getState().inboxTab).toBe('archived');
     expect(sendBridgeMessage).toHaveBeenCalledWith({ type: 'BURST_DISCOVER', category: 'ARCHIVE' });
@@ -177,7 +178,8 @@ describe('narrow-sidebar folder dropdown', () => {
     useUIStore.setState({ inboxTab: 'other' });
     render(<ConversationListHeader />);
 
-    fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'focused' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Folder' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Focused/i }));
 
     expect(useUIStore.getState().inboxTab).toBe('focused');
     expect(sendBridgeMessage).not.toHaveBeenCalled();

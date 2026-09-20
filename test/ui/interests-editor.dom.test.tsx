@@ -24,6 +24,13 @@ it('renders existing interest tags', () => {
   expect(screen.getByText('★ Investors')).toBeInTheDocument();
 });
 
+it('calls onClose from the close button', () => {
+  const onClose = vi.fn();
+  render(<InterestsEditor aiAvailable connectionCount={10} onRecategorize={vi.fn()} onClose={onClose} />);
+  fireEvent.click(screen.getByRole('button', { name: /Close tag editor/i }));
+  expect(onClose).toHaveBeenCalled();
+});
+
 it('adds a new tag on Enter', () => {
   render(<InterestsEditor aiAvailable connectionCount={10} onRecategorize={vi.fn()} />);
   const input = screen.getByPlaceholderText(/Add an interest/i);

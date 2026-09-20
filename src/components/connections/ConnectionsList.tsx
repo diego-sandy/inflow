@@ -24,6 +24,12 @@ function filterMatches(c: Connection, f: ConnectionFilter): boolean {
 
 type SortMode = 'recent' | 'first' | 'last';
 
+const SORT_OPTIONS: { id: SortMode; label: string }[] = [
+  { id: 'recent', label: 'Recently added' },
+  { id: 'first', label: 'First name' },
+  { id: 'last', label: 'Last name' },
+];
+
 const SORT_KEY = 'inflow-connections-sort';
 function getStoredSort(): SortMode {
   try {
@@ -198,6 +204,7 @@ export function ConnectionsList() {
   const setQuery = useUIStore((s) => s.setConnectionsSearch);
   const [editingInterests, setEditingInterests] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [sort, setSort] = useState<SortMode>(getStoredSort);
 
   const toggleRole = (r: ConnectionRole) => {
@@ -535,17 +542,43 @@ export function ConnectionsList() {
             )}
           </div>
         )}
-        <label className="sr-only" htmlFor="connections-sort">Sort connections</label>
-        <select
-          id="connections-sort"
-          value={sort}
-          onChange={(e) => changeSort(e.target.value as SortMode)}
-          className="shrink-0 rounded-lg bg-surface-input px-2 py-1.5 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge outline-none focus:ring-blue-500/40"
-        >
-          <option value="recent">Recently added</option>
-          <option value="first">First name</option>
-          <option value="last">Last name</option>
-        </select>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setSortMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={sortMenuOpen}
+            aria-label="Sort connections"
+            className="flex items-center gap-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
+          >
+            {SORT_OPTIONS.find((o) => o.id === sort)?.label ?? 'Sort'}
+            <svg className={`h-3 w-3 text-fg-muted transition-transform ${sortMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          {sortMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setSortMenuOpen(false)} />
+              <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-edge bg-surface-raised py-1 shadow-lg">
+                {SORT_OPTIONS.map((o) => {
+                  const active = sort === o.id;
+                  return (
+                    <button
+                      key={o.id}
+                      role="menuitemradio"
+                      aria-checked={active}
+                      onClick={() => { changeSort(o.id); setSortMenuOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
+                    >
+                      <span className="flex-1">{o.label}</span>
+                      {active && (
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Interests editor */}
@@ -553,6 +586,7 @@ export function ConnectionsList() {
         <InterestsEditor
           aiAvailable={aiAvailable}
           connectionCount={connections.length}
+          onClose={() => setEditingInterests(false)}
           onRecategorize={async () => {
             // Clear the stamp so the auto-categorizer re-runs with new interests.
             if (db) await db.connections.toCollection().modify({ categorizedAt: 0 });

@@ -70,21 +70,26 @@ it('searches headlines too', () => {
   expect(order()).toEqual(['c']);
 });
 
+function pickSort(label: RegExp) {
+  fireEvent.click(screen.getByRole('button', { name: /Sort connections/i }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: label }));
+}
+
 it('sorts by first name', () => {
   render(<ConnectionsList />);
-  fireEvent.change(screen.getByLabelText(/Sort connections/i), { target: { value: 'first' } });
+  pickSort(/First name/i);
   expect(order()).toEqual(['a', 'b', 'c']); // Ada, Alan, Grace
 });
 
 it('sorts by last name', () => {
   render(<ConnectionsList />);
-  fireEvent.change(screen.getByLabelText(/Sort connections/i), { target: { value: 'last' } });
+  pickSort(/Last name/i);
   expect(order()).toEqual(['c', 'a', 'b']); // Hopper, Lovelace, Turing
 });
 
 it('persists the sort choice to localStorage', () => {
   render(<ConnectionsList />);
-  fireEvent.change(screen.getByLabelText(/Sort connections/i), { target: { value: 'last' } });
+  pickSort(/Last name/i);
   expect(localStorage.getItem('inflow-connections-sort')).toBe('last');
 });
 

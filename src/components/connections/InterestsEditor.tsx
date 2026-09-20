@@ -10,11 +10,14 @@ export function InterestsEditor({
   aiAvailable,
   connectionCount,
   onRecategorize,
+  onClose,
 }: {
   aiAvailable: boolean;
   /** Total connections a re-categorize would re-scan (for the cost warning). */
   connectionCount: number;
   onRecategorize: () => Promise<void> | void;
+  /** Close the editor (returns to the plain list). */
+  onClose?: () => void;
 }) {
   const [interests, setInterests] = useConnectionInterests();
   const [draft, setDraft] = useState('');
@@ -51,6 +54,7 @@ export function InterestsEditor({
         <p className="text-[11px] font-medium uppercase tracking-wide text-fg-faint">
           Interest tags
         </p>
+        <div className="flex items-center gap-1">
         {recategorizing ? (
           <span className="px-2 py-1 text-[11px] font-medium text-blue-300">Re-categorizing…</span>
         ) : confirming ? (
@@ -82,6 +86,18 @@ export function InterestsEditor({
             Re-categorize all
           </button>
         )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close tag editor"
+            title="Close"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-strong"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        )}
+        </div>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

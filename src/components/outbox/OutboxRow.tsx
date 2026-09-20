@@ -36,6 +36,17 @@ function badgeClass(status: ScheduledMessage['status'], ready: boolean): string 
  */
 async function reopenInComposer(msg: ScheduledMessage) {
   if (!db) return;
+  // A scheduled reply belongs to a real thread — reopen that thread's composer
+  // with the body restored, rather than minting a new draft conversation.
+  if (msg.conversationId) {
+    await db.draftAttachments.put({ conversationId: msg.conversationId, text: msg.body, files: [], names: [], types: [] });
+    await db.scheduledMessages.delete(msg.id);
+    const store = useUIStore.getState();
+    store.setActiveSection('inbox');
+    store.setComposeNewActive(false);
+    store.setSelectedConversationId(msg.conversationId);
+    return;
+  }
   const convId = makeDraftConversationId(msg.recipientUrns);
   const names = (msg.recipientName || '').split(',').map((s) => s.trim()).filter(Boolean);
   await db.conversations.put({
@@ -78,7 +89,11 @@ export function OutboxRow({ msg, ready }: { msg: ScheduledMessage; ready?: boole
     setBusy(true);
     await save({ status: 'sending' }); // claim locally so nothing double-sends
     try {
-      const res = await sendBridgeMessage({ type: 'CREATE_CONVERSATION', recipientUrns: msg.recipientUrns, body: msg.body });
+      // A reply (conversationId set) sends into the existing thread; a new
+      // outbound message creates a fresh conversation from the recipient URNs.
+      const res = msg.conversationId
+        ? await sendBridgeMessage({ type: 'SEND_MESSAGE', conversationId: msg.conversationId, body: msg.body })
+        : await sendBridgeMessage({ type: 'CREATE_CONVERSATION', recipientUrns: msg.recipientUrns, body: msg.body });
       if (res.success) {
         await save({ status: 'sent', sentAt: Date.now() });
         showToast({ message: `Message sent to ${msg.recipientName}` });

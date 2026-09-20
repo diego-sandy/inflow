@@ -61,6 +61,39 @@ it('lists a draft under Drafts and sends it now', async () => {
   await waitFor(async () => expect((await db!.scheduledMessages.get('d1'))!.status).toBe('sent'));
 });
 
+it('sends a scheduled reply into its thread via SEND_MESSAGE (not CREATE_CONVERSATION)', async () => {
+  await db!.scheduledMessages.add(
+    row({ id: 'r1', conversationId: 'urn:li:msg_conversation:THREAD', body: 'Following up!' }),
+  );
+  render(<OutboxView />);
+  await screen.findByText('Ada Lovelace');
+
+  fireEvent.click(screen.getByRole('button', { name: /send now/i }));
+  await waitFor(() =>
+    expect(sendBridgeMessage).toHaveBeenCalledWith({
+      type: 'SEND_MESSAGE',
+      conversationId: 'urn:li:msg_conversation:THREAD',
+      body: 'Following up!',
+    }),
+  );
+  await waitFor(async () => expect((await db!.scheduledMessages.get('r1'))!.status).toBe('sent'));
+});
+
+it('Edit on a scheduled reply reopens its real thread, not a draft conversation', async () => {
+  await db!.scheduledMessages.add(
+    row({ id: 'r2', conversationId: 'urn:li:msg_conversation:T2', body: 'Reopen reply' }),
+  );
+  render(<OutboxView />);
+  await screen.findByText('Ada Lovelace');
+
+  fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }));
+  await waitFor(async () => expect(await db!.scheduledMessages.get('r2')).toBeUndefined());
+  const s = useUIStore.getState();
+  expect(s.activeSection).toBe('inbox');
+  expect(s.selectedConversationId).toBe('urn:li:msg_conversation:T2');
+  expect((await db!.draftAttachments.get('urn:li:msg_conversation:T2'))?.text).toBe('Reopen reply');
+});
+
 it('resurfaces a past-due scheduled message as Ready to send (does not auto-send)', async () => {
   await db!.scheduledMessages.add(row({ id: 's1', status: 'scheduled', scheduledAt: Date.now() - 60_000 }));
   render(<OutboxView />);

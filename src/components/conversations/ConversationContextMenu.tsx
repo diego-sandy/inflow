@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useUIStore } from '@/store/ui-store';
 import { useOptimisticAction } from '@/hooks/useOptimisticAction';
+import { tabLabel } from '@/lib/inbox-labels';
 import type { Conversation } from '@/types/conversation';
 
 interface ConversationContextMenuProps {
@@ -28,6 +29,7 @@ export function ConversationContextMenu({ conversation, x, y, onClose }: Convers
   const [pos, setPos] = useState({ x, y });
   const actions = useOptimisticAction();
   const inboxTab = useUIStore((s) => s.inboxTab);
+  const inboxLabels = useUIStore((s) => s.inboxLabels);
 
   // Clamp to the viewport so the menu never renders off-screen.
   useLayoutEffect(() => {
@@ -68,9 +70,20 @@ export function ConversationContextMenu({ conversation, x, y, onClose }: Convers
     };
   }, [onClose]);
 
+  const focusedLabel = tabLabel('focused', inboxLabels);
+  const otherLabel = tabLabel('other', inboxLabels);
+
   const items: MenuItem[] = [
     {
-      label: inboxTab === 'archived' ? 'Move to Focused' : 'Archive',
+      label: conversation.read === 0 ? 'Mark as read' : 'Mark as unread',
+      shortcut: 'U',
+      onSelect: () =>
+        conversation.read === 0
+          ? actions.markRead(conversation.id, conversation.mergedIds)
+          : actions.markUnread(conversation.id),
+    },
+    {
+      label: inboxTab === 'archived' ? `Move to ${focusedLabel}` : 'Archive',
       shortcut: 'E',
       onSelect: () =>
         inboxTab === 'archived'
@@ -83,7 +96,7 @@ export function ConversationContextMenu({ conversation, x, y, onClose }: Convers
       onSelect: () => actions.starConversation(conversation),
     },
     {
-      label: 'Move to Other',
+      label: `Move to ${otherLabel}`,
       shortcut: 'O',
       onSelect: () => actions.moveToOther(conversation),
     },

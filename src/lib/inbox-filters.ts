@@ -22,6 +22,19 @@ export function isFocusedConversation(
   return isFocusedCategory(c.category);
 }
 
+/**
+ * "Belongs to the Other tab" for badge purposes: SECONDARY_INBOX, not archived,
+ * not a compose draft. Mirrors the list query (useConversations) so the badge
+ * and the list agree on what counts.
+ */
+export function isOtherConversation(
+  c: Pick<Conversation, 'archived' | 'category' | 'draft'>
+): boolean {
+  if (c.draft === 1) return false;
+  if (c.archived === 1) return false;
+  return c.category === 'SECONDARY_INBOX';
+}
+
 /** Count unread Focused-tab conversations (drives the toolbar badge). */
 export async function countUnreadFocused(db: {
   conversations: { where(index: string): { equals(v: number): { filter(f: (c: Conversation) => boolean): { count(): Promise<number> } } } };

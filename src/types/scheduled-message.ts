@@ -9,6 +9,12 @@ export interface ScheduledMessage {
   id: string;
   /** Recipient profile URN(s). A single urn for a 1:1. */
   recipientUrns: string[];
+  /**
+   * Existing thread to send into. When set, sending goes through SEND_MESSAGE
+   * (a reply); when absent, through CREATE_CONVERSATION (a brand-new outbound
+   * message keyed on `recipientUrns`).
+   */
+  conversationId?: string;
   /** Display name for the queue. */
   recipientName: string;
   body: string;

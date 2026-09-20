@@ -154,13 +154,13 @@ describe('narrow-sidebar folder dropdown', () => {
   it('renders both selector variants, container-gated by sidebar width', () => {
     render(<ConversationListHeader />);
     // Segmented control: visible only when the sidebar is wide enough.
-    const segmented = screen.getByRole('button', { name: 'Focused' }).parentElement!;
+    const segmented = screen.getByRole('button', { name: 'Primary' }).parentElement!;
     expect(segmented.className).toContain('hidden');
     expect(segmented.className).toContain('@min-[352px]:flex');
     // Narrow-width custom dropdown (a button, not a native select).
     const folder = screen.getByRole('button', { name: 'Folder' });
     expect(folder.parentElement!.className).toContain('@min-[352px]:hidden');
-    expect(folder.textContent).toContain('Focused');
+    expect(folder.textContent).toContain('Primary');
   });
 
   it('choosing a folder in the dropdown switches folders and triggers the category sync', () => {
@@ -179,7 +179,7 @@ describe('narrow-sidebar folder dropdown', () => {
     render(<ConversationListHeader />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Folder' }));
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Focused/i }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Primary/i }));
 
     expect(useUIStore.getState().inboxTab).toBe('focused');
     expect(sendBridgeMessage).not.toHaveBeenCalled();

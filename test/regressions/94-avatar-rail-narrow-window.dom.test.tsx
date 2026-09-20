@@ -109,7 +109,7 @@ describe('regression #94: avatar rail at narrow window widths', () => {
 
     expect(container.querySelector('[data-search-input]')).toBeFalsy();
     expect(screen.queryByText('Keyboard Shortcuts')).toBeFalsy();
-    expect(screen.queryByText('Focused')).toBeFalsy();
+    expect(screen.queryByText('Primary')).toBeFalsy();
     expect(screen.getByTitle('New message (C)')).toBeTruthy();
     expect(container.querySelectorAll('[data-conversation-id]').length).toBe(2);
   });

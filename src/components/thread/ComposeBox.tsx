@@ -324,24 +324,29 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
     }
 
     /**
-     * Save the current compose as an Outbox item (a deliberate draft, or a
-     * scheduled send) instead of sending now. Only used on the new-message flow,
-     * so recipients come straight from the draft conversation. Attachments are
-     * not carried into the Outbox yet — those still go out with an immediate send.
+     * Save the current compose as a queued item — a deliberate draft, or a
+     * scheduled send — instead of sending now. Works for both a new-message
+     * draft conversation (creates a fresh thread on send) and a reply into an
+     * existing thread (`conversationId` is carried so the send goes to that
+     * thread). Drafts/scheduled live in the Inbox; the queue is not owned by the
+     * MCP connector. Attachments aren't carried into the queue yet — those still
+     * go out with an immediate send.
      */
     async function saveToOutbox(status: 'draft' | 'scheduled', scheduledAt?: number) {
       const text = body.trim();
       if (!text) return;
-      const draftConv = await db.conversations.get(conversationId);
-      if (!draftConv) {
-        useUIStore.getState().showToast({ message: 'Draft conversation not found' });
+      const conv = await db.conversations.get(conversationId);
+      if (!conv) {
+        useUIStore.getState().showToast({ message: 'Conversation not found' });
         return;
       }
       const now = Date.now();
       await db.scheduledMessages.add({
         id: crypto.randomUUID(),
-        recipientUrns: draftConv.participantUrns,
-        recipientName: draftConv.participantNames.filter(Boolean).join(', ') || 'Unknown',
+        recipientUrns: conv.participantUrns,
+        recipientName: conv.participantNames.filter(Boolean).join(', ') || 'Unknown',
+        // A reply carries the thread id; a new-message draft does not.
+        ...(isDraftConv ? {} : { conversationId }),
         body: text,
         status,
         ...(scheduledAt ? { scheduledAt } : {}),
@@ -354,12 +359,15 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       setOutboxMenuOpen(false);
       setScheduleWhen('');
       saveDraft(conversationId, '', []);
-      try { await db.conversations.delete(conversationId); } catch {}
       const store = useUIStore.getState();
-      store.setSelectedConversationId(null);
-      store.setComposeNewActive(false);
-      store.setActiveSection('outbox');
-      store.showToast({ message: status === 'scheduled' ? 'Scheduled — find it under MCP connector' : 'Saved to drafts (MCP connector)' });
+      if (isDraftConv) {
+        try { await db.conversations.delete(conversationId); } catch {}
+        store.setComposeNewActive(false);
+      }
+      // Surface where it landed — the Inbox Drafts / Scheduled tab.
+      store.setActiveSection('inbox');
+      store.setInboxTab(status === 'scheduled' ? 'scheduled' : 'drafts');
+      store.showToast({ message: status === 'scheduled' ? 'Scheduled — find it in Scheduled' : 'Saved to Drafts' });
     }
 
     /**
@@ -826,9 +834,8 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
 
             <div className="flex-1" />
 
-            {/* Save-as-draft / schedule (new-message flow only) */}
-            {isDraftConv && (
-              <div className="relative shrink-0">
+            {/* Save-as-draft / schedule — for new messages and replies alike */}
+            <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => setOutboxMenuOpen((v) => !v)}
@@ -879,7 +886,6 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                   </>
                 )}
               </div>
-            )}
 
             {/* Send — hold ⌘ to send and archive (hint lives in the tooltip) */}
             <button

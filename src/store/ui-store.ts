@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Message } from '@/types/message';
 import type { ConnectionRole } from '@/types/connection';
 import { isDemoMode as checkDemoMode } from '@/lib/demo-mode';
+import { type InboxLabels, DEFAULT_INBOX_LABELS, normalizeInboxLabels } from '@/lib/inbox-labels';
 
 export type ViewMode = 'list' | 'thread';
 export type Theme = 'light' | 'dark' | 'system' | 'purple';
@@ -59,6 +60,8 @@ interface UIState {
   searchQuery: string;
   theme: Theme;
   inboxTab: InboxTab;
+  /** User-renamable labels for the Focused/Other tabs (persisted). */
+  inboxLabels: InboxLabels;
   lightboxImageUrl: string | null;
   deleteConfirmId: string | null;
   spamConfirmId: string | null;
@@ -98,6 +101,7 @@ interface UIState {
   clearLastUndo: () => void;
   setSearchQuery: (query: string) => void;
   setInboxTab: (tab: InboxTab) => void;
+  setInboxLabels: (labels: InboxLabels) => void;
   openLightbox: (url: string) => void;
   closeLightbox: () => void;
   setDeleteConfirmId: (id: string | null) => void;
@@ -157,6 +161,16 @@ function saveView(state: { inboxTab: InboxTab; selectedConversationId: string | 
   try {
     localStorage.setItem('inflow-view', JSON.stringify(state));
   } catch {}
+}
+
+const INBOX_LABELS_KEY = 'inflow-inbox-labels';
+
+function getStoredInboxLabels(): InboxLabels {
+  try {
+    const raw = localStorage.getItem(INBOX_LABELS_KEY);
+    if (raw) return normalizeInboxLabels(JSON.parse(raw));
+  } catch {}
+  return DEFAULT_INBOX_LABELS;
 }
 
 function getStoredSection(): AppSection {
@@ -225,6 +239,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   searchQuery: '',
   theme: initialTheme,
   inboxTab: initialView.inboxTab,
+  inboxLabels: getStoredInboxLabels(),
   lightboxImageUrl: null,
   deleteConfirmId: null,
   spamConfirmId: null,
@@ -276,6 +291,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     };
     set(newState);
     saveView({ inboxTab: tab, selectedConversationId: newState.selectedConversationId, selectedIndex: newState.selectedIndex, viewMode: s.viewMode });
+  },
+  setInboxLabels: (labels) => {
+    const normalized = normalizeInboxLabels(labels);
+    try { localStorage.setItem(INBOX_LABELS_KEY, JSON.stringify(normalized)); } catch {}
+    set({ inboxLabels: normalized });
   },
   openLightbox: (url) => set({ lightboxImageUrl: url }),
   closeLightbox: () => set({ lightboxImageUrl: null }),

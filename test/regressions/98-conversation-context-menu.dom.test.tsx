@@ -66,12 +66,30 @@ function menu() {
 }
 
 describe('regression #98: conversation row context menu', () => {
-  it('right-click opens the menu with all five actions', async () => {
+  it('right-click opens the menu with all actions', async () => {
     await renderListWithMenu(makeConversation());
     expect(menu()).toBeTruthy();
-    for (const label of ['Archive', 'Star', 'Move to Other', 'Mark as spam', 'Delete']) {
+    for (const label of ['Mark as unread', 'Archive', 'Star', 'Move to InMail', 'Mark as spam', 'Delete']) {
       expect(within(menu()!).getByText(label)).toBeTruthy();
     }
+  });
+
+  it('Mark as unread flips a read row to unread; unread rows offer Mark as read', async () => {
+    const conv = makeConversation({ read: 1 });
+    const { unmount } = await renderListWithMenu(conv);
+    fireEvent.click(within(menu()!).getByText('Mark as unread'));
+    await waitFor(async () => {
+      const stored = await testDb.conversations.get(conv.id);
+      expect(stored.read).toBe(0);
+    });
+    unmount();
+
+    const unread = makeConversation({ read: 0 });
+    await testDb.conversations.put(unread);
+    const utils = render(<ConversationList conversations={[unread]} category="PRIMARY_INBOX" />);
+    const row = utils.container.querySelector(`[data-conversation-id="${unread.id}"]`)!;
+    fireEvent.contextMenu(row, { clientX: 50, clientY: 50 });
+    expect(within(menu()!).getByText('Mark as read')).toBeTruthy();
   });
 
   it('Archive archives optimistically and closes the menu', async () => {
@@ -117,7 +135,7 @@ describe('regression #98: conversation row context menu', () => {
     const conv = makeConversation();
     await renderListWithMenu(conv);
 
-    fireEvent.click(within(menu()!).getByText('Move to Other'));
+    fireEvent.click(within(menu()!).getByText('Move to InMail'));
     await waitFor(async () => {
       const stored = await testDb.conversations.get(conv.id);
       expect(stored.category).toBe('SECONDARY_INBOX');
@@ -146,10 +164,10 @@ describe('regression #98: conversation row context menu', () => {
     const conv = makeConversation({ archived: 1, category: 'ARCHIVE' });
     await renderListWithMenu(conv);
 
-    expect(within(menu()!).getByText('Move to Focused')).toBeTruthy();
+    expect(within(menu()!).getByText('Move to Primary')).toBeTruthy();
     expect(within(menu()!).queryByText(/^Archive$/)).toBeFalsy();
 
-    fireEvent.click(within(menu()!).getByText('Move to Focused'));
+    fireEvent.click(within(menu()!).getByText('Move to Primary'));
     await waitFor(async () => {
       const stored = await testDb.conversations.get(conv.id);
       expect(stored.archived).toBe(0);

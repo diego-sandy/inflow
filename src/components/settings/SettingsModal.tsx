@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useUIStore, type SettingsSection, type Theme } from '@/store/ui-store';
+import { DEFAULT_INBOX_LABELS } from '@/lib/inbox-labels';
 import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { checkForUpdateAndToast } from '@/lib/check-update';
 import { AIKeySettings } from './AIKeySettings';
@@ -48,6 +49,65 @@ function AppearanceSettings() {
           </button>
         ))}
       </div>
+
+      <InboxLabelSettings />
+    </div>
+  );
+}
+
+function InboxLabelSettings() {
+  const inboxLabels = useUIStore((s) => s.inboxLabels);
+  const setInboxLabels = useUIStore((s) => s.setInboxLabels);
+  // Local draft so the user can clear a field while typing; committed on blur
+  // (empty falls back to the default via the store's normalizer).
+  const [draft, setDraft] = useState(inboxLabels);
+  useEffect(() => setDraft(inboxLabels), [inboxLabels]);
+
+  const commit = (next: { focused: string; other: string }) => setInboxLabels(next);
+  const isDefault =
+    inboxLabels.focused === DEFAULT_INBOX_LABELS.focused &&
+    inboxLabels.other === DEFAULT_INBOX_LABELS.other;
+
+  const fields: { key: 'focused' | 'other'; heading: string; hint: string }[] = [
+    { key: 'focused', heading: 'Primary tab', hint: 'LinkedIn’s primary inbox — your main conversations.' },
+    { key: 'other', heading: 'Secondary tab', hint: 'InMail, connection requests, and lower-priority threads.' },
+  ];
+
+  return (
+    <div className="mt-8 border-t border-edge pt-6">
+      <h3 className="text-sm font-semibold text-fg-strong">Inbox tab names</h3>
+      <p className="mt-1 text-sm text-fg-secondary">
+        Rename the two LinkedIn inbox tabs to whatever fits how you work.
+      </p>
+      <div className="mt-3 space-y-3">
+        {fields.map((f) => (
+          <div key={f.key} className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-fg-strong">{f.heading}</p>
+              <p className="text-xs text-fg-muted">{f.hint}</p>
+            </div>
+            <input
+              value={draft[f.key]}
+              maxLength={24}
+              onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+              onBlur={() => commit(draft)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
+              placeholder={DEFAULT_INBOX_LABELS[f.key]}
+              className="w-40 shrink-0 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+            />
+          </div>
+        ))}
+      </div>
+      {!isDefault && (
+        <button
+          onClick={() => commit(DEFAULT_INBOX_LABELS)}
+          className="mt-3 rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
+        >
+          Reset to {DEFAULT_INBOX_LABELS.focused} / {DEFAULT_INBOX_LABELS.other}
+        </button>
+      )}
     </div>
   );
 }

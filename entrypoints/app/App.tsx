@@ -22,6 +22,7 @@ import { InsightsView } from '@/components/insights/InsightsView';
 import { ChatView } from '@/components/chat/ChatView';
 import { OutboxView } from '@/components/outbox/OutboxView';
 import { useOutbox } from '@/hooks/useOutbox';
+import { useInboxUnread } from '@/hooks/useInboxUnread';
 import { useMcpBridge } from '@/hooks/useMcpBridge';
 import { InvitationsView } from '@/components/network/InvitationsView';
 import { useInvitations } from '@/hooks/useInvitations';
@@ -44,7 +45,8 @@ export function App() {
   const composeNewActive = useUIStore((s) => s.composeNewActive);
   const activeSection = useUIStore((s) => s.activeSection);
   const { connections } = useConnections();
-  const { attention: outboxAttention } = useOutbox();
+  const { attention: outboxAttention, drafts, scheduled, ready } = useOutbox();
+  const inboxUnread = useInboxUnread();
   const { count: invitationsCount, refresh: refreshInvitations } = useInvitations();
   useMcpBridge();
 
@@ -254,7 +256,13 @@ export function App() {
       <UpdateBanner />
       <div className={`flex min-h-0 flex-1 overflow-hidden bg-surface text-fg transition-[padding-bottom] duration-200 ease-out ${shortcutPanelOpen ? SHORTCUT_PANEL_PADDING : 'pb-0'}`}>
         {/* Section nav rail — Inbox / Connections, collapsible */}
-        <NavRail connectionsCount={connections.length} outboxAttention={outboxAttention} invitationsCount={invitationsCount} />
+        <NavRail
+          connectionsCount={connections.length}
+          inboxUnread={inboxUnread}
+          inboxQueue={{ drafts: drafts.length, scheduled: ready.length + scheduled.length }}
+          outboxAttention={outboxAttention}
+          invitationsCount={invitationsCount}
+        />
 
         {activeSection === 'chat' ? (
           <ChatView />

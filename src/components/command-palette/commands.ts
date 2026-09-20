@@ -1,3 +1,5 @@
+import { type InboxLabels, DEFAULT_INBOX_LABELS } from '@/lib/inbox-labels';
+
 export interface Command {
   id: string;
   label: string;
@@ -6,6 +8,8 @@ export interface Command {
 }
 
 export function buildCommands(actions: {
+  /** User's custom Focused/Other tab names, for the tab-related commands. */
+  inboxLabels?: InboxLabels;
   archiveSelected: () => void;
   moveToOtherSelected: () => void;
   moveToSpamSelected: () => void;
@@ -41,9 +45,10 @@ export function buildCommands(actions: {
   openInsights: () => void;
   goToInbox: () => void;
 }): Command[] {
+  const labels = actions.inboxLabels ?? DEFAULT_INBOX_LABELS;
   return [
     { id: 'archive', label: 'Archive conversation', shortcut: 'E', action: actions.archiveSelected },
-    { id: 'move-to-other', label: 'Move to Other', shortcut: 'O', action: actions.moveToOtherSelected },
+    { id: 'move-to-other', label: `Move to ${labels.other}`, shortcut: 'O', action: actions.moveToOtherSelected },
     { id: 'move-to-spam', label: 'Mark as spam', shortcut: '!', action: actions.moveToSpamSelected },
     { id: 'mark-read', label: 'Mark as read', shortcut: '', action: actions.markReadSelected },
     { id: 'mark-unread', label: 'Mark as unread', shortcut: 'U', action: actions.markUnreadSelected },
@@ -52,8 +57,8 @@ export function buildCommands(actions: {
     { id: 'compose', label: 'Compose new message', shortcut: 'C', action: actions.compose },
     { id: 'undo', label: 'Undo last action', shortcut: 'Z', action: actions.undo },
     { id: 'back', label: 'Go back to inbox', shortcut: 'Esc', action: actions.goBack },
-    { id: 'go-focused', label: 'Go to Focused inbox', shortcut: '1', action: actions.goToFocused },
-    { id: 'go-other', label: 'Go to Other inbox', shortcut: '2', action: actions.goToOther },
+    { id: 'go-focused', label: `Go to ${labels.focused} inbox`, shortcut: '1', action: actions.goToFocused },
+    { id: 'go-other', label: `Go to ${labels.other} inbox`, shortcut: '2', action: actions.goToOther },
     { id: 'go-archived', label: 'Go to Archived', shortcut: '3', action: actions.goToArchived },
     { id: 'go-spam', label: 'Go to Spam', shortcut: '4', action: actions.goToSpam },
     { id: 'go-inbox', label: 'Go to Inbox', shortcut: 'G I', action: actions.goToInbox },

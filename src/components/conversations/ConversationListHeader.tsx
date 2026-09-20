@@ -2,11 +2,12 @@ import { useState, useRef, useMemo, useCallback } from 'react';
 import { useUIStore, type InboxTab } from '@/store/ui-store';
 import { sendBridgeMessage } from '@/lib/bridge';
 import { useOutbox } from '@/hooks/useOutbox';
+import { tabLabel } from '@/lib/inbox-labels';
 
 /** The outbound-queue views reachable from the tab row's "More" menu. */
-const QUEUE_TABS: { id: InboxTab; label: string }[] = [
-  { id: 'drafts', label: 'Drafts' },
-  { id: 'scheduled', label: 'Scheduled' },
+const QUEUE_TABS: { id: InboxTab }[] = [
+  { id: 'drafts' },
+  { id: 'scheduled' },
 ];
 
 const FILTER_SUGGESTIONS = [
@@ -26,11 +27,11 @@ const FILTER_SUGGESTIONS = [
 /** Prefixes that accept a user-provided value after the colon */
 const VALUE_PREFIXES = ['from:', 'after:', 'before:', 'newer:', 'older:'];
 
-const TABS: { id: InboxTab; label: string; key: string }[] = [
-  { id: 'focused', label: 'Focused', key: '1' },
-  { id: 'other', label: 'Other', key: '2' },
-  { id: 'archived', label: 'Archive', key: '3' },
-  { id: 'spam', label: 'Spam', key: '4' },
+const TABS: { id: InboxTab; key: string }[] = [
+  { id: 'focused', key: '1' },
+  { id: 'other', key: '2' },
+  { id: 'archived', key: '3' },
+  { id: 'spam', key: '4' },
 ];
 
 /** Map UI tab to LinkedIn API category for on-demand sync. */
@@ -49,6 +50,8 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const inboxTab = useUIStore((s) => s.inboxTab);
   const setInboxTab = useUIStore((s) => s.setInboxTab);
+  const inboxLabels = useUIStore((s) => s.inboxLabels);
+  const labelFor = (id: InboxTab) => tabLabel(id, inboxLabels);
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
@@ -181,7 +184,7 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
                   : 'text-fg-muted hover:text-fg-secondary'
               }`}
             >
-              {tab.label}
+              {labelFor(tab.id)}
             </button>
           ))}
         </div>
@@ -198,7 +201,7 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
                 : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'
             }`}
           >
-            {queueActive ? QUEUE_TABS.find((t) => t.id === inboxTab)!.label : 'More'}
+            {queueActive ? labelFor(inboxTab) : 'More'}
             {!queueActive && (queueCounts.drafts + queueCounts.scheduled) > 0 && (
               <span className="rounded-full bg-blue-500/20 px-1.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
                 {queueCounts.drafts + queueCounts.scheduled}
@@ -220,7 +223,7 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
                       onClick={() => { handleTabSelect(t.id); setMoreOpen(false); }}
                       className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
                     >
-                      <span className="flex-1">{t.label}</span>
+                      <span className="flex-1">{labelFor(t.id)}</span>
                       {queueCounts[t.id] > 0 && (
                         <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${active ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-surface-input text-fg-muted'}`}>
                           {queueCounts[t.id]}
@@ -243,7 +246,7 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
             aria-expanded={folderMenuOpen}
             className="flex items-center gap-1 rounded-md bg-surface-input px-2 py-1 text-[11px] font-medium text-fg-strong transition-colors hover:bg-surface-hover"
           >
-            {[...TABS, ...QUEUE_TABS].find((t) => t.id === inboxTab)?.label ?? 'Folder'}
+            {[...TABS, ...QUEUE_TABS].some((t) => t.id === inboxTab) ? labelFor(inboxTab) : 'Folder'}
             <svg className={`h-3 w-3 text-fg-muted transition-transform ${folderMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
           </button>
           {folderMenuOpen && (
@@ -261,7 +264,7 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
                       onClick={() => { handleTabSelect(t.id); setFolderMenuOpen(false); }}
                       className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
                     >
-                      <span className="flex-1">{t.label}</span>
+                      <span className="flex-1">{labelFor(t.id)}</span>
                       {count > 0 && (
                         <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${active ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-surface-input text-fg-muted'}`}>{count}</span>
                       )}

@@ -1,60 +1,45 @@
 // @vitest-environment jsdom
-// The Outbox MCP status bar: shows connection state, setup instructions with the
-// npx command + pairing input, wires Pair & connect, and lists activity.
+// The Outbox MCP status bar: connection state, a click-to-reveal log, and setup
+// instructions where inflow shows the pairing code + a one-click .mcpb download.
 import '../dom-setup';
 
-const { startMcpBridge, stopMcpBridge } = vi.hoisted(() => ({ startMcpBridge: vi.fn(), stopMcpBridge: vi.fn() }));
-vi.mock('@/lib/mcp/bridge-client', () => ({ startMcpBridge, stopMcpBridge }));
+const { stopMcpBridge } = vi.hoisted(() => ({ stopMcpBridge: vi.fn() }));
+vi.mock('@/lib/mcp/bridge-client', () => ({ startMcpBridge: vi.fn(), stopMcpBridge }));
 
-const { setPairingToken, clearPairingToken } = vi.hoisted(() => ({
-  setPairingToken: vi.fn(async () => {}),
-  clearPairingToken: vi.fn(async () => {}),
-}));
-vi.mock('@/lib/mcp/pairing', () => ({ setPairingToken, clearPairingToken }));
+const { getOrCreatePairingCode } = vi.hoisted(() => ({ getOrCreatePairingCode: vi.fn(async () => 'A1B2-C3D4') }));
+vi.mock('@/lib/mcp/pairing', () => ({ getOrCreatePairingCode }));
 
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { McpStatusBar } from '@/components/outbox/McpStatusBar';
 import { useUIStore } from '@/store/ui-store';
 
 beforeEach(() => {
-  startMcpBridge.mockClear();
   stopMcpBridge.mockClear();
-  setPairingToken.mockClear();
-  clearPairingToken.mockClear();
   act(() => useUIStore.setState({ mcpStatus: 'disconnected', mcpError: null, mcpActivity: [] }));
 });
 
-it('shows the disconnected state and reveals setup instructions', () => {
+it('shows the disconnected state and reveals setup with the pairing code + download', async () => {
   render(<McpStatusBar />);
   expect(screen.getByText(/Claude not connected/i)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
   expect(screen.getByText(/Claude Desktop extension/i)).toBeInTheDocument();
+  // inflow owns and displays the pairing code.
+  expect(await screen.findByText('A1B2-C3D4')).toBeInTheDocument();
   // One-click download of the bundled companion.
   const dl = screen.getByRole('link', { name: /Download inflow\.mcpb/i });
   expect(dl).toHaveAttribute('download', 'inflow.mcpb');
-  expect(screen.getByText(/copy config/i)).toBeInTheDocument();
-  expect(screen.getByPlaceholderText(/Pairing code/i)).toBeInTheDocument();
+  // No manual paste-a-code step anymore.
+  expect(screen.queryByPlaceholderText(/Pairing code/i)).not.toBeInTheDocument();
 });
 
-it('pairs and connects with the entered code', async () => {
-  render(<McpStatusBar />);
-  fireEvent.click(screen.getByRole('button', { name: /Connect Claude/i }));
-  fireEvent.change(screen.getByPlaceholderText(/Pairing code/i), { target: { value: 'ABCD-1234' } });
-  fireEvent.click(screen.getByRole('button', { name: /Pair & connect/i }));
-
-  await waitFor(() => expect(setPairingToken).toHaveBeenCalledWith('ABCD-1234'));
-  expect(startMcpBridge).toHaveBeenCalledWith('ABCD-1234');
-});
-
-it('shows connected state and disconnects', async () => {
+it('shows connected state and disconnects (keeps the code)', () => {
   act(() => useUIStore.setState({ mcpStatus: 'connected' }));
   render(<McpStatusBar />);
   expect(screen.getByText(/Claude connected/i)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /Disconnect/i }));
   expect(stopMcpBridge).toHaveBeenCalled();
-  await waitFor(() => expect(clearPairingToken).toHaveBeenCalled());
 });
 
 it('reveals the connection log when the status is clicked', () => {
@@ -63,7 +48,6 @@ it('reveals the connection log when the status is clicked', () => {
     mcpActivity: [{ id: '1', at: Date.now(), text: 'Claude searched your connections for “investors”' }],
   }));
   render(<McpStatusBar />);
-  // Hidden until the status is clicked (like the inbox "Up to date" popover).
   expect(screen.queryByText(/searched your connections/i)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /Claude connected/i }));
   expect(screen.getByText(/searched your connections/i)).toBeInTheDocument();

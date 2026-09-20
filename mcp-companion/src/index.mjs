@@ -52,7 +52,9 @@ function ensurePairingCode() {
   return code;
 }
 
-const PAIRING_CODE = ensurePairingCode();
+// Prefer the code Claude injects from the .mcpb install prompt (which the user
+// copied from inflow); fall back to a locally-persisted code for `npx` runs.
+const PAIRING_CODE = process.env.INFLOW_PAIRING_CODE?.trim() || ensurePairingCode();
 
 function printSetup() {
   const cfg = {

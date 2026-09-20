@@ -11,7 +11,17 @@
     "entry_point": "src/index.mjs",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/src/index.mjs"]
+      "args": ["${__dirname}/src/index.mjs"],
+      "env": { "INFLOW_PAIRING_CODE": "${user_config.pairing_code}" }
+    }
+  },
+  "user_config": {
+    "pairing_code": {
+      "type": "string",
+      "title": "inflow pairing code",
+      "description": "Copy it from inflow → MCP connector → Connect Claude.",
+      "required": true,
+      "sensitive": true
     }
   }
 }

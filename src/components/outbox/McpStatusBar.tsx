@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { useUIStore, type McpStatus } from '@/store/ui-store';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
-import { setPairingToken, clearPairingToken } from '@/lib/mcp/pairing';
-import { startMcpBridge, stopMcpBridge } from '@/lib/mcp/bridge-client';
+import { getOrCreatePairingCode } from '@/lib/mcp/pairing';
+import { stopMcpBridge } from '@/lib/mcp/bridge-client';
 
 const STATUS_META: Record<McpStatus, { label: string; dot: string }> = {
   disconnected: { label: 'Claude not connected', dot: 'bg-fg-faint' },
@@ -14,8 +14,8 @@ const STATUS_META: Record<McpStatus, { label: string; dot: string }> = {
 
 /**
  * The MCP (Claude co-worker) status bar at the top of the connector section.
- * Click the status to reveal an inline log of what's happening (connection
- * events + what Claude did), like the inbox's "Up to date" popover — no window.
+ * Click the status to reveal an inline connection log (no separate window).
+ * inflow owns the pairing code; the user hands it to Claude at install time.
  */
 export function McpStatusBar() {
   const status = useUIStore((s) => s.mcpStatus);
@@ -23,22 +23,14 @@ export function McpStatusBar() {
   const activity = useUIStore((s) => s.mcpActivity);
   const [showSetup, setShowSetup] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
-  const [code, setCode] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [pairCode, setPairCode] = useState('');
+  const [copied, setCopied] = useState<null | 'code' | 'config'>(null);
 
-  const CLAUDE_CONFIG = JSON.stringify(
-    { mcpServers: { inflow: { command: 'npx', args: ['-y', 'inflow-mcp'] } } },
-    null,
-    2,
-  );
-
-  const copyConfig = async () => {
-    try {
-      await navigator.clipboard.writeText(CLAUDE_CONFIG);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
-  };
+  useEffect(() => {
+    let cancelled = false;
+    getOrCreatePairingCode().then((c) => { if (!cancelled) setPairCode(c); });
+    return () => { cancelled = true; };
+  }, []);
 
   const meta = STATUS_META[status];
   const connected = status === 'connected';
@@ -52,25 +44,24 @@ export function McpStatusBar() {
     }
   })();
 
-  const pairAndConnect = async () => {
-    const token = code.trim();
-    if (!token) return;
-    await setPairingToken(token);
-    startMcpBridge(token);
-    setCode('');
-    setShowSetup(false);
-  };
+  const claudeConfig = JSON.stringify(
+    { mcpServers: { inflow: { command: 'npx', args: ['-y', 'inflow-mcp'], env: { INFLOW_PAIRING_CODE: pairCode } } } },
+    null,
+    2,
+  );
 
-  const disconnect = async () => {
-    stopMcpBridge();
-    await clearPairingToken();
+  const copy = async (what: 'code' | 'config') => {
+    try {
+      await navigator.clipboard.writeText(what === 'code' ? pairCode : claudeConfig);
+      setCopied(what);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {}
   };
 
   return (
     <div className="rounded-xl border border-edge bg-surface-raised">
       <div className="flex items-center gap-2 px-3 py-2.5">
         <SparkleIcon className="h-4 w-4 text-blue-500 dark:text-blue-300" />
-        {/* Click the status to open the inline log. */}
         <button
           onClick={() => setLogsOpen((v) => !v)}
           aria-expanded={logsOpen}
@@ -84,7 +75,7 @@ export function McpStatusBar() {
         <span className="flex-1" />
         {connected ? (
           <button
-            onClick={disconnect}
+            onClick={() => stopMcpBridge()}
             className="rounded-md px-2.5 py-1 text-xs font-medium text-fg-muted ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
           >
             Disconnect
@@ -129,13 +120,28 @@ export function McpStatusBar() {
         <div className="space-y-3 border-t border-edge px-3 py-2.5 text-xs leading-relaxed text-fg-secondary">
           <p className="font-medium text-fg-strong">Connect Claude to your network</p>
 
+          {/* The code inflow owns — the user hands it to Claude at install. */}
+          <div className="rounded-lg bg-surface-input px-2.5 py-2 ring-1 ring-inset ring-edge">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">Your pairing code</p>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="font-mono text-sm font-semibold tracking-widest text-fg-strong">{pairCode || '····-····'}</code>
+              <button
+                onClick={() => copy('code')}
+                className="ml-auto rounded-md bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
+              >
+                {copied === 'code' ? 'copied ✓' : 'Copy'}
+              </button>
+            </div>
+          </div>
+
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
               Recommended · Claude Desktop extension
             </p>
             <ol className="mt-1 ml-4 list-decimal space-y-1 marker:text-fg-faint">
               <li>Download the inflow companion below.</li>
-              <li>In Claude Desktop → Settings → Extensions, install the downloaded <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow.mcpb</code>, then restart Claude.</li>
+              <li>In Claude Desktop → Settings → Extensions, install the downloaded <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow.mcpb</code>.</li>
+              <li>When it asks for the pairing code, paste the one above, then restart Claude. No terminal.</li>
             </ol>
             <a
               href={mcpbUrl}
@@ -150,45 +156,21 @@ export function McpStatusBar() {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">Advanced · npx / other MCP clients</p>
-            <ol className="mt-1 ml-4 list-decimal space-y-1 marker:text-fg-faint">
-              <li>
-                Add inflow to Claude Desktop’s config (
-                <button
-                  onClick={copyConfig}
-                  className="cursor-pointer rounded bg-surface px-1 py-0.5 font-mono text-blue-600 hover:underline dark:text-blue-300"
-                >
-                  {copied ? 'copied ✓' : 'copy config'}
-                </button>
-                ), then restart Claude. Uses <code className="rounded bg-surface px-1 py-0.5 font-mono">npx inflow-mcp</code>.
-              </li>
-            </ol>
-          </div>
-
-          <div>
-            <p className="text-[11px] text-fg-faint">
-              First time only — paste the companion’s pairing code, then it reconnects on its own. To see the code, run <code className="rounded bg-surface px-1 py-0.5 font-mono">npx inflow-mcp --config</code> once.
-            </p>
-            <div className="mt-1.5 flex items-center gap-2">
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void pairAndConnect(); }}
-                placeholder="Pairing code"
-                className="min-w-0 flex-1 rounded-md bg-surface-input px-2.5 py-1.5 text-xs text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
-              />
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">Advanced · other MCP clients</p>
+            <p className="mt-1 ml-1">
+              Once <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow-mcp</code> is published to npm, add this to the client’s MCP config (
               <button
-                onClick={() => void pairAndConnect()}
-                disabled={!code.trim()}
-                className="shrink-0 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:opacity-40 dark:text-blue-300"
+                onClick={() => copy('config')}
+                className="cursor-pointer rounded bg-surface px-1 py-0.5 font-mono text-blue-600 hover:underline dark:text-blue-300"
               >
-                Pair &amp; connect
+                {copied === 'config' ? 'copied ✓' : 'copy config'}
               </button>
-            </div>
+              ) — it carries your pairing code — then restart it.
+            </p>
           </div>
 
           <p className="text-[11px] text-fg-faint">
-            Claude only reads your network and drafts messages — it never sends. You always send from the Outbox.
+            inflow connects automatically once Claude has the code. Claude only reads your network and drafts messages — it never sends. You always send from the Outbox.
           </p>
         </div>
       )}

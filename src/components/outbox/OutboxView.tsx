@@ -13,7 +13,11 @@ function Section({ title, count, hint, children }: { title: string; count?: numb
         )}
         {hint && <span className="text-[11px] text-fg-faint">{hint}</span>}
       </div>
-      <div className="space-y-2">{children}</div>
+      {/* Cards flow left→right and wrap, filling the width instead of stacking
+          in a single centered column. */}
+      <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        {children}
+      </div>
     </section>
   );
 }
@@ -58,7 +62,7 @@ export function OutboxView() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-6 px-6 py-5">
+        <div className="w-full space-y-6 px-6 py-5">
           <McpStatusBar />
 
           {queueEmpty ? (

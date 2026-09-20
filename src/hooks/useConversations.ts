@@ -13,6 +13,10 @@ const TAB_TO_CATEGORY: Record<InboxTab, string> = {
   other: 'SECONDARY_INBOX',
   archived: 'ARCHIVE',
   spam: 'SPAM',
+  // Local outbound queue views — no LinkedIn category, so these match no
+  // conversations (ConversationList renders the queue for them instead).
+  drafts: 'DRAFTS_QUEUE',
+  scheduled: 'SCHEDULED_QUEUE',
 };
 
 export function useConversations() {

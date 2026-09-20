@@ -1,6 +1,13 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { useUIStore, type InboxTab } from '@/store/ui-store';
 import { sendBridgeMessage } from '@/lib/bridge';
+import { useOutbox } from '@/hooks/useOutbox';
+
+/** The outbound-queue views reachable from the tab row's "More" menu. */
+const QUEUE_TABS: { id: InboxTab; label: string }[] = [
+  { id: 'drafts', label: 'Drafts' },
+  { id: 'scheduled', label: 'Scheduled' },
+];
 
 const FILTER_SUGGESTIONS = [
   { filter: 'is:unread', description: 'Unread conversations' },
@@ -32,6 +39,9 @@ export const TAB_CATEGORY: Record<InboxTab, string | null> = {
   other: 'SECONDARY_INBOX',
   archived: 'ARCHIVE',
   spam: 'SPAM',
+  // Local outbound queue views — no LinkedIn category to sync.
+  drafts: null,
+  scheduled: null,
 };
 
 export function ConversationListHeader({ conversationCount }: { conversationCount?: number }) {
@@ -42,6 +52,10 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { drafts, scheduled, ready } = useOutbox();
+  const queueCounts: Record<string, number> = { drafts: drafts.length, scheduled: ready.length + scheduled.length };
+  const queueActive = inboxTab === 'drafts' || inboxTab === 'scheduled';
 
   function handleTabSelect(tab: InboxTab) {
     setInboxTab(tab);
@@ -170,6 +184,55 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
             </button>
           ))}
         </div>
+
+        {/* Outbound queue (Drafts / Scheduled) — a small menu beside the tabs. */}
+        <div className="relative hidden @min-[352px]:block">
+          <button
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+              queueActive || moreOpen
+                ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
+                : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'
+            }`}
+          >
+            {queueActive ? QUEUE_TABS.find((t) => t.id === inboxTab)!.label : 'More'}
+            {!queueActive && (queueCounts.drafts + queueCounts.scheduled) > 0 && (
+              <span className="rounded-full bg-blue-500/20 px-1.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                {queueCounts.drafts + queueCounts.scheduled}
+              </span>
+            )}
+            <svg className={`h-3 w-3 transition-transform ${moreOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          {moreOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+              <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-edge bg-surface-raised py-1 shadow-lg">
+                {QUEUE_TABS.map((t) => {
+                  const active = inboxTab === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      role="menuitemradio"
+                      aria-checked={active}
+                      onClick={() => { handleTabSelect(t.id); setMoreOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
+                    >
+                      <span className="flex-1">{t.label}</span>
+                      {queueCounts[t.id] > 0 && (
+                        <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${active ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-surface-input text-fg-muted'}`}>
+                          {queueCounts[t.id]}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="relative @min-[352px]:hidden">
           <select
             aria-label="Folder"
@@ -180,6 +243,11 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
             {TABS.map((tab) => (
               <option key={tab.id} value={tab.id}>
                 {tab.label}
+              </option>
+            ))}
+            {QUEUE_TABS.map((tab) => (
+              <option key={tab.id} value={tab.id}>
+                {tab.label}{queueCounts[tab.id] > 0 ? ` (${queueCounts[tab.id]})` : ''}
               </option>
             ))}
           </select>

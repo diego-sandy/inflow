@@ -7,6 +7,7 @@ import { db } from '@/db/database';
 import { computeWindow } from '@/lib/list-window';
 import { useDbGeneration } from '@/hooks/useDbGeneration';
 import { ConversationListHeader } from './ConversationListHeader';
+import { InboxQueue } from './InboxQueue';
 import { ConversationRow } from './ConversationRow';
 import { ConversationContextMenu } from './ConversationContextMenu';
 import { SwipeableRow } from './SwipeableRow';
@@ -312,6 +313,9 @@ export function ConversationList({ conversations, isLoading, isDiscovering, cate
       ) : (
         <ConversationListHeader conversationCount={conversations.length} />
       )}
+      {inboxTab === 'drafts' || inboxTab === 'scheduled' ? (
+        <InboxQueue kind={inboxTab} />
+      ) : (
       <div
         ref={scrollContainerRef}
         onScroll={(e) => setScrollTop((e.target as HTMLElement).scrollTop)}
@@ -372,6 +376,7 @@ export function ConversationList({ conversations, isLoading, isDiscovering, cate
           </div>
         )}
       </div>
+      )}
       {!compact && <div className="flex items-center justify-between border-t border-edge px-4 py-2 text-xs text-fg-faint">
         <button
           onClick={() => useUIStore.getState().toggleShortcutOverlay()}

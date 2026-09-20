@@ -91,15 +91,30 @@ let advertisedTools = [];
 /** Pending relayed calls, id → { resolve, reject, timer }. */
 const pending = new Map();
 
-const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
+let wss = null;
 
-wss.on('listening', () => log(`listening on ws://127.0.0.1:${PORT}`));
-wss.on('error', (e) => {
-  if (e?.code === 'EADDRINUSE') log(`port ${PORT} is in use — is another companion already running?`);
-  else log('WebSocket server error:', e?.message);
-});
+/**
+ * Bind the localhost WebSocket server, retrying on EADDRINUSE instead of dying.
+ * Claude Desktop can briefly run two instances during a relaunch; the loser used
+ * to give up and the whole connection collapsed. Now the live instance keeps
+ * trying until the port frees up, then grabs it and pairs.
+ */
+function bindWs() {
+  wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
+  wss.on('listening', () => log(`listening on ws://127.0.0.1:${PORT}`));
+  wss.on('connection', onConnection);
+  wss.on('error', (e) => {
+    if (e?.code === 'EADDRINUSE') {
+      log(`port ${PORT} in use — another companion is still up; retrying in 2s`);
+      try { wss.close(); } catch {}
+      setTimeout(bindWs, 2000);
+    } else {
+      log('WebSocket server error:', e?.message);
+    }
+  });
+}
 
-wss.on('connection', (socket) => {
+function onConnection(socket) {
   let authed = false;
   socket.on('message', (raw) => {
     let msg;
@@ -141,7 +156,9 @@ wss.on('connection', (socket) => {
       notifyToolsChanged();
     }
   });
-});
+}
+
+bindWs();
 
 /** Relay a tool call to the paired extension and await its result. */
 function relayCall(name, args) {

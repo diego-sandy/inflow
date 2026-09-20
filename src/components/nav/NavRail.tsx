@@ -60,13 +60,12 @@ function InvitationsIcon({ className }: { className?: string }) {
   );
 }
 
-function OutboxIcon({ className }: { className?: string }) {
+function ConnectorIcon({ className }: { className?: string }) {
+  // A plug / link — the connection between Claude (MCP) and inflow.
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
-      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-      <path d="M12 7v6" />
-      <path d="M9.5 9.5 12 7l2.5 2.5" />
+      <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
+      <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
     </svg>
   );
 }
@@ -191,7 +190,7 @@ export function NavRail({ connectionsCount, inboxUnread, outboxAttention, invita
         { id: 'invitations', label: 'Invitations', desc: 'Pending connection requests — accept or ignore.', Icon: InvitationsIcon, count: invitationsCount },
       ],
     },
-    { id: 'outbox', label: 'Outbox', desc: 'Drafts and scheduled messages — you always send.', Icon: OutboxIcon, count: outboxAttention },
+    { id: 'outbox', label: 'MCP connector', desc: 'Connect Claude (MCP) to source people and draft outreach — you always send.', Icon: ConnectorIcon, count: outboxAttention },
     { id: 'insights', label: 'Insights', desc: 'Network composition, firm clusters, and AI suggestions.', Icon: InsightsIcon },
     { id: 'chat', label: 'AI Chat', desc: 'Ask AI anything about your network.', Icon: ChatIcon },
   ];
@@ -261,7 +260,9 @@ export function NavRail({ connectionsCount, inboxUnread, outboxAttention, invita
           <div key={item.id}>
             <NavItem
               item={item}
-              active={activeSection === item.id}
+              // Collapsed, the branch is hidden — highlight the parent when a
+              // child section (e.g. Invitations) is active so the rail isn't blank.
+              active={activeSection === item.id || (collapsed && item.children!.some((c) => c.id === activeSection))}
               collapsed={collapsed}
               trailing={chevron}
               onClick={() => setActiveSection(item.id)}
@@ -281,17 +282,7 @@ export function NavRail({ connectionsCount, inboxUnread, outboxAttention, invita
                 ))}
               </div>
             )}
-            {/* Collapsed rail: children fall back to their own icon rows. */}
-            {collapsed &&
-              item.children!.map((child) => (
-                <NavItem
-                  key={child.id}
-                  item={child}
-                  active={activeSection === child.id}
-                  collapsed
-                  onClick={() => setActiveSection(child.id)}
-                />
-              ))}
+            {/* Collapsed rail: the branch is a Connections detail — no child icon. */}
           </div>
         );
       })}

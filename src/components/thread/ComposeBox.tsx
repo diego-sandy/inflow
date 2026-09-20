@@ -359,7 +359,7 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       store.setSelectedConversationId(null);
       store.setComposeNewActive(false);
       store.setActiveSection('outbox');
-      store.showToast({ message: status === 'scheduled' ? 'Scheduled — find it in your Outbox' : 'Saved to Outbox drafts' });
+      store.showToast({ message: status === 'scheduled' ? 'Scheduled — find it under MCP connector' : 'Saved to drafts (MCP connector)' });
     }
 
     /**
@@ -828,7 +828,7 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                 onClick={() => setOutboxMenuOpen((v) => !v)}
                 disabled={!body.trim()}
                 title="Save as draft or schedule for later"
-                aria-label="Save to Outbox"
+                aria-label="Save as draft or schedule"
                 className="flex h-full items-center gap-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

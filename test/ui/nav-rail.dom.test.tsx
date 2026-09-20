@@ -36,9 +36,9 @@ it('shows the Flow section', () => {
   expect(screen.getByRole('button', { name: 'AI Chat' })).toBeInTheDocument();
 });
 
-it('shows the Outbox section with an attention badge', () => {
+it('shows the MCP connector section with an attention badge', () => {
   render(<NavRail connectionsCount={3} outboxAttention={2} />);
-  const btn = screen.getByRole('button', { name: 'Outbox' });
+  const btn = screen.getByRole('button', { name: 'MCP connector' });
   expect(btn).toBeInTheDocument();
   expect(within(btn).getByText('2')).toBeInTheDocument();
 });

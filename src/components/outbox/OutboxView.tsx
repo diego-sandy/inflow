@@ -199,8 +199,8 @@ export function OutboxView() {
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-edge px-6 py-3">
-        <h2 className="text-base font-semibold text-fg-strong">Outbox</h2>
-        <span className="text-[11px] text-fg-faint">Drafts and scheduled messages — you always send.</span>
+        <h2 className="text-base font-semibold text-fg-strong">MCP connector</h2>
+        <span className="text-[11px] text-fg-faint">Claude drafts land here as drafts &amp; scheduled — you always send.</span>
         <span className="flex-1" />
         <button
           onClick={openComposer}
@@ -216,7 +216,7 @@ export function OutboxView() {
 
           {isEmpty && (
             <div className="flex flex-col items-center gap-2 py-16 text-center">
-              <p className="text-sm text-fg-muted">Your outbox is empty.</p>
+              <p className="text-sm text-fg-muted">Nothing here yet.</p>
               <p className="max-w-xs text-xs text-fg-faint">
                 Compose a message and choose “Save as draft” or “Schedule”, or start one from a follow-up — it’ll show up here to review and send.
               </p>

@@ -77,7 +77,7 @@ function FollowUpRow({ f }: { f: FollowUp }) {
       createdAt: now,
       updatedAt: now,
     });
-    showToast({ message: 'Saved to Outbox — schedule or send it there' });
+    showToast({ message: 'Saved to drafts — schedule or send under MCP connector' });
     setText('');
     setComposing(false);
   };
@@ -171,7 +171,7 @@ function FollowUpRow({ f }: { f: FollowUp }) {
             <button
               onClick={scheduleDraft}
               disabled={!text.trim()}
-              title="Save to the Outbox to schedule or send later"
+              title="Save to drafts to schedule or send later (MCP connector)"
               className="rounded-md px-2.5 py-1 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:opacity-40"
             >
               Schedule

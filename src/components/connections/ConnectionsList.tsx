@@ -349,6 +349,44 @@ export function ConnectionsList() {
           <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" title="Refreshing connections from LinkedIn" />
         )}
         <div className="ml-auto flex items-center gap-1">
+          {/* Sort — lives in the header so the toolbar can give search more room. */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setSortMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={sortMenuOpen}
+              aria-label="Sort connections"
+              className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-fg-muted ring-1 ring-inset ring-edge transition-colors hover:text-fg-secondary"
+            >
+              {SORT_OPTIONS.find((o) => o.id === sort)?.label ?? 'Sort'}
+              <svg className={`h-3 w-3 transition-transform ${sortMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {sortMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setSortMenuOpen(false)} />
+                <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-edge bg-surface-raised py-1 shadow-lg">
+                  {SORT_OPTIONS.map((o) => {
+                    const active = sort === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        role="menuitemradio"
+                        aria-checked={active}
+                        onClick={() => { changeSort(o.id); setSortMenuOpen(false); }}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
+                      >
+                        <span className="flex-1">{o.label}</span>
+                        {active && (
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
           {aiAvailable && (
             <button
               type="button"
@@ -542,43 +580,6 @@ export function ConnectionsList() {
             )}
           </div>
         )}
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setSortMenuOpen((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={sortMenuOpen}
-            aria-label="Sort connections"
-            className="flex items-center gap-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
-          >
-            {SORT_OPTIONS.find((o) => o.id === sort)?.label ?? 'Sort'}
-            <svg className={`h-3 w-3 text-fg-muted transition-transform ${sortMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-          </button>
-          {sortMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setSortMenuOpen(false)} />
-              <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-edge bg-surface-raised py-1 shadow-lg">
-                {SORT_OPTIONS.map((o) => {
-                  const active = sort === o.id;
-                  return (
-                    <button
-                      key={o.id}
-                      role="menuitemradio"
-                      aria-checked={active}
-                      onClick={() => { changeSort(o.id); setSortMenuOpen(false); }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
-                    >
-                      <span className="flex-1">{o.label}</span>
-                      {active && (
-                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Interests editor */}

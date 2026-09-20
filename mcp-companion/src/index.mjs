@@ -79,6 +79,13 @@ if (process.argv.includes('--config') || process.argv.includes('--setup')) {
 // --- Extension bridge (WebSocket) -----------------------------------------
 /** The currently paired extension socket, if any. */
 let extension = null;
+/**
+ * Tell Claude the tool list changed (set once the MCP server exists). Claude
+ * calls tools/list once at startup — before the extension has paired — so we
+ * must nudge it to re-fetch when the extension connects (or drops), otherwise
+ * it caches an empty toolset and reports "no inflow connector".
+ */
+let notifyToolsChanged = () => {};
 /** Tools advertised by the extension (MCP tool descriptors). */
 let advertisedTools = [];
 /** Pending relayed calls, id → { resolve, reject, timer }. */
@@ -109,6 +116,7 @@ wss.on('connection', (socket) => {
       advertisedTools = Array.isArray(msg.tools) ? msg.tools : [];
       socket.send(JSON.stringify({ type: 'hello_ack' }));
       log(`extension paired; ${advertisedTools.length} tools available`);
+      notifyToolsChanged(); // Claude re-fetches tools/list now that they exist
       return;
     }
     if (!authed) return;
@@ -130,6 +138,7 @@ wss.on('connection', (socket) => {
       extension = null;
       advertisedTools = [];
       log('extension disconnected');
+      notifyToolsChanged();
     }
   });
 });
@@ -154,8 +163,19 @@ function relayCall(name, args) {
 // --- MCP server (stdio to Claude Desktop) ---------------------------------
 const server = new Server(
   { name: 'inflow', version: '0.1.0' },
-  { capabilities: { tools: {} } },
+  { capabilities: { tools: { listChanged: true } } },
 );
+
+// Now that the server exists, wire the "tools changed" nudge. Prefer the SDK
+// helper; fall back to a raw notification for older SDKs.
+notifyToolsChanged = () => {
+  try {
+    if (typeof server.sendToolListChanged === 'function') server.sendToolListChanged();
+    else server.notification({ method: 'notifications/tools/list_changed' });
+  } catch (e) {
+    log('tools/list_changed notify failed:', e?.message);
+  }
+};
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: advertisedTools.map((t) => ({

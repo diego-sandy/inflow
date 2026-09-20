@@ -506,52 +506,6 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
 
     return (
       <div className="border-t border-edge p-3">
-        {/* Attachment chips */}
-        {attachments.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {attachments.map((file, i) =>
-              file.type.startsWith('image/') ? (
-                <span
-                  key={`${file.name}-${i}`}
-                  className="group relative inline-block overflow-hidden rounded-md ring-1 ring-ring-muted"
-                >
-                  <img
-                    src={previewUrls.get(file)}
-                    alt={file.name}
-                    className="h-16 w-16 cursor-zoom-in object-cover"
-                    onClick={() => {
-                      const url = previewUrls.get(file);
-                      if (url) useUIStore.getState().openLightbox(url);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(i)}
-                    className="absolute right-0.5 top-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-black/60 text-[10px] leading-none text-white opacity-0 transition-opacity group-hover:opacity-100"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : (
-                <span
-                  key={`${file.name}-${i}`}
-                  className="inline-flex items-center gap-1 rounded-md bg-surface-raised px-2 py-1 text-xs text-fg-muted ring-1 ring-ring-muted"
-                >
-                  <span>{fileIcon(file)}</span>
-                  <span className="max-w-[140px] truncate">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(i)}
-                    className="ml-0.5 cursor-pointer text-fg-faint hover:text-fg"
-                  >
-                    ×
-                  </button>
-                </span>
-              )
-            )}
-          </div>
-        )}
-
         {/* Reply preview banner */}
         {replyingTo && (
           <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-blue-400 bg-surface-raised px-2.5 py-2">
@@ -612,300 +566,350 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
           </div>
         )}
 
-        <div className="flex items-end gap-2">
-          {/* Attach file */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            aria-hidden="true"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length) {
-                document.dispatchEvent(new CustomEvent('inflow:attach-files', { detail: files }));
-              }
-              // Reset so picking the same file again re-fires change.
-              e.target.value = '';
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            title="Attach a file"
-            aria-label="Attach a file"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-            </svg>
-          </button>
+        {/* Hidden file pickers (triggered by the toolbar buttons below) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          aria-hidden="true"
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length) {
+              document.dispatchEvent(new CustomEvent('inflow:attach-files', { detail: files }));
+            }
+            // Reset so picking the same file again re-fires change.
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          aria-hidden="true"
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length) {
+              document.dispatchEvent(new CustomEvent('inflow:attach-files', { detail: files }));
+            }
+            e.target.value = '';
+          }}
+        />
 
-          {/* Attach photo (images only) */}
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            aria-hidden="true"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length) {
-                document.dispatchEvent(new CustomEvent('inflow:attach-files', { detail: files }));
-              }
-              e.target.value = '';
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => photoInputRef.current?.click()}
-            title="Attach a photo"
-            aria-label="Attach a photo"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="M21 15l-5-5L5 21" />
-            </svg>
-          </button>
-
-          {/* Emoji picker */}
-          <div className="relative shrink-0">
-            {emojiPickerOpen && (
-              <EmojiPicker
-                onSelect={insertEmojiChar}
-                onClose={() => setEmojiPickerOpen(false)}
-              />
-            )}
-            <button
-              type="button"
-              onClick={() => setEmojiPickerOpen((v) => !v)}
-              title="Emoji"
-              aria-label="Emoji"
-              aria-expanded={emojiPickerOpen}
-              className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover ${emojiPickerOpen ? 'text-fg-secondary' : 'text-fg-muted hover:text-fg-secondary'}`}
-            >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                <line x1="9" y1="9" x2="9.01" y2="9" />
-                <line x1="15" y1="9" x2="15.01" y2="9" />
-              </svg>
-            </button>
-          </div>
-
-          <div className={`relative flex flex-1 items-end ${autocomplete.isOpen ? 'rounded-lg bg-surface-input ring-1 ring-ring-muted' : ''}`}>
-          {autocomplete.suggestion && (
-            <div
-              className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg px-3 py-2 text-sm"
-              style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}
-            >
-              <span style={{ visibility: 'hidden' }}>{body}</span>
-              <span className="text-zinc-500">{autocomplete.suggestion}</span>
-            </div>
-          )}
-          <textarea
-            ref={setRefs}
-            value={body}
-            onChange={(e) => {
-              const val = e.target.value;
-              setBody(val);
-              autoResize();
-              // Track whether cursor is at the end of the text
-              const pos = e.target.selectionStart ?? val.length;
-              setCursorAtEnd(pos === val.length);
-              // Detect emoji shortcode: `:` followed by valid chars before cursor
-              const before = val.slice(0, pos);
-              const match = before.match(EMOJI_SHORTCODE_RE);
-              if (match) {
-                setEmojiQuery(match[1]);
-                setEmojiIndex(0);
-              } else {
-                setEmojiQuery(null);
-              }
-            }}
-            onSelect={(e) => {
-              // Keep cursorAtEnd fresh on caret movement without a text change
-              // (arrow keys, click) so autocomplete gating doesn't go stale.
-              const ta = e.currentTarget;
-              setCursorAtEnd((ta.selectionStart ?? ta.value.length) === ta.value.length);
-            }}
-            onFocus={() => setComposeActive(true)}
-            onBlur={() => { setComposeActive(false); setEmojiQuery(null); }}
-            placeholder="Reply..."
-            rows={2}
-            data-compose-input=""
-            data-emoji-open={emojiOpen ? '' : undefined}
-            data-autocomplete-open={autocomplete.isOpen || undefined}
-            className={`max-h-40 w-full resize-none rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-faint outline-none transition-colors ${autocomplete.isOpen ? 'bg-transparent ring-0' : 'bg-surface-input ring-1 ring-ring-muted focus:ring-blue-500/50'}`}
-            onPaste={(e) => {
-              const files = Array.from(e.clipboardData?.files || []);
-              if (files.length) {
-                e.preventDefault();
-                document.dispatchEvent(new CustomEvent('inflow:attach-files', { detail: files }));
-              }
-            }}
-            onKeyDown={(e) => {
-              // Emoji autocomplete keyboard handling (when popup is open)
-              if (emojiQuery !== null && emojiResults.length > 0) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setEmojiIndex((i) => (i + 1) % emojiResults.length);
-                  return;
-                }
-                if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setEmojiIndex((i) => (i - 1 + emojiResults.length) % emojiResults.length);
-                  return;
-                }
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  insertEmoji(emojiResults[emojiIndex]);
-                  return;
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setEmojiQuery(null);
-                  return;
-                }
-              }
-              // AI autocomplete keyboard handling
-              if (autocomplete.isOpen) {
-                if (e.key === 'Tab') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  autocomplete.accept();
-                  return;
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  autocomplete.dismiss();
-                  return;
-                }
-              }
-              // Escape dismisses reply preview
-              if (e.key === 'Escape' && useUIStore.getState().replyingTo) {
-                e.preventDefault();
-                e.stopPropagation();
-                setReplyingTo(null);
-                return;
-              }
-              // All Enter variants are handled by the global keyboard hook
-              // (useKeyboard.ts) which dispatches custom events. Prevent
-              // default here to stop the textarea from inserting a newline
-              // on plain Enter and Cmd+Enter. Shift+Enter is left alone.
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-              }
-            }}
-          />
-          {!body && (
-            <kbd className="pointer-events-none absolute left-[4.25rem] top-[0.6rem] rounded border border-ring-muted bg-surface px-1.5 py-0.5 font-mono text-[10px] leading-none text-fg-faint">
-              R
-            </kbd>
-          )}
-          {emojiQuery !== null && emojiResults.length > 0 && (
-            <EmojiAutocomplete
-              results={emojiResults}
-              selectedIndex={emojiIndex}
-              query={emojiQuery}
-              onSelect={insertEmoji}
-              onClose={() => setEmojiQuery(null)}
-            />
-          )}
-          </div>
-          {isDraftConv && (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setOutboxMenuOpen((v) => !v)}
-                disabled={!body.trim()}
-                title="Save as draft or schedule for later"
-                aria-label="Save as draft or schedule"
-                className="flex h-full items-center gap-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-              </button>
-              {outboxMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setOutboxMenuOpen(false)} />
-                  <div className="absolute bottom-full right-0 z-50 mb-1.5 w-60 rounded-xl border border-edge bg-surface-raised p-1.5 shadow-lg">
+        {/* Unified composer field: attachments, textarea, and a slim action row
+            all share one rounded surface (iMessage / Slack style). */}
+        <div className="rounded-2xl bg-surface-input px-2.5 pb-1.5 pt-2 ring-1 ring-inset ring-ring-muted transition-colors focus-within:ring-blue-500/50">
+          {/* Attachment previews */}
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2 px-0.5">
+              {attachments.map((file, i) =>
+                file.type.startsWith('image/') ? (
+                  <span
+                    key={`${file.name}-${i}`}
+                    className="group relative inline-block overflow-hidden rounded-lg ring-1 ring-ring-muted"
+                  >
+                    <img
+                      src={previewUrls.get(file)}
+                      alt={file.name}
+                      className="h-12 w-12 cursor-zoom-in object-cover"
+                      onClick={() => {
+                        const url = previewUrls.get(file);
+                        if (url) useUIStore.getState().openLightbox(url);
+                      }}
+                    />
                     <button
                       type="button"
-                      onClick={() => saveToOutbox('draft')}
-                      className="block w-full rounded-md px-2.5 py-1.5 text-left text-sm text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
+                      onClick={() => removeAttachment(i)}
+                      aria-label={`Remove ${file.name}`}
+                      className="absolute right-0.5 top-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-black/60 text-[10px] leading-none text-white opacity-0 transition-opacity group-hover:opacity-100"
                     >
-                      Save as draft
+                      ×
                     </button>
-                    <div className="mt-1 border-t border-edge pt-1.5">
-                      <p className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-fg-faint">Schedule for later</p>
-                      <div className="px-1.5">
-                        <input
-                          type="datetime-local"
-                          value={scheduleWhen}
-                          onChange={(e) => setScheduleWhen(e.target.value)}
-                          className="w-full rounded-md bg-surface-input px-2 py-1 text-xs text-fg-strong ring-1 ring-inset ring-edge outline-none focus:ring-blue-500/40"
-                        />
-                        <button
-                          type="button"
-                          disabled={!scheduleWhen}
-                          onClick={() => {
-                            const at = new Date(scheduleWhen).getTime();
-                            if (Number.isFinite(at)) void saveToOutbox('scheduled', at);
-                          }}
-                          className="mt-1.5 w-full rounded-md bg-blue-500/15 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:opacity-40 dark:text-blue-300"
-                        >
-                          Schedule
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </>
+                  </span>
+                ) : (
+                  <span
+                    key={`${file.name}-${i}`}
+                    className="inline-flex items-center gap-1 rounded-lg bg-surface-raised px-2 py-1 text-xs text-fg-muted ring-1 ring-ring-muted"
+                  >
+                    <span>{fileIcon(file)}</span>
+                    <span className="max-w-[140px] truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(i)}
+                      aria-label={`Remove ${file.name}`}
+                      className="ml-0.5 cursor-pointer text-fg-faint hover:text-fg"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )
               )}
             </div>
           )}
-          <button
-            onClick={() => {
-              if (cmdHeld) {
-                // Trigger send+archive via the same path as Cmd+Enter
-                document.dispatchEvent(new CustomEvent('inflow:send-and-archive'));
-              } else {
-                handleSend();
-              }
-            }}
-            disabled={!hasContent}
-            className="flex shrink-0 flex-col items-center justify-center rounded-lg btn-primary px-3 py-1.5 text-sm font-medium leading-tight transition-colors hover:btn-primary disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {cmdHeld && hasContent ? (
-              <>
-                <span className="flex items-center gap-1.5">
-                  Send
-                  <kbd className="rounded border border-white/30 bg-white/10 px-1 py-0.5 font-mono text-[10px] leading-none opacity-60">⌘</kbd>
-                </span>
-                <span className="-my-1 text-[9px] font-normal opacity-50">+</span>
-                <span className="flex items-center gap-1.5">
-                  Archive
-                  <kbd className="rounded border border-white/30 bg-white/10 px-1 py-0.5 font-mono text-[10px] leading-none opacity-60">↵</kbd>
-                </span>
-              </>
-            ) : (
-              <span className="flex items-center gap-1.5">
-                Send
-                <kbd className="rounded border border-white/30 bg-white/10 px-1 py-0.5 font-mono text-[10px] leading-none opacity-60">↵</kbd>
-              </span>
+
+          {/* Textarea + overlays (ghost autocomplete, emoji popup) */}
+          <div className="relative flex items-end">
+            {autocomplete.suggestion && (
+              <div
+                className="pointer-events-none absolute inset-0 overflow-hidden px-1.5 py-1 text-sm"
+                style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}
+              >
+                <span style={{ visibility: 'hidden' }}>{body}</span>
+                <span className="text-zinc-500">{autocomplete.suggestion}</span>
+              </div>
             )}
-          </button>
+            <textarea
+              ref={setRefs}
+              value={body}
+              onChange={(e) => {
+                const val = e.target.value;
+                setBody(val);
+                autoResize();
+                // Track whether cursor is at the end of the text
+                const pos = e.target.selectionStart ?? val.length;
+                setCursorAtEnd(pos === val.length);
+                // Detect emoji shortcode: `:` followed by valid chars before cursor
+                const before = val.slice(0, pos);
+                const match = before.match(EMOJI_SHORTCODE_RE);
+                if (match) {
+                  setEmojiQuery(match[1]);
+                  setEmojiIndex(0);
+                } else {
+                  setEmojiQuery(null);
+                }
+              }}
+              onSelect={(e) => {
+                // Keep cursorAtEnd fresh on caret movement without a text change
+                // (arrow keys, click) so autocomplete gating doesn't go stale.
+                const ta = e.currentTarget;
+                setCursorAtEnd((ta.selectionStart ?? ta.value.length) === ta.value.length);
+              }}
+              onFocus={() => setComposeActive(true)}
+              onBlur={() => { setComposeActive(false); setEmojiQuery(null); }}
+              placeholder="Reply..."
+              rows={1}
+              data-compose-input=""
+              data-emoji-open={emojiOpen ? '' : undefined}
+              data-autocomplete-open={autocomplete.isOpen || undefined}
+              className="max-h-40 w-full resize-none bg-transparent px-1.5 py-1 text-sm text-fg placeholder-fg-faint outline-none"
+              onPaste={(e) => {
+                const files = Array.from(e.clipboardData?.files || []);
+                if (files.length) {
+                  e.preventDefault();
+                  document.dispatchEvent(new CustomEvent('inflow:attach-files', { detail: files }));
+                }
+              }}
+              onKeyDown={(e) => {
+                // Emoji autocomplete keyboard handling (when popup is open)
+                if (emojiQuery !== null && emojiResults.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEmojiIndex((i) => (i + 1) % emojiResults.length);
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEmojiIndex((i) => (i - 1 + emojiResults.length) % emojiResults.length);
+                    return;
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    insertEmoji(emojiResults[emojiIndex]);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEmojiQuery(null);
+                    return;
+                  }
+                }
+                // AI autocomplete keyboard handling
+                if (autocomplete.isOpen) {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    autocomplete.accept();
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    autocomplete.dismiss();
+                    return;
+                  }
+                }
+                // Escape dismisses reply preview
+                if (e.key === 'Escape' && useUIStore.getState().replyingTo) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setReplyingTo(null);
+                  return;
+                }
+                // All Enter variants are handled by the global keyboard hook
+                // (useKeyboard.ts) which dispatches custom events. Prevent
+                // default here to stop the textarea from inserting a newline
+                // on plain Enter and Cmd+Enter. Shift+Enter is left alone.
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                }
+              }}
+            />
+            {emojiQuery !== null && emojiResults.length > 0 && (
+              <EmojiAutocomplete
+                results={emojiResults}
+                selectedIndex={emojiIndex}
+                query={emojiQuery}
+                onSelect={insertEmoji}
+                onClose={() => setEmojiQuery(null)}
+              />
+            )}
+          </div>
+
+          {/* Slim action row: attach / photo / emoji on the left, send on the right */}
+          <div className="mt-0.5 flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach a file"
+              aria-label="Attach a file"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
+            >
+              <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              title="Attach a photo"
+              aria-label="Attach a photo"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
+            >
+              <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+            </button>
+
+            {/* Emoji picker */}
+            <div className="relative shrink-0">
+              {emojiPickerOpen && (
+                <EmojiPicker
+                  onSelect={insertEmojiChar}
+                  onClose={() => setEmojiPickerOpen(false)}
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => setEmojiPickerOpen((v) => !v)}
+                title="Emoji"
+                aria-label="Emoji"
+                aria-expanded={emojiPickerOpen}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover ${emojiPickerOpen ? 'text-fg-secondary' : 'text-fg-muted hover:text-fg-secondary'}`}
+              >
+                <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                  <line x1="9" y1="9" x2="9.01" y2="9" />
+                  <line x1="15" y1="9" x2="15.01" y2="9" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Save-as-draft / schedule (new-message flow only) */}
+            {isDraftConv && (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setOutboxMenuOpen((v) => !v)}
+                  disabled={!body.trim()}
+                  title="Save as draft or schedule for later"
+                  aria-label="Save as draft or schedule"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                </button>
+                {outboxMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOutboxMenuOpen(false)} />
+                    <div className="absolute bottom-full right-0 z-50 mb-1.5 w-60 rounded-xl border border-edge bg-surface-raised p-1.5 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => saveToOutbox('draft')}
+                        className="block w-full rounded-md px-2.5 py-1.5 text-left text-sm text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
+                      >
+                        Save as draft
+                      </button>
+                      <div className="mt-1 border-t border-edge pt-1.5">
+                        <p className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-fg-faint">Schedule for later</p>
+                        <div className="px-1.5">
+                          <input
+                            type="datetime-local"
+                            value={scheduleWhen}
+                            onChange={(e) => setScheduleWhen(e.target.value)}
+                            className="w-full rounded-md bg-surface-input px-2 py-1 text-xs text-fg-strong ring-1 ring-inset ring-edge outline-none focus:ring-blue-500/40"
+                          />
+                          <button
+                            type="button"
+                            disabled={!scheduleWhen}
+                            onClick={() => {
+                              const at = new Date(scheduleWhen).getTime();
+                              if (Number.isFinite(at)) void saveToOutbox('scheduled', at);
+                            }}
+                            className="mt-1.5 w-full rounded-md bg-blue-500/15 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:opacity-40 dark:text-blue-300"
+                          >
+                            Schedule
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Send — hold ⌘ to send and archive (hint lives in the tooltip) */}
+            <button
+              onClick={() => {
+                if (cmdHeld) {
+                  // Trigger send+archive via the same path as Cmd+Enter
+                  document.dispatchEvent(new CustomEvent('inflow:send-and-archive'));
+                } else {
+                  handleSend();
+                }
+              }}
+              disabled={!hasContent}
+              aria-label={cmdHeld && hasContent ? 'Send and archive' : 'Send'}
+              title={cmdHeld && hasContent ? 'Send and archive (⌘↵)' : 'Send (↵) — hold ⌘ to send and archive'}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full btn-primary transition-colors hover:btn-primary disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {cmdHeld && hasContent ? (
+                <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="5" rx="1" />
+                  <path d="M4 9v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9" />
+                  <path d="M10 13h4" />
+                </svg>
+              ) : (
+                <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 2 11 13" />
+                  <path d="M22 2 15 22l-4-9-9-4 20-7z" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     );

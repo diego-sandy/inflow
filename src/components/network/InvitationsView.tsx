@@ -172,7 +172,18 @@ export function InvitationsView() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {selected?.message ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg-secondary">{selected.message}</p>
+            // Inbox-style incoming message: the sender's face beside a bubble.
+            <div className="flex items-start gap-2.5">
+              <div className="mt-0.5 shrink-0">
+                <GroupAvatar names={[selected.name || 'LinkedIn Member']} pictures={[selected.pictureUrl]} size={32} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="mb-1 text-xs font-medium text-fg-secondary">{selected.name || 'LinkedIn Member'}</p>
+                <div className="w-fit max-w-full whitespace-pre-wrap rounded-2xl bg-surface-raised px-3.5 py-2.5 text-sm leading-relaxed text-fg">
+                  {selected.message}
+                </div>
+              </div>
+            </div>
           ) : (
             <p className="pt-8 text-center text-xs text-fg-faint">
               {selected ? 'No note came with this request.' : 'Select an invitation to read its note.'}

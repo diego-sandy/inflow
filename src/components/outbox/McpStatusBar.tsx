@@ -24,7 +24,7 @@ export function McpStatusBar() {
   const [showSetup, setShowSetup] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [pairCode, setPairCode] = useState('');
-  const [copied, setCopied] = useState<null | 'code' | 'config'>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,17 +44,11 @@ export function McpStatusBar() {
     }
   })();
 
-  const claudeConfig = JSON.stringify(
-    { mcpServers: { inflow: { command: 'npx', args: ['-y', 'inflow-mcp'], env: { INFLOW_PAIRING_CODE: pairCode } } } },
-    null,
-    2,
-  );
-
-  const copy = async (what: 'code' | 'config') => {
+  const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(what === 'code' ? pairCode : claudeConfig);
-      setCopied(what);
-      setTimeout(() => setCopied(null), 2000);
+      await navigator.clipboard.writeText(pairCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {}
   };
 
@@ -126,10 +120,10 @@ export function McpStatusBar() {
             <div className="mt-1 flex items-center gap-2">
               <code className="font-mono text-sm font-semibold tracking-widest text-fg-strong">{pairCode || '····-····'}</code>
               <button
-                onClick={() => copy('code')}
+                onClick={copyCode}
                 className="ml-auto rounded-md bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
               >
-                {copied === 'code' ? 'copied ✓' : 'Copy'}
+                {copied ? 'copied ✓' : 'Copy'}
               </button>
             </div>
           </div>
@@ -153,20 +147,6 @@ export function McpStatusBar() {
               </svg>
               Download inflow.mcpb
             </a>
-          </div>
-
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">Advanced · other MCP clients</p>
-            <p className="mt-1 ml-1">
-              Once <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow-mcp</code> is published to npm, add this to the client’s MCP config (
-              <button
-                onClick={() => copy('config')}
-                className="cursor-pointer rounded bg-surface px-1 py-0.5 font-mono text-blue-600 hover:underline dark:text-blue-300"
-              >
-                {copied === 'config' ? 'copied ✓' : 'copy config'}
-              </button>
-              ) — it carries your pairing code — then restart it.
-            </p>
           </div>
 
           <p className="text-[11px] text-fg-faint">

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// The Invitations section lists pending requests, refreshes on mount, and
-// accepts/ignores optimistically via the bridge.
+// The Invitations section: a two-pane inbox that refreshes on mount, shows the
+// selected request's detail, and accepts/ignores optimistically via the bridge.
 import '../dom-setup';
 import Dexie from 'dexie';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
@@ -44,22 +44,24 @@ afterEach(async () => {
 it('refreshes on mount and shows an empty state', async () => {
   render(<InvitationsView />);
   await waitFor(() => expect(sendBridgeMessage).toHaveBeenCalledWith({ type: 'FETCH_INVITATIONS' }));
-  expect(await screen.findByText(/No pending invitations/i)).toBeInTheDocument();
+  expect((await screen.findAllByText(/No pending invitations/i)).length).toBeGreaterThan(0);
 });
 
-it('lists an invitation with its mutual line', async () => {
-  await db!.invitations.add(inv({ id: 'i1', name: 'Ada Lovelace', mutualCount: 3, mutualNames: ['Grace Hopper'] }));
+it('auto-selects the first invitation and shows its detail with the mutual line', async () => {
+  await db!.invitations.add(inv({ id: 'i1', name: 'Ada Lovelace', message: 'Hi Diego', mutualCount: 3, mutualNames: ['Grace Hopper'] }));
   render(<InvitationsView />);
-  expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
-  expect(screen.getByText(/Grace Hopper and 2 other shared connections/i)).toBeInTheDocument();
+  // The detail pane (only place the note + mutual line render) waits to mount.
+  expect(await screen.findByText(/Grace Hopper and 2 other shared connections/i)).toBeInTheDocument();
+  expect(screen.getByText('Hi Diego')).toBeInTheDocument();
+  // Name shows in both the list row and the detail pane.
+  expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThanOrEqual(2);
 });
 
-it('accepts an invitation (optimistic remove + bridge call)', async () => {
+it('accepts the selected invitation (optimistic remove + bridge call)', async () => {
   await db!.invitations.add(inv({ id: 'i2', name: 'Alan Turing', sharedSecret: 'XYZ' }));
   render(<InvitationsView />);
-  await screen.findByText('Alan Turing');
-
-  fireEvent.click(screen.getByRole('button', { name: /^Accept$/i }));
+  // Wait for the detail pane (where the actions live) to mount for the selection.
+  fireEvent.click(await screen.findByRole('button', { name: /^Accept$/i }));
   await waitFor(async () => expect(await db!.invitations.get('i2')).toBeUndefined());
   expect(sendBridgeMessage).toHaveBeenCalledWith({
     type: 'RESPOND_INVITATION',
@@ -69,11 +71,10 @@ it('accepts an invitation (optimistic remove + bridge call)', async () => {
   });
 });
 
-it('ignores an invitation', async () => {
+it('ignores the selected invitation', async () => {
   await db!.invitations.add(inv({ id: 'i3', name: 'Grace Hopper' }));
   render(<InvitationsView />);
-  await screen.findByText('Grace Hopper');
-  fireEvent.click(screen.getByRole('button', { name: /^Ignore$/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /^Ignore$/i }));
   await waitFor(() =>
     expect(sendBridgeMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'RESPOND_INVITATION', action: 'ignore' })),
   );

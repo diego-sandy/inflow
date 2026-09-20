@@ -43,6 +43,22 @@ it('shows the Outbox section with an attention badge', () => {
   expect(within(btn).getByText('2')).toBeInTheDocument();
 });
 
+it('shows Invitations as an expandable branch under Connections', () => {
+  render(<NavRail connectionsCount={3} invitationsCount={40} />);
+  // Branch is expanded by default → the child is visible with its count.
+  const inv = screen.getByRole('button', { name: 'Invitations' });
+  expect(inv).toBeInTheDocument();
+  expect(within(inv).getByText('40')).toBeInTheDocument();
+
+  // Selecting the child switches to the invitations section.
+  fireEvent.click(inv);
+  expect(useUIStore.getState().activeSection).toBe('invitations');
+
+  // The chevron collapses the branch, hiding the child.
+  fireEvent.click(screen.getByLabelText(/Collapse Connections/i));
+  expect(screen.queryByRole('button', { name: 'Invitations' })).not.toBeInTheDocument();
+});
+
 it('shows a hover description for each section', () => {
   render(<NavRail connectionsCount={3} />);
   expect(screen.getByText(/Read and reply to your LinkedIn messages/i)).toBeInTheDocument();

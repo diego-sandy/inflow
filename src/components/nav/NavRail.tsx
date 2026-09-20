@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useUIStore, type AppSection } from '@/store/ui-store';
 import { Logo } from '@/components/common/Wordmark';
 
@@ -90,6 +90,67 @@ interface ItemDef {
   desc: string;
   Icon: (p: { className?: string }) => ReactNode;
   count?: number;
+  /** Nested sub-sections shown as an indented branch when expanded. */
+  children?: ItemDef[];
+}
+
+/** One nav row: icon + label + count, with a hover tooltip and optional trailing control. */
+function NavItem({
+  item,
+  active,
+  collapsed,
+  small,
+  trailing,
+  onClick,
+}: {
+  item: ItemDef;
+  active: boolean;
+  collapsed: boolean;
+  small?: boolean;
+  trailing?: ReactNode;
+  onClick: () => void;
+}) {
+  const { label, desc, Icon, count } = item;
+  return (
+    <div className="group/nav relative">
+      <div className="flex items-center">
+        <button
+          onClick={onClick}
+          aria-label={label}
+          aria-current={active ? 'page' : undefined}
+          className={`flex cursor-pointer items-center rounded-lg font-medium transition-colors ${small ? 'text-[13px]' : 'text-sm'} ${
+            collapsed ? 'w-full justify-center px-0 py-2' : 'flex-1 gap-2.5 px-2.5 py-2'
+          } ${
+            active
+              ? 'bg-blue-500/15 text-fg-strong ring-1 ring-inset ring-blue-500/30'
+              : 'text-fg-muted hover:bg-surface-hover hover:text-fg-secondary'
+          }`}
+        >
+          <span className="relative shrink-0">
+            <Icon className={small ? 'h-4 w-4' : 'h-[18px] w-[18px]'} />
+            {collapsed && count !== undefined && count > 0 && (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-blue-400 ring-2 ring-surface-raised" />
+            )}
+          </span>
+          {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+          {!collapsed && count !== undefined && count > 0 && (
+            <span className={`shrink-0 text-[11px] font-semibold tabular-nums ${active ? 'text-blue-300' : 'text-fg-faint'}`}>
+              {count > 99 ? '99+' : count}
+            </span>
+          )}
+        </button>
+        {!collapsed && trailing}
+      </div>
+
+      <div
+        role="tooltip"
+        className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 w-max max-w-[220px] -translate-y-1/2 rounded-lg bg-surface-raised px-3 py-2 opacity-0 shadow-lg ring-1 ring-inset ring-edge transition-opacity duration-100 group-hover/nav:opacity-100"
+      >
+        <p className="text-xs font-semibold text-fg-strong">{label}</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-fg-muted">{desc}</p>
+      </div>
+    </div>
+  );
 }
 
 export function NavRail({ connectionsCount, inboxUnread, outboxAttention, invitationsCount }: NavRailProps) {
@@ -102,10 +163,34 @@ export function NavRail({ connectionsCount, inboxUnread, outboxAttention, invita
   const canGoBack = useUIStore((s) => s.sectionHistory.length > 0);
   const canGoForward = useUIStore((s) => s.sectionForward.length > 0);
 
+  const [branchOpen, setBranchOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('inflow-connections-branch') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const toggleBranch = () =>
+    setBranchOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem('inflow-connections-branch', next ? '1' : '0');
+      } catch {}
+      return next;
+    });
+
   const items: ItemDef[] = [
     { id: 'inbox', label: 'Inbox', desc: 'Read and reply to your LinkedIn messages.', Icon: InboxIcon, count: inboxUnread },
-    { id: 'connections', label: 'Connections', desc: 'Your connections, auto-categorized by role and interest.', Icon: PeopleIcon, count: connectionsCount },
-    { id: 'invitations', label: 'Invitations', desc: 'Pending connection requests — accept or ignore.', Icon: InvitationsIcon, count: invitationsCount },
+    {
+      id: 'connections',
+      label: 'Connections',
+      desc: 'Your connections, auto-categorized by role and interest.',
+      Icon: PeopleIcon,
+      count: connectionsCount,
+      children: [
+        { id: 'invitations', label: 'Invitations', desc: 'Pending connection requests — accept or ignore.', Icon: InvitationsIcon, count: invitationsCount },
+      ],
+    },
     { id: 'outbox', label: 'Outbox', desc: 'Drafts and scheduled messages — you always send.', Icon: OutboxIcon, count: outboxAttention },
     { id: 'insights', label: 'Insights', desc: 'Network composition, firm clusters, and AI suggestions.', Icon: InsightsIcon },
     { id: 'chat', label: 'AI Chat', desc: 'Ask AI anything about your network.', Icon: ChatIcon },
@@ -142,46 +227,71 @@ export function NavRail({ connectionsCount, inboxUnread, outboxAttention, invita
         </div>
       </div>
 
-      {/* Section items */}
-      {items.map(({ id, label, desc, Icon, count }) => {
-        const active = activeSection === id;
+      {/* Section items (Connections carries an expandable Invitations branch) */}
+      {items.map((item) => {
+        const hasChildren = !!item.children?.length;
+        if (!hasChildren) {
+          return (
+            <NavItem
+              key={item.id}
+              item={item}
+              active={activeSection === item.id}
+              collapsed={collapsed}
+              onClick={() => setActiveSection(item.id)}
+            />
+          );
+        }
+        // A parent with a branch: the row navigates; the chevron toggles the branch.
+        const chevron = (
+          <button
+            onClick={toggleBranch}
+            aria-label={branchOpen ? `Collapse ${item.label}` : `Expand ${item.label}`}
+            aria-expanded={branchOpen}
+            className="ml-0.5 shrink-0 rounded-md p-1 text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-secondary"
+          >
+            <svg
+              className={`h-3.5 w-3.5 transition-transform ${branchOpen ? 'rotate-90' : ''}`}
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+        );
         return (
-          <div key={id} className="group/nav relative">
-            <button
-              onClick={() => setActiveSection(id)}
-              aria-label={label}
-              aria-current={active ? 'page' : undefined}
-              className={`flex w-full cursor-pointer items-center rounded-lg text-sm font-medium transition-colors ${
-                collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2'
-              } ${
-                active
-                  ? 'bg-blue-500/15 text-fg-strong ring-1 ring-inset ring-blue-500/30'
-                  : 'text-fg-muted hover:bg-surface-hover hover:text-fg-secondary'
-              }`}
-            >
-              <span className="relative shrink-0">
-                <Icon className="h-[18px] w-[18px]" />
-                {/* Collapsed: a small dot stands in for the count badge. */}
-                {collapsed && count !== undefined && count > 0 && (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-blue-400 ring-2 ring-surface-raised" />
-                )}
-              </span>
-              {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
-              {!collapsed && count !== undefined && count > 0 && (
-                <span className={`shrink-0 text-[11px] font-semibold tabular-nums ${active ? 'text-blue-300' : 'text-fg-faint'}`}>
-                  {count > 99 ? '99+' : count}
-                </span>
-              )}
-            </button>
-
-            {/* Hover description — instant custom tooltip to the right of the item. */}
-            <div
-              role="tooltip"
-              className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 w-max max-w-[220px] -translate-y-1/2 rounded-lg bg-surface-raised px-3 py-2 opacity-0 shadow-lg ring-1 ring-inset ring-edge transition-opacity duration-100 group-hover/nav:opacity-100"
-            >
-              <p className="text-xs font-semibold text-fg-strong">{label}</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-fg-muted">{desc}</p>
-            </div>
+          <div key={item.id}>
+            <NavItem
+              item={item}
+              active={activeSection === item.id}
+              collapsed={collapsed}
+              trailing={chevron}
+              onClick={() => setActiveSection(item.id)}
+            />
+            {/* Expanded branch: indented children with a connector line. */}
+            {!collapsed && branchOpen && (
+              <div className="ml-[19px] mt-0.5 flex flex-col gap-0.5 border-l border-edge pl-2">
+                {item.children!.map((child) => (
+                  <NavItem
+                    key={child.id}
+                    item={child}
+                    active={activeSection === child.id}
+                    collapsed={false}
+                    small
+                    onClick={() => setActiveSection(child.id)}
+                  />
+                ))}
+              </div>
+            )}
+            {/* Collapsed rail: children fall back to their own icon rows. */}
+            {collapsed &&
+              item.children!.map((child) => (
+                <NavItem
+                  key={child.id}
+                  item={child}
+                  active={activeSection === child.id}
+                  collapsed
+                  onClick={() => setActiveSection(child.id)}
+                />
+              ))}
           </div>
         );
       })}

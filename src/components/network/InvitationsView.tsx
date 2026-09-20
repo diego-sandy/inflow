@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { GroupAvatar } from '../common/GroupAvatar';
 import { useInvitations } from '@/hooks/useInvitations';
@@ -90,9 +90,14 @@ function ProfileRow({ inv, selected, onSelect }: { inv: Invitation; selected: bo
 export function InvitationsView() {
   const { invitations, syncing, error, refresh } = useInvitations();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { width: noteWidth, isDragging, onDividerMouseDown, onDividerDoubleClick } = useResizablePane({
-    storageKey: 'inflow-invitations-note-width',
-    defaultWidth: 340,
+  const containerRef = useRef<HTMLDivElement>(null);
+  // The list is the resizable pane (docked left); the note fills the remainder.
+  const { width: listWidth, isDragging, onDividerMouseDown, onDividerDoubleClick } = useResizablePane({
+    storageKey: 'inflow-invitations-list-width',
+    defaultWidth: 600,
+    min: 380,
+    side: 'left',
+    originRef: containerRef,
   });
 
   useEffect(() => {
@@ -113,9 +118,9 @@ export function InvitationsView() {
   const selected = invitations.find((i) => i.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-full min-w-0 flex-1">
-      {/* Left: profiles list (rows centered in a readable column) */}
-      <div className="flex h-full min-w-0 flex-1 flex-col">
+    <div ref={containerRef} className="flex h-full min-w-0 flex-1">
+      {/* Left: profiles list — a left-docked, resizable column */}
+      <div style={{ width: listWidth }} className="flex h-full shrink-0 flex-col">
         <div className="flex items-center gap-2 border-b border-edge px-4 py-2.5">
           <h2 className="text-sm font-semibold text-fg-strong">Invitations</h2>
           {invitations.length > 0 && (
@@ -135,18 +140,16 @@ export function InvitationsView() {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl">
-            {error && <div className="px-4 py-8 text-center text-sm text-red-500 dark:text-red-400">{error}</div>}
-            {!error && invitations.length === 0 && (
-              <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-                <p className="text-sm text-fg-muted">{syncing ? 'Loading invitations…' : 'No pending invitations.'}</p>
-                {!syncing && <p className="max-w-xs text-xs text-fg-faint">New connection requests will show up here to accept or ignore.</p>}
-              </div>
-            )}
-            {invitations.map((inv) => (
-              <ProfileRow key={inv.id} inv={inv} selected={inv.id === selectedId} onSelect={() => setSelectedId(inv.id)} />
-            ))}
-          </div>
+          {error && <div className="px-4 py-8 text-center text-sm text-red-500 dark:text-red-400">{error}</div>}
+          {!error && invitations.length === 0 && (
+            <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
+              <p className="text-sm text-fg-muted">{syncing ? 'Loading invitations…' : 'No pending invitations.'}</p>
+              {!syncing && <p className="max-w-xs text-xs text-fg-faint">New connection requests will show up here to accept or ignore.</p>}
+            </div>
+          )}
+          {invitations.map((inv) => (
+            <ProfileRow key={inv.id} inv={inv} selected={inv.id === selectedId} onSelect={() => setSelectedId(inv.id)} />
+          ))}
         </div>
       </div>
 
@@ -160,8 +163,8 @@ export function InvitationsView() {
         <div className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${isDragging ? 'bg-blue-500' : 'bg-edge group-hover:bg-blue-500/60'}`} />
       </div>
 
-      {/* Right: the selected request's note */}
-      <div style={{ width: noteWidth }} className="flex h-full shrink-0 flex-col">
+      {/* Right: the selected request's note — fills whatever's left of the list */}
+      <div className="flex h-full min-w-0 flex-1 flex-col">
         <div className="flex items-center border-b border-edge px-5 py-2.5">
           <h3 className="truncate text-sm font-semibold text-fg-strong">
             {selected ? `Note from ${selected.name || 'LinkedIn Member'}` : 'Note'}

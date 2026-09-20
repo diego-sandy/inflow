@@ -1,18 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 
 /**
- * A resizable pane docked to the RIGHT edge: dragging the divider left/right
- * changes its width live (clamped), releasing persists it, and a double-click
- * resets to the default. Mirrors useResizableSidebar but measures from the
- * window's right edge (the pane's outer edge is flush to it).
+ * A resizable pane docked to one edge. Dragging the divider changes its width
+ * live (clamped), releasing persists it, and a double-click resets to default.
+ *  - side 'right': the pane hugs the window's right edge (width from clientX to
+ *    the right). Divider sits on the pane's left.
+ *  - side 'left': the pane hugs `originRef`'s left edge (width from that edge to
+ *    clientX). Divider sits on the pane's right.
  */
 export function useResizablePane(opts: {
   storageKey: string;
   defaultWidth: number;
   min?: number;
   max?: number;
+  side?: 'left' | 'right';
+  originRef?: React.RefObject<HTMLElement | null>;
 }) {
-  const { storageKey, defaultWidth, min = 260, max = 640 } = opts;
+  const { storageKey, defaultWidth, min = 260, max = 900, side = 'right', originRef } = opts;
 
   const clamp = useCallback(
     (px: number) => {
@@ -48,7 +52,11 @@ export function useResizablePane(opts: {
   useEffect(() => {
     if (!isDragging) return;
     function move(e: MouseEvent) {
-      setWidth(clamp(window.innerWidth - e.clientX));
+      const px =
+        side === 'left'
+          ? e.clientX - (originRef?.current?.getBoundingClientRect().left ?? 0)
+          : window.innerWidth - e.clientX;
+      setWidth(clamp(px));
     }
     function up() {
       setIsDragging(false);
@@ -71,7 +79,7 @@ export function useResizablePane(opts: {
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
     };
-  }, [isDragging, clamp, storageKey]);
+  }, [isDragging, clamp, storageKey, side, originRef]);
 
   return { width, isDragging, onDividerMouseDown, onDividerDoubleClick };
 }

@@ -23,6 +23,16 @@ export interface ConnectionFilter {
 /** The empty filter — everything shows. */
 export const EMPTY_CONNECTION_FILTER: ConnectionFilter = { roles: [], interests: [] };
 
+/** Connection state of the local MCP bridge (companion ↔ inflow). */
+export type McpStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+/** One line in the MCP activity feed — what Claude just did. */
+export interface McpActivityEntry {
+  id: string;
+  at: number;
+  text: string;
+}
+
 export interface Toast {
   id: string;
   message: string;
@@ -68,6 +78,11 @@ interface UIState {
   tabMemory: Partial<Record<InboxTab, TabMemory>>;
   _pendingRestore: TabMemory | null;
 
+  // --- MCP (Claude co-worker) connection status + live activity feed ---------
+  mcpStatus: McpStatus;
+  mcpError: string | null;
+  mcpActivity: McpActivityEntry[];
+
   setDemoMode: (active: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
   setSelectedIndex: (index: number) => void;
@@ -99,6 +114,9 @@ interface UIState {
   setNavRailCollapsed: (collapsed: boolean) => void;
   toggleNavRail: () => void;
   setSelectedConnectionUrn: (urn: string | null) => void;
+  setMcpStatus: (status: McpStatus, error?: string | null) => void;
+  pushMcpActivity: (text: string) => void;
+  clearMcpActivity: () => void;
   setConnectionsFilter: (filter: ConnectionFilter) => void;
   setConnectionsSearch: (query: string) => void;
   /** Jump to Connections applying a filter and/or search (from Insights). */
@@ -222,6 +240,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedConnectionUrn: null,
   connectionsFilter: { roles: [], interests: [] },
   connectionsSearch: '',
+  mcpStatus: 'disconnected',
+  mcpError: null,
+  mcpActivity: [],
   tabMemory: {},
   _pendingRestore: null,
 
@@ -324,6 +345,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ navRailCollapsed: next });
   },
   setSelectedConnectionUrn: (urn) => set({ selectedConnectionUrn: urn }),
+  setMcpStatus: (status, error = null) => set({ mcpStatus: status, mcpError: status === 'error' ? error : null }),
+  pushMcpActivity: (text) =>
+    set((s) => ({
+      // Cap the feed so it can't grow unbounded during a long session.
+      mcpActivity: [{ id: crypto.randomUUID(), at: Date.now(), text }, ...s.mcpActivity].slice(0, 50),
+    })),
+  clearMcpActivity: () => set({ mcpActivity: [] }),
   setConnectionsFilter: (filter) => set({ connectionsFilter: filter }),
   setConnectionsSearch: (query) => set({ connectionsSearch: query }),
   showConnections: (opts) => {

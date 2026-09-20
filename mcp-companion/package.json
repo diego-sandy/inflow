@@ -1,0 +1,20 @@
+{
+  "name": "inflow-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP companion for the inflow LinkedIn extension — exposes your inflow toolbox (connections, network stats) to Claude Desktop. Read-only in this version; Claude never sends messages.",
+  "type": "module",
+  "bin": {
+    "inflow-mcp": "src/index.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}

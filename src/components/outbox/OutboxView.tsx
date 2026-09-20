@@ -7,6 +7,7 @@ import { sendBridgeMessage } from '@/lib/bridge';
 import { statusLabel } from '@/lib/scheduled-messages';
 import { makeDraftConversationId } from '@/lib/draft-conversation';
 import { GroupAvatar } from '../common/GroupAvatar';
+import { McpStatusBar } from './McpStatusBar';
 import type { ScheduledMessage } from '@/types/scheduled-message';
 
 /** Convert epoch ms → value for <input type="datetime-local">. */
@@ -211,6 +212,8 @@ export function OutboxView() {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl space-y-6 px-6 py-5">
+          <McpStatusBar />
+
           {isEmpty && (
             <div className="flex flex-col items-center gap-2 py-16 text-center">
               <p className="text-sm text-fg-muted">Your outbox is empty.</p>

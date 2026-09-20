@@ -22,6 +22,7 @@ import { InsightsView } from '@/components/insights/InsightsView';
 import { ChatView } from '@/components/chat/ChatView';
 import { OutboxView } from '@/components/outbox/OutboxView';
 import { useOutbox } from '@/hooks/useOutbox';
+import { useMcpBridge } from '@/hooks/useMcpBridge';
 import { useConversations } from '@/hooks/useConversations';
 import { useConnections } from '@/hooks/useConnections';
 import { useRemoteSearch } from '@/hooks/useRemoteSearch';
@@ -42,6 +43,7 @@ export function App() {
   const activeSection = useUIStore((s) => s.activeSection);
   const { connections } = useConnections();
   const { attention: outboxAttention } = useOutbox();
+  useMcpBridge();
   const shortcutPanelOpen = useUIStore((s) => s.shortcutOverlayOpen);
   const deleteConfirmId = useUIStore((s) => s.deleteConfirmId);
   const setDeleteConfirmId = useUIStore((s) => s.setDeleteConfirmId);

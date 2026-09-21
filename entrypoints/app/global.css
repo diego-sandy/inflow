@@ -106,16 +106,16 @@ html.theme-purple {
 }
 
 /*
- * Send button — a solid clay circle with a white glyph. Deliberately the one
- * loud, saturated CTA in the composer so "send" reads instantly. Same color in
- * every theme (it's an action color, not a surface tint).
+ * Send button — a solid blue circle with a white glyph. The one saturated CTA in
+ * the composer so "send" reads instantly, in the app's blue accent (not orange).
+ * Same color in every theme (it's an action color, not a surface tint).
  */
 .btn-send {
-  background-color: #c96442; /* clay */
+  background-color: rgb(37 99 235); /* blue-600 */
   color: #fff;
 }
 .btn-send:hover:not(:disabled) {
-  background-color: #b5573a;
+  background-color: rgb(29 78 216); /* blue-700 */
 }
 .btn-send:disabled {
   opacity: 0.4;

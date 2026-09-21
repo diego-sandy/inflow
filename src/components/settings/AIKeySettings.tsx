@@ -512,7 +512,7 @@ export function AIKeySettings() {
                 onClick={() => setCategorizeMode(m)}
                 aria-pressed={categorizeMode === m}
                 className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
-                  categorizeMode === m ? 'bg-blue-500/20 text-blue-200' : 'text-fg-secondary hover:text-fg-strong'
+                  categorizeMode === m ? 'bg-blue-500/15 text-blue-700 ring-1 ring-inset ring-blue-500/30 dark:text-blue-200' : 'text-fg-secondary hover:text-fg-strong'
                 }`}
               >
                 {m}

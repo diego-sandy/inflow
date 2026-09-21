@@ -236,6 +236,17 @@ function ChatPromptsSettings() {
 function AppearanceSettings() {
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
+  // Pick into a draft and only apply on Save, so a stray click can't change the
+  // whole app's look by accident.
+  const [draft, setDraft] = useState<Theme>(theme);
+  const [justSaved, setJustSaved] = useState(false);
+  useEffect(() => setDraft(theme), [theme]);
+  const dirty = draft !== theme;
+  const save = () => {
+    setTheme(draft);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2000);
+  };
   const options: { value: Theme; label: string }[] = [
     { value: 'light', label: 'Light' },
     { value: 'dark', label: 'Dark' },
@@ -245,22 +256,31 @@ function AppearanceSettings() {
   return (
     <div>
       <h3 className="text-sm font-semibold text-fg-strong">Theme</h3>
-      <p className="mt-1 text-sm text-fg-secondary">Choose how inflow looks.</p>
-      <div className="mt-3 inline-flex rounded-lg bg-surface p-1 ring-1 ring-ring">
-        {options.map((o) => (
-          <button
-            key={o.value}
-            onClick={() => setTheme(o.value)}
-            aria-pressed={theme === o.value}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              theme === o.value
-                ? 'bg-blue-500/20 text-blue-200'
-                : 'text-fg-secondary hover:text-fg-strong'
-            }`}
-          >
-            {o.label}
-          </button>
-        ))}
+      <p className="mt-1 text-sm text-fg-secondary">Choose how inflow looks. Changes apply when you save.</p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg bg-surface p-1 ring-1 ring-ring">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => setDraft(o.value)}
+              aria-pressed={draft === o.value}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                draft === o.value
+                  ? 'bg-blue-500/15 text-blue-700 ring-1 ring-inset ring-blue-500/30 dark:text-blue-200'
+                  : 'text-fg-secondary hover:text-fg-strong'
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={save}
+          disabled={!dirty}
+          className="rounded-md bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
+        >
+          {justSaved ? 'Saved ✓' : 'Save'}
+        </button>
       </div>
 
       <InboxLabelSettings />

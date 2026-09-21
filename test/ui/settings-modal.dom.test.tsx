@@ -116,12 +116,15 @@ it('toggles categorization between auto and manual', async () => {
   expect(aiSettings.setCategorizeMode).toHaveBeenCalledWith('manual');
 });
 
-it('switches to Appearance and changes the theme', async () => {
+it('switches to Appearance and changes the theme on Save', async () => {
   await openSettings();
   fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
 
   const dark = await screen.findByRole('button', { name: 'Dark' });
   fireEvent.click(dark);
+  // Draft only — theme is not applied until Save.
+  expect(useUIStore.getState().theme).not.toBe('dark');
+  fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
   expect(useUIStore.getState().theme).toBe('dark');
 });
 

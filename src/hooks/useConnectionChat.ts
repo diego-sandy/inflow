@@ -99,13 +99,26 @@ export function useConnectionChat(): ConnectionChatState {
           getAIChatMaxWords(),
           getAIChatInstructions(),
         ]);
+        // Stream the answer in live so the user sees it build instead of a blank
+        // "Thinking…". We append an empty assistant turn and grow its content.
+        let streamed = '';
+        const renderStream = () => {
+          useInsightChatStore.getState().setMessages([
+            ...withUser,
+            { role: 'assistant', content: streamed },
+          ]);
+        };
         const answer = await answerConnectionQuestion(connections, question, predict, history, CHAT_CONTEXT_LIMIT, {
           maxTokens: wordsToMaxTokens(maxWords),
           extraInstructions,
+          onToken: (chunk) => {
+            streamed += chunk;
+            renderStream();
+          },
         });
         const withAnswer: ChatMessage[] = [
           ...withUser,
-          { role: 'assistant', content: answer || "I couldn't find an answer in your connections." },
+          { role: 'assistant', content: answer || streamed || "I couldn't find an answer in your connections." },
         ];
         useInsightChatStore.getState().setMessages(withAnswer);
         await persist(id, withAnswer);

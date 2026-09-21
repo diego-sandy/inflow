@@ -79,6 +79,8 @@ export interface ChatAnswerOptions {
   maxTokens?: number;
   /** Extra user instructions appended to the system prompt (tone, format, length). */
   extraInstructions?: string;
+  /** Called with each text chunk as the answer streams in (for live display). */
+  onToken?: (chunk: string) => void;
 }
 
 export async function answerConnectionQuestion(
@@ -107,6 +109,7 @@ export async function answerConnectionQuestion(
     temperature: 0.3,
     systemPrompt: system,
     tier: 'quality', // reasoning over the network — route to the stronger model
+    onToken: opts.onToken,
   });
   return (answer || '').trim() || null;
 }

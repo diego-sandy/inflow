@@ -37,6 +37,7 @@ export type PredictFn = (
     systemPrompt?: string;
     signal?: AbortSignal;
     tier?: 'fast' | 'quality';
+    onToken?: (chunk: string) => void;
   },
 ) => Promise<string | null>;
 

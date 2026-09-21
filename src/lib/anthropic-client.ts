@@ -19,6 +19,8 @@ export interface AnthropicPredictOptions {
   maxTokens?: number;
   /** System prompt (Anthropic top-level `system`). */
   systemPrompt?: string;
+  /** When set, stream the response and call this with each text delta. */
+  onToken?: (chunk: string) => void;
 }
 
 /**
@@ -63,6 +65,7 @@ export async function predictAnthropic(
 ): Promise<string | null> {
   const maxTokens = Math.max(options?.maxTokens ?? 256, 64);
   const thinking = /haiku/i.test(model) ? undefined : { type: 'disabled' as const };
+  const stream = !!options?.onToken;
 
   try {
     const res = await fetch(ANTHROPIC_URL, {
@@ -77,6 +80,7 @@ export async function predictAnthropic(
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
+        ...(stream ? { stream: true } : {}),
         ...(thinking ? { thinking } : {}),
         ...(options?.systemPrompt ? { system: options.systemPrompt } : {}),
         messages: [{ role: 'user', content: prompt }],
@@ -86,6 +90,10 @@ export async function predictAnthropic(
     if (!res.ok) {
       console.warn('[inflow] Anthropic request failed:', res.status, anthropicErrorMessage(res.status));
       return null;
+    }
+
+    if (stream && res.body) {
+      return await readAnthropicStream(res.body, options!.onToken!);
     }
 
     const data = await res.json();
@@ -101,4 +109,53 @@ export async function predictAnthropic(
     console.warn('[inflow] Anthropic request error:', e);
     return null;
   }
+}
+
+/**
+ * Read the Messages API SSE stream, appending each `text_delta` and forwarding
+ * it to `onToken`. Buffers across reads so a `data:` line split between network
+ * chunks is never dropped (the same class of bug that truncated the Gemini path).
+ */
+async function readAnthropicStream(
+  body: ReadableStream<Uint8Array>,
+  onToken: (chunk: string) => void,
+): Promise<string | null> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let buffer = '';
+
+  const consumeLine = (line: string) => {
+    if (!line.startsWith('data:')) return;
+    const payload = line.slice(5).trim();
+    if (!payload) return;
+    try {
+      const json = JSON.parse(payload);
+      if (json?.type === 'content_block_delta' && json?.delta?.type === 'text_delta') {
+        const t = json.delta.text;
+        if (typeof t === 'string') {
+          text += t;
+          onToken(t);
+        }
+      }
+    } catch {
+      // skip malformed SSE lines
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) consumeLine(line);
+    }
+    if (buffer) consumeLine(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+
+  return text.trim() || null;
 }

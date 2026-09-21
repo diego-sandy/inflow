@@ -66,7 +66,7 @@ export function ChatThread() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
         <p className="max-w-sm text-sm text-fg-muted">
-          Add an AI key to chat with Flow about your network.
+          Add an AI key to chat about your network.
         </p>
         <button
           onClick={() => openSettings('ai')}
@@ -112,10 +112,12 @@ export function ChatThread() {
                   <AssistantMessage key={i} content={m.content} />
                 ),
               )}
-              {loading && (
+              {/* Only show the status while we're still waiting for the first
+                  token — once text streams in, the growing answer is the status. */}
+              {loading && messages[messages.length - 1]?.role !== 'assistant' && (
                 <div className="flex items-center gap-2 text-sm text-fg-muted">
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" />
-                  Thinking…
+                  Reading your {connectionCount.toLocaleString()} connection{connectionCount === 1 ? '' : 's'}…
                 </div>
               )}
             </div>

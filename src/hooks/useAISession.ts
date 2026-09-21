@@ -32,6 +32,8 @@ interface PredictOptions {
   temperature?: number;
   /** Model tier — 'fast' (default) or 'quality'. Only Anthropic honors it. */
   tier?: AIModelTier;
+  /** Called with each text chunk as it streams in (for live display). */
+  onToken?: (chunk: string) => void;
 }
 
 interface AISession {
@@ -154,15 +156,16 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
   const systemPrompt = isOpts ? options.systemPrompt ?? SYSTEM_PROMPT : SYSTEM_PROMPT;
   const temperature = isOpts ? options.temperature ?? 0.3 : 0.3;
   const tier: AIModelTier = isOpts ? options.tier ?? 'fast' : 'fast';
+  const onToken = isOpts ? options.onToken : undefined;
 
   if (config.provider === 'anthropic') {
     if (!config.anthropicKey) return null;
     const model = tier === 'quality' ? config.qualityModel : config.fastModel;
-    return predictAnthropic(prompt, config.anthropicKey, model, { signal, maxTokens, systemPrompt });
+    return predictAnthropic(prompt, config.anthropicKey, model, { signal, maxTokens, systemPrompt, onToken });
   }
 
   const model = tier === 'quality' ? config.geminiQualityModel : config.geminiFastModel;
-  return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model });
+  return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model, onToken });
 }
 
 /** Gemini streaming prediction (the original provider). */
@@ -175,6 +178,7 @@ async function predictGemini(
     systemPrompt: string;
     temperature: number;
     model: string;
+    onToken?: (chunk: string) => void;
   },
 ): Promise<string | null> {
   try {
@@ -194,34 +198,44 @@ async function predictGemini(
 
     if (!res.ok || !res.body) return null;
 
-    // Read SSE stream
+    // Read SSE stream. Buffer across reads: a single `data: {...}` line can be
+    // split between two network chunks, so we only parse complete lines and keep
+    // any trailing partial line for the next read. (Parsing per-chunk dropped
+    // split lines, which truncated long answers mid-word.)
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let text = '';
+    let buffer = '';
+
+    const consumeLine = (line: string) => {
+      if (!line.startsWith('data:')) return;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') return;
+      try {
+        const json = JSON.parse(payload);
+        const parts = json?.candidates?.[0]?.content?.parts;
+        if (Array.isArray(parts)) {
+          for (const p of parts) {
+            if (typeof p?.text === 'string') {
+              text += p.text;
+              opts.onToken?.(p.text);
+            }
+          }
+        }
+      } catch {
+        // skip malformed SSE lines
+      }
+    };
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const json = JSON.parse(line.slice(6));
-            // Concatenate every text part in the chunk — a candidate's content
-            // can carry more than one part, and reading only parts[0] silently
-            // dropped the rest (a source of truncated answers).
-            const parts = json?.candidates?.[0]?.content?.parts;
-            if (Array.isArray(parts)) {
-              for (const p of parts) {
-                if (typeof p?.text === 'string') text += p.text;
-              }
-            }
-          } catch {
-            // skip malformed SSE lines
-          }
-        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? ''; // keep the (possibly partial) last line
+        for (const line of lines) consumeLine(line);
 
         // For autocomplete we only need a few words — bail after first meaningful text
         if (!opts.fullResponse && text.trim().length > 0) {
@@ -229,6 +243,8 @@ async function predictGemini(
           break;
         }
       }
+      // Flush any complete line left in the buffer at stream end.
+      if (buffer) consumeLine(buffer);
     } finally {
       reader.releaseLock();
     }

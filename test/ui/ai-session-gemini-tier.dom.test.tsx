@@ -34,6 +34,21 @@ function sseResponse(text: string): Response {
   return { ok: true, body } as unknown as Response;
 }
 
+/** A Response that emits the text across chunks, splitting one `data:` line mid-way. */
+function splitSseResponse(text: string): Response {
+  const full = `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] })}\n`;
+  const mid = Math.floor(full.length / 2);
+  const body = new ReadableStream({
+    start(controller) {
+      const enc = new TextEncoder();
+      controller.enqueue(enc.encode(full.slice(0, mid)));
+      controller.enqueue(enc.encode(full.slice(mid)));
+      controller.close();
+    },
+  });
+  return { ok: true, body } as unknown as Response;
+}
+
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   fetchMock = vi.fn(async () => sseResponse('ok'));
@@ -57,4 +72,24 @@ it('routes the quality tier to the quality Gemini model', async () => {
   await result.current.predict('write a message', { tier: 'quality' });
   const url = String(fetchMock.mock.calls[0][0]);
   expect(url).toContain('/models/gemini-3.1-pro-preview:streamGenerateContent');
+});
+
+it('streams text chunks to onToken', async () => {
+  fetchMock.mockImplementation(async () => sseResponse('streamed answer'));
+  const { result } = renderHook(() => useAISession());
+  await waitFor(() => expect(result.current.available).toBe(true));
+
+  const chunks: string[] = [];
+  const out = await result.current.predict('q', { fullResponse: true, onToken: (c) => chunks.push(c) });
+  expect(out).toBe('streamed answer');
+  expect(chunks.join('')).toBe('streamed answer');
+});
+
+it('does not drop text when a data line is split across network reads', async () => {
+  fetchMock.mockImplementation(async () => splitSseResponse('the whole answer survives'));
+  const { result } = renderHook(() => useAISession());
+  await waitFor(() => expect(result.current.available).toBe(true));
+
+  const out = await result.current.predict('q', { fullResponse: true });
+  expect(out).toBe('the whole answer survives');
 });

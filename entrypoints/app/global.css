@@ -111,11 +111,11 @@ html.theme-purple {
  * Same color in every theme (it's an action color, not a surface tint).
  */
 .btn-send {
-  background-color: rgb(37 99 235); /* blue-600 */
+  background-color: rgb(59 130 246); /* blue-500 — the app's accent hue */
   color: #fff;
 }
 .btn-send:hover:not(:disabled) {
-  background-color: rgb(29 78 216); /* blue-700 */
+  background-color: rgb(37 99 235); /* blue-600 */
 }
 .btn-send:disabled {
   opacity: 0.4;

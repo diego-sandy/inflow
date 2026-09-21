@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useUIStore, type SettingsSection, type Theme } from '@/store/ui-store';
-import { DEFAULT_INBOX_LABELS, DEFAULT_INBOX_SECTION_LABEL } from '@/lib/inbox-labels';
+import {
+  DEFAULT_INBOX_LABELS,
+  DEFAULT_INBOX_SECTION_LABEL,
+  normalizeInboxLabels,
+  normalizeSectionLabel,
+} from '@/lib/inbox-labels';
 import {
   getAIChatMaxWords,
   setAIChatMaxWords,
@@ -236,36 +241,71 @@ function ChatPromptsSettings() {
 function AppearanceSettings() {
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
-  // Pick into a draft and only apply on Save, so a stray click can't change the
-  // whole app's look by accident.
-  const [draft, setDraft] = useState<Theme>(theme);
+  const inboxLabels = useUIStore((s) => s.inboxLabels);
+  const setInboxLabels = useUIStore((s) => s.setInboxLabels);
+  const inboxSectionLabel = useUIStore((s) => s.inboxSectionLabel);
+  const setInboxSectionLabel = useUIStore((s) => s.setInboxSectionLabel);
+
+  // Everything in this section is a draft until the one Save at the bottom, so
+  // nothing changes by accident and the whole section commits together.
+  const [themeDraft, setThemeDraft] = useState<Theme>(theme);
+  const [sectionDraft, setSectionDraft] = useState(inboxSectionLabel);
+  const [labels, setLabels] = useState(inboxLabels);
   const [justSaved, setJustSaved] = useState(false);
-  useEffect(() => setDraft(theme), [theme]);
-  const dirty = draft !== theme;
+
+  useEffect(() => setThemeDraft(theme), [theme]);
+  useEffect(() => setSectionDraft(inboxSectionLabel), [inboxSectionLabel]);
+  useEffect(() => setLabels(inboxLabels), [inboxLabels]);
+
+  const nextSection = normalizeSectionLabel(sectionDraft);
+  const nextLabels = normalizeInboxLabels(labels);
+  const dirty =
+    themeDraft !== theme ||
+    nextSection !== inboxSectionLabel ||
+    nextLabels.focused !== inboxLabels.focused ||
+    nextLabels.other !== inboxLabels.other;
+
   const save = () => {
-    setTheme(draft);
+    setTheme(themeDraft);
+    setInboxSectionLabel(sectionDraft);
+    setInboxLabels(labels);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
   };
-  const options: { value: Theme; label: string }[] = [
+
+  const namesAtDefault =
+    nextSection === DEFAULT_INBOX_SECTION_LABEL &&
+    nextLabels.focused === DEFAULT_INBOX_LABELS.focused &&
+    nextLabels.other === DEFAULT_INBOX_LABELS.other;
+  const resetNames = () => {
+    setSectionDraft(DEFAULT_INBOX_SECTION_LABEL);
+    setLabels({ ...DEFAULT_INBOX_LABELS });
+  };
+
+  const themeOptions: { value: Theme; label: string }[] = [
     { value: 'light', label: 'Light' },
     { value: 'dark', label: 'Dark' },
     { value: 'system', label: 'System' },
     { value: 'purple', label: 'Purple' },
   ];
+  const nameFields: { key: 'focused' | 'other'; heading: string; hint: string }[] = [
+    { key: 'focused', heading: 'Primary tab', hint: 'LinkedIn’s primary inbox — your main conversations.' },
+    { key: 'other', heading: 'Secondary tab', hint: 'InMail, connection requests, and lower-priority threads.' },
+  ];
+
   return (
-    <div>
-      <h3 className="text-sm font-semibold text-fg-strong">Theme</h3>
-      <p className="mt-1 text-sm text-fg-secondary">Choose how inflow looks. Changes apply when you save.</p>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-lg bg-surface p-1 ring-1 ring-ring">
-          {options.map((o) => (
+    <div className="flex min-h-full flex-col">
+      <div>
+        <h3 className="text-sm font-semibold text-fg-strong">Theme</h3>
+        <p className="mt-1 text-sm text-fg-secondary">Choose how inflow looks.</p>
+        <div className="mt-3 inline-flex rounded-lg bg-surface p-1 ring-1 ring-ring">
+          {themeOptions.map((o) => (
             <button
               key={o.value}
-              onClick={() => setDraft(o.value)}
-              aria-pressed={draft === o.value}
+              onClick={() => setThemeDraft(o.value)}
+              aria-pressed={themeDraft === o.value}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                draft === o.value
+                themeDraft === o.value
                   ? 'bg-blue-500/15 text-blue-700 ring-1 ring-inset ring-blue-500/30 dark:text-blue-200'
                   : 'text-fg-secondary hover:text-fg-strong'
               }`}
@@ -274,92 +314,65 @@ function AppearanceSettings() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mt-8 border-t border-edge pt-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-sm font-semibold text-fg-strong">Inbox names</h3>
+          {!namesAtDefault && (
+            <button
+              onClick={resetNames}
+              className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
+            >
+              Reset to defaults
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-fg-secondary">
+          Rename the Inbox section and its two LinkedIn tabs to whatever fits how you work.
+        </p>
+        <div className="mt-3 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-fg-strong">Section name</p>
+              <p className="text-xs text-fg-muted">The nav label — e.g. “Messages” instead of “Inbox”.</p>
+            </div>
+            <input
+              value={sectionDraft}
+              maxLength={24}
+              onChange={(e) => setSectionDraft(e.target.value)}
+              placeholder={DEFAULT_INBOX_SECTION_LABEL}
+              className="w-40 shrink-0 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+            />
+          </div>
+          {nameFields.map((f) => (
+            <div key={f.key} className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-fg-strong">{f.heading}</p>
+                <p className="text-xs text-fg-muted">{f.hint}</p>
+              </div>
+              <input
+                value={labels[f.key]}
+                maxLength={24}
+                onChange={(e) => setLabels((d) => ({ ...d, [f.key]: e.target.value }))}
+                placeholder={DEFAULT_INBOX_LABELS[f.key]}
+                className="w-40 shrink-0 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* One Save for the whole section, pinned to the bottom-right. */}
+      <div className="mt-8 flex flex-1 items-end justify-end">
         <button
           onClick={save}
           disabled={!dirty}
-          className="rounded-md bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
+          className="rounded-md bg-blue-500/15 px-4 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
         >
           {justSaved ? 'Saved ✓' : 'Save'}
         </button>
       </div>
-
-      <InboxLabelSettings />
-    </div>
-  );
-}
-
-function InboxLabelSettings() {
-  const inboxLabels = useUIStore((s) => s.inboxLabels);
-  const setInboxLabels = useUIStore((s) => s.setInboxLabels);
-  const inboxSectionLabel = useUIStore((s) => s.inboxSectionLabel);
-  const setInboxSectionLabel = useUIStore((s) => s.setInboxSectionLabel);
-  // Local draft so the user can clear a field while typing; committed on blur
-  // (empty falls back to the default via the store's normalizer).
-  const [draft, setDraft] = useState(inboxLabels);
-  const [sectionDraft, setSectionDraft] = useState(inboxSectionLabel);
-  useEffect(() => setDraft(inboxLabels), [inboxLabels]);
-  useEffect(() => setSectionDraft(inboxSectionLabel), [inboxSectionLabel]);
-
-  const commit = (next: { focused: string; other: string }) => setInboxLabels(next);
-  const isDefault =
-    inboxLabels.focused === DEFAULT_INBOX_LABELS.focused &&
-    inboxLabels.other === DEFAULT_INBOX_LABELS.other;
-
-  const fields: { key: 'focused' | 'other'; heading: string; hint: string }[] = [
-    { key: 'focused', heading: 'Primary tab', hint: 'LinkedIn’s primary inbox — your main conversations.' },
-    { key: 'other', heading: 'Secondary tab', hint: 'InMail, connection requests, and lower-priority threads.' },
-  ];
-
-  return (
-    <div className="mt-8 border-t border-edge pt-6">
-      <h3 className="text-sm font-semibold text-fg-strong">Inbox names</h3>
-      <p className="mt-1 text-sm text-fg-secondary">
-        Rename the Inbox section and its two LinkedIn tabs to whatever fits how you work.
-      </p>
-      <div className="mt-3 space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-fg-strong">Section name</p>
-            <p className="text-xs text-fg-muted">The nav label — e.g. “Messages” instead of “Inbox”.</p>
-          </div>
-          <input
-            value={sectionDraft}
-            maxLength={24}
-            onChange={(e) => setSectionDraft(e.target.value)}
-            onBlur={() => setInboxSectionLabel(sectionDraft)}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            placeholder={DEFAULT_INBOX_SECTION_LABEL}
-            className="w-40 shrink-0 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
-          />
-        </div>
-        {fields.map((f) => (
-          <div key={f.key} className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-fg-strong">{f.heading}</p>
-              <p className="text-xs text-fg-muted">{f.hint}</p>
-            </div>
-            <input
-              value={draft[f.key]}
-              maxLength={24}
-              onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-              onBlur={() => commit(draft)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-              }}
-              placeholder={DEFAULT_INBOX_LABELS[f.key]}
-              className="w-40 shrink-0 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
-            />
-          </div>
-        ))}
-      </div>
-      {!isDefault && (
-        <button
-          onClick={() => commit(DEFAULT_INBOX_LABELS)}
-          className="mt-3 rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
-        >
-          Reset to {DEFAULT_INBOX_LABELS.focused} / {DEFAULT_INBOX_LABELS.other}
-        </button>
-      )}
     </div>
   );
 }

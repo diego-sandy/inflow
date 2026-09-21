@@ -77,7 +77,7 @@ describe('answerConnectionQuestion', () => {
     expect(predict.mock.calls[0][0]).toContain('Who are my investors?');
   });
 
-  it('applies a custom output cap and extra instructions from Advanced settings', async () => {
+  it('uses custom instructions as the base prompt and a word-target hint', async () => {
     const predict = vi.fn().mockResolvedValue('ok');
     await answerConnectionQuestion(
       [c({ fullName: 'Ada' })],
@@ -85,11 +85,14 @@ describe('answerConnectionQuestion', () => {
       predict,
       [],
       undefined as any, // use default context limit
-      { maxTokens: 1234, extraInstructions: 'Answer only in emoji.' },
+      { maxTokens: 1234, instructions: 'Answer only in emoji.', targetWords: 120 },
     );
     const opts = predict.mock.calls[0][1];
     expect(opts.maxTokens).toBe(1234);
     expect(opts.systemPrompt).toContain('Answer only in emoji.');
+    expect(opts.systemPrompt).toContain('approximately 120 words');
+    // The connection list is still appended after the instructions.
+    expect(opts.systemPrompt).toContain('Ada');
   });
 
   it('includes prior turns for follow-up context', async () => {

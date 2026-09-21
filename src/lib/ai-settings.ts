@@ -178,8 +178,8 @@ export async function clearGeminiApiKey(): Promise<void> {
 export const DEFAULT_CHAT_MAX_WORDS = 0;
 export const CHAT_MAX_WORDS_MIN = 0;
 export const CHAT_MAX_WORDS_MAX = 8000;
-/** Cap on the custom-instructions text, to keep the prompt bounded. */
-export const CHAT_INSTRUCTIONS_MAX_CHARS = 2000;
+/** Cap on the instructions text, to keep the prompt bounded. */
+export const CHAT_INSTRUCTIONS_MAX_CHARS = 4000;
 
 function clampWords(words: number): number {
   return Math.min(Math.max(Math.round(words), CHAT_MAX_WORDS_MIN), CHAT_MAX_WORDS_MAX);

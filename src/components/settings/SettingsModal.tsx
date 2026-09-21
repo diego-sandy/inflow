@@ -21,6 +21,7 @@ import {
   CHAT_PROMPTS_MAX,
   CHAT_PROMPT_MAX_CHARS,
 } from '@/lib/ai-settings';
+import { DEFAULT_CHAT_INSTRUCTIONS } from '@/lib/connection-chat';
 import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { checkForUpdateAndToast } from '@/lib/check-update';
 import { AIKeySettings } from './AIKeySettings';
@@ -57,9 +58,11 @@ function AIAdvancedSettings() {
     let cancelled = false;
     Promise.all([getAIChatMaxWords(), getAIChatInstructions()]).then(([w, i]) => {
       if (cancelled) return;
+      // Show the actual default instructions when the user hasn't customized them.
+      const inst = i.trim() || DEFAULT_CHAT_INSTRUCTIONS;
       setMaxWords(w);
-      setInstructions(i);
-      setSaved({ maxWords: w, instructions: i });
+      setInstructions(inst);
+      setSaved({ maxWords: w, instructions: inst });
     });
     return () => { cancelled = true; };
   }, []);
@@ -114,20 +117,33 @@ function AIAdvancedSettings() {
         </div>
 
         <div>
-          <label htmlFor="ai-instructions" className="text-sm font-medium text-fg-strong">
-            Custom instructions <span className="font-normal text-fg-faint">(optional)</span>
-          </label>
+          <div className="flex items-baseline justify-between gap-3">
+            <label htmlFor="ai-instructions" className="text-sm font-medium text-fg-strong">
+              Instructions
+            </label>
+            {instructions !== DEFAULT_CHAT_INSTRUCTIONS && (
+              <button
+                type="button"
+                onClick={() => setInstructions(DEFAULT_CHAT_INSTRUCTIONS)}
+                className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
+              >
+                Reset to defaults
+              </button>
+            )}
+          </div>
+          <p className="mt-0.5 text-xs text-fg-muted">
+            The base prompt sent to the model. Your connection list is added automatically after it.
+          </p>
           <textarea
             id="ai-instructions"
             value={instructions}
             maxLength={CHAT_INSTRUCTIONS_MAX_CHARS}
             onChange={(e) => setInstructions(e.target.value)}
-            rows={3}
-            placeholder="e.g. Answer in bullet points, keep a warm tone, and always suggest a next step."
-            className="mt-1.5 w-full resize-y rounded-lg bg-surface-input px-3 py-2 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+            rows={10}
+            className="mt-1.5 w-full resize-y rounded-lg bg-surface-input px-3 py-2 font-mono text-[13px] leading-relaxed text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
           />
           <p className="mt-1 text-[11px] text-fg-faint">
-            Folded into the AI Chat prompt. {instructions.length}/{CHAT_INSTRUCTIONS_MAX_CHARS}
+            {instructions.length}/{CHAT_INSTRUCTIONS_MAX_CHARS}
           </p>
         </div>
 

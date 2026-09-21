@@ -26,7 +26,12 @@ export interface ChatMessage {
  */
 export const CHAT_CONTEXT_LIMIT = 10000;
 
-const SYSTEM_PROMPT =
+/**
+ * The default instructions the chat sends to the model. Surfaced verbatim in
+ * Settings → AI so the user can read, edit, and reset them. The connection list
+ * itself is always appended after these instructions (not shown here).
+ */
+export const DEFAULT_CHAT_INSTRUCTIONS =
   'You answer questions about the user\'s LinkedIn connections using ONLY the ' +
   'provided list. Each line is: "name (role) — headline [interests: …] — about: ' +
   '<what they do> — history: <recap of past messages with them>". Use the ' +
@@ -73,8 +78,13 @@ export interface ChatAnswerOptions {
    * hard cutoff. A positive value caps explicitly.
    */
   maxTokens?: number;
-  /** Extra user instructions appended to the system prompt (tone, format, length). */
-  extraInstructions?: string;
+  /**
+   * The base instructions (system prompt) — the user's edited version, or the
+   * default. The connection list is always appended after these.
+   */
+  instructions?: string;
+  /** Soft target length (words); appended as a hint when > 0. */
+  targetWords?: number;
   /** Called with each text chunk as the answer streams in (for live display). */
   onToken?: (chunk: string) => void;
 }
@@ -89,10 +99,11 @@ export async function answerConnectionQuestion(
 ): Promise<string | null> {
   const { text, included, total } = buildConnectionContext(connections, limit);
   const note = total > included ? `\n\n(Showing ${included} of ${total} connections.)` : '';
-  const extra = opts.extraInstructions?.trim()
-    ? `\n\nExtra instructions from the user (follow these):\n${opts.extraInstructions.trim()}`
+  const base = opts.instructions?.trim() || DEFAULT_CHAT_INSTRUCTIONS;
+  const wordsNote = opts.targetWords && opts.targetWords > 0
+    ? `\n\nAim for approximately ${opts.targetWords} words.`
     : '';
-  const system = `${SYSTEM_PROMPT}${extra}\n\nConnections:\n${text}${note}`;
+  const system = `${base}${wordsNote}\n\nConnections:\n${text}${note}`;
 
   const convo = history
     .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useUIStore, type SettingsSection, type Theme } from '@/store/ui-store';
-import { DEFAULT_INBOX_LABELS } from '@/lib/inbox-labels';
+import { DEFAULT_INBOX_LABELS, DEFAULT_INBOX_SECTION_LABEL } from '@/lib/inbox-labels';
 import {
   getAIChatMaxWords,
   setAIChatMaxWords,
@@ -171,10 +171,14 @@ function AppearanceSettings() {
 function InboxLabelSettings() {
   const inboxLabels = useUIStore((s) => s.inboxLabels);
   const setInboxLabels = useUIStore((s) => s.setInboxLabels);
+  const inboxSectionLabel = useUIStore((s) => s.inboxSectionLabel);
+  const setInboxSectionLabel = useUIStore((s) => s.setInboxSectionLabel);
   // Local draft so the user can clear a field while typing; committed on blur
   // (empty falls back to the default via the store's normalizer).
   const [draft, setDraft] = useState(inboxLabels);
+  const [sectionDraft, setSectionDraft] = useState(inboxSectionLabel);
   useEffect(() => setDraft(inboxLabels), [inboxLabels]);
+  useEffect(() => setSectionDraft(inboxSectionLabel), [inboxSectionLabel]);
 
   const commit = (next: { focused: string; other: string }) => setInboxLabels(next);
   const isDefault =
@@ -188,11 +192,26 @@ function InboxLabelSettings() {
 
   return (
     <div className="mt-8 border-t border-edge pt-6">
-      <h3 className="text-sm font-semibold text-fg-strong">Inbox tab names</h3>
+      <h3 className="text-sm font-semibold text-fg-strong">Inbox names</h3>
       <p className="mt-1 text-sm text-fg-secondary">
-        Rename the two LinkedIn inbox tabs to whatever fits how you work.
+        Rename the Inbox section and its two LinkedIn tabs to whatever fits how you work.
       </p>
       <div className="mt-3 space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-fg-strong">Section name</p>
+            <p className="text-xs text-fg-muted">The nav label — e.g. “Messages” instead of “Inbox”.</p>
+          </div>
+          <input
+            value={sectionDraft}
+            maxLength={24}
+            onChange={(e) => setSectionDraft(e.target.value)}
+            onBlur={() => setInboxSectionLabel(sectionDraft)}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            placeholder={DEFAULT_INBOX_SECTION_LABEL}
+            className="w-40 shrink-0 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+          />
+        </div>
         {fields.map((f) => (
           <div key={f.key} className="flex items-center justify-between gap-4">
             <div className="min-w-0">

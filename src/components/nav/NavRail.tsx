@@ -215,6 +215,7 @@ export function NavRail({ connectionsCount, inboxUnread, inboxQueue, outboxAtten
   const inboxTab = useUIStore((s) => s.inboxTab);
   const setInboxTab = useUIStore((s) => s.setInboxTab);
   const inboxLabels = useUIStore((s) => s.inboxLabels);
+  const inboxSectionLabel = useUIStore((s) => s.inboxSectionLabel);
   const collapsed = useUIStore((s) => s.navRailCollapsed);
   const toggleNavRail = useUIStore((s) => s.toggleNavRail);
   const goBackSection = useUIStore((s) => s.goBackSection);
@@ -246,7 +247,7 @@ export function NavRail({ connectionsCount, inboxUnread, inboxQueue, outboxAtten
     {
       key: 'inbox',
       section: 'inbox',
-      label: 'Inbox',
+      label: inboxSectionLabel,
       desc: 'Read and reply to your LinkedIn messages.',
       Icon: InboxIcon,
       count: inboxUnread?.total,

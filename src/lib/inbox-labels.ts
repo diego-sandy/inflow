@@ -18,6 +18,14 @@ export const DEFAULT_INBOX_LABELS: InboxLabels = {
   other: 'InMail',
 };
 
+/** Default name for the Inbox nav section itself (renamable, e.g. "Messages"). */
+export const DEFAULT_INBOX_SECTION_LABEL = 'Inbox';
+
+/** Coerce a stored/blank section label into a usable, trimmed value. */
+export function normalizeSectionLabel(raw: string | null | undefined): string {
+  return (raw ?? '').trim() || DEFAULT_INBOX_SECTION_LABEL;
+}
+
 /** Fixed labels for the tabs the user can't rename. */
 const FIXED_TAB_LABELS: Record<Exclude<InboxTab, 'focused' | 'other'>, string> = {
   archived: 'Archive',

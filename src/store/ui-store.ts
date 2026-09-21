@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Message } from '@/types/message';
 import type { ConnectionRole } from '@/types/connection';
 import { isDemoMode as checkDemoMode } from '@/lib/demo-mode';
-import { type InboxLabels, DEFAULT_INBOX_LABELS, normalizeInboxLabels } from '@/lib/inbox-labels';
+import { type InboxLabels, DEFAULT_INBOX_LABELS, normalizeInboxLabels, DEFAULT_INBOX_SECTION_LABEL, normalizeSectionLabel } from '@/lib/inbox-labels';
 
 export type ViewMode = 'list' | 'thread';
 export type Theme = 'light' | 'dark' | 'system' | 'purple';
@@ -62,6 +62,8 @@ interface UIState {
   inboxTab: InboxTab;
   /** User-renamable labels for the Focused/Other tabs (persisted). */
   inboxLabels: InboxLabels;
+  /** User-renamable name for the Inbox nav section itself (persisted). */
+  inboxSectionLabel: string;
   lightboxImageUrl: string | null;
   deleteConfirmId: string | null;
   spamConfirmId: string | null;
@@ -102,6 +104,7 @@ interface UIState {
   setSearchQuery: (query: string) => void;
   setInboxTab: (tab: InboxTab) => void;
   setInboxLabels: (labels: InboxLabels) => void;
+  setInboxSectionLabel: (label: string) => void;
   openLightbox: (url: string) => void;
   closeLightbox: () => void;
   setDeleteConfirmId: (id: string | null) => void;
@@ -164,6 +167,7 @@ function saveView(state: { inboxTab: InboxTab; selectedConversationId: string | 
 }
 
 const INBOX_LABELS_KEY = 'inflow-inbox-labels';
+const INBOX_SECTION_LABEL_KEY = 'inflow-inbox-section-label';
 
 function getStoredInboxLabels(): InboxLabels {
   try {
@@ -171,6 +175,13 @@ function getStoredInboxLabels(): InboxLabels {
     if (raw) return normalizeInboxLabels(JSON.parse(raw));
   } catch {}
   return DEFAULT_INBOX_LABELS;
+}
+
+function getStoredInboxSectionLabel(): string {
+  try {
+    return normalizeSectionLabel(localStorage.getItem(INBOX_SECTION_LABEL_KEY));
+  } catch {}
+  return DEFAULT_INBOX_SECTION_LABEL;
 }
 
 function getStoredSection(): AppSection {
@@ -240,6 +251,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   theme: initialTheme,
   inboxTab: initialView.inboxTab,
   inboxLabels: getStoredInboxLabels(),
+  inboxSectionLabel: getStoredInboxSectionLabel(),
   lightboxImageUrl: null,
   deleteConfirmId: null,
   spamConfirmId: null,
@@ -296,6 +308,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     const normalized = normalizeInboxLabels(labels);
     try { localStorage.setItem(INBOX_LABELS_KEY, JSON.stringify(normalized)); } catch {}
     set({ inboxLabels: normalized });
+  },
+  setInboxSectionLabel: (label) => {
+    const normalized = normalizeSectionLabel(label);
+    try { localStorage.setItem(INBOX_SECTION_LABEL_KEY, normalized); } catch {}
+    set({ inboxSectionLabel: normalized });
   },
   openLightbox: (url) => set({ lightboxImageUrl: url }),
   closeLightbox: () => set({ lightboxImageUrl: null }),

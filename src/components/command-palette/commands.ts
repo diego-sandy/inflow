@@ -10,6 +10,8 @@ export interface Command {
 export function buildCommands(actions: {
   /** User's custom Focused/Other tab names, for the tab-related commands. */
   inboxLabels?: InboxLabels;
+  /** User's custom name for the Inbox section (e.g. "Messages"). */
+  inboxSectionLabel?: string;
   archiveSelected: () => void;
   moveToOtherSelected: () => void;
   moveToSpamSelected: () => void;
@@ -46,6 +48,7 @@ export function buildCommands(actions: {
   goToInbox: () => void;
 }): Command[] {
   const labels = actions.inboxLabels ?? DEFAULT_INBOX_LABELS;
+  const inbox = actions.inboxSectionLabel?.trim() || 'Inbox';
   return [
     { id: 'archive', label: 'Archive conversation', shortcut: 'E', action: actions.archiveSelected },
     { id: 'move-to-other', label: `Move to ${labels.other}`, shortcut: 'O', action: actions.moveToOtherSelected },
@@ -56,12 +59,12 @@ export function buildCommands(actions: {
     { id: 'reply', label: 'Reply', shortcut: 'R', action: actions.reply },
     { id: 'compose', label: 'Compose new message', shortcut: 'C', action: actions.compose },
     { id: 'undo', label: 'Undo last action', shortcut: 'Z', action: actions.undo },
-    { id: 'back', label: 'Go back to inbox', shortcut: 'Esc', action: actions.goBack },
+    { id: 'back', label: `Go back to ${inbox}`, shortcut: 'Esc', action: actions.goBack },
     { id: 'go-focused', label: `Go to ${labels.focused} inbox`, shortcut: '1', action: actions.goToFocused },
     { id: 'go-other', label: `Go to ${labels.other} inbox`, shortcut: '2', action: actions.goToOther },
     { id: 'go-archived', label: 'Go to Archived', shortcut: '3', action: actions.goToArchived },
     { id: 'go-spam', label: 'Go to Spam', shortcut: '4', action: actions.goToSpam },
-    { id: 'go-inbox', label: 'Go to Inbox', shortcut: 'G I', action: actions.goToInbox },
+    { id: 'go-inbox', label: `Go to ${inbox}`, shortcut: 'G I', action: actions.goToInbox },
     { id: 'connections', label: 'Go to Connections', shortcut: 'G C', action: actions.openConnections },
     { id: 'insights', label: 'Go to Insights', shortcut: '', action: actions.openInsights },
     { id: 'shortcuts', label: 'Show keyboard shortcuts', shortcut: '?', action: actions.showShortcuts },

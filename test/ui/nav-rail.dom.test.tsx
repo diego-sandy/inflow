@@ -70,6 +70,14 @@ it('highlights the Inbox parent and the active tab together (option B)', () => {
   expect(screen.getByRole('button', { name: 'Connections' })).not.toHaveAttribute('aria-current');
 });
 
+it('renders a custom Inbox section name from settings', () => {
+  act(() => useUIStore.setState({ inboxSectionLabel: 'Messages' }));
+  render(<NavRail connectionsCount={3} />);
+  expect(screen.getByRole('button', { name: 'Messages' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Inbox' })).not.toBeInTheDocument();
+  act(() => useUIStore.setState({ inboxSectionLabel: 'Inbox' }));
+});
+
 it('shows a hover description for each section', () => {
   render(<NavRail connectionsCount={3} />);
   expect(screen.getByText(/Read and reply to your LinkedIn messages/i)).toBeInTheDocument();

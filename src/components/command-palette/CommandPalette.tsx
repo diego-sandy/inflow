@@ -38,8 +38,10 @@ export function CommandPalette({ conversations, composeRef }: CommandPaletteProp
     : conversations[selectedIndex];
 
   const inboxLabels = useUIStore((s) => s.inboxLabels);
+  const inboxSectionLabel = useUIStore((s) => s.inboxSectionLabel);
   const commands = buildCommands({
     inboxLabels,
+    inboxSectionLabel,
     archiveSelected: () => {
       if (!selectedConv) return;
       // In the Archived tab the action un-archives (mirrors the 'e' shortcut).

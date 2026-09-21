@@ -356,10 +356,12 @@ export function NavRail({ connectionsCount, inboxUnread, inboxQueue, outboxAtten
           <div key={item.key}>
             <NavItem
               item={item}
-              // Expanded, the active child carries the highlight, so the parent
-              // stays quiet. Collapsed, the branch is hidden — highlight the
-              // parent when it or one of its children is active.
-              active={collapsed ? isActive(item) || anyChildActive : isActive(item) && !anyChildActive}
+              // Highlight the parent whenever its section is active — so "Inbox"
+              // lights up alongside the active tab (its children share the same
+              // section). Connections stays single-highlight because its child
+              // (Invitations) is a *different* section. Collapsed, the branch is
+              // hidden, so also light the parent when a child is the active view.
+              active={isActive(item) || (collapsed && anyChildActive)}
               collapsed={collapsed}
               trailing={chevron}
               onClick={() => openItem(item)}

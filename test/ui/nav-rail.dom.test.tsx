@@ -59,6 +59,17 @@ it('shows Invitations as an expandable branch under Connections', () => {
   expect(screen.queryByRole('button', { name: 'Invitations' })).not.toBeInTheDocument();
 });
 
+it('highlights the Inbox parent and the active tab together (option B)', () => {
+  act(() => useUIStore.setState({ activeSection: 'inbox', inboxTab: 'other' }));
+  render(<NavRail connectionsCount={3} />);
+  // Parent Inbox is marked current…
+  expect(screen.getByRole('button', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
+  // …and so is the active tab child (InMail = the 'other' tab).
+  expect(screen.getByRole('button', { name: 'InMail' })).toHaveAttribute('aria-current', 'page');
+  // Connections (a different section) is not highlighted.
+  expect(screen.getByRole('button', { name: 'Connections' })).not.toHaveAttribute('aria-current');
+});
+
 it('shows a hover description for each section', () => {
   render(<NavRail connectionsCount={3} />);
   expect(screen.getByText(/Read and reply to your LinkedIn messages/i)).toBeInTheDocument();

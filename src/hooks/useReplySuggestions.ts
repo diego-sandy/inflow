@@ -117,7 +117,7 @@ export function useReplySuggestions({
       {
         signal: controller.signal,
         fullResponse: true,
-        maxTokens: 100,
+        maxTokens: 256,
         systemPrompt: REPLY_SUGGESTIONS_SYSTEM_PROMPT,
         temperature: 0.7,
       },

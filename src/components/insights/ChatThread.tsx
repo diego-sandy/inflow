@@ -147,7 +147,7 @@ export function ChatThread() {
           </button>
         </div>
         <p className="mx-auto mt-1.5 max-w-3xl text-[11px] text-fg-faint">
-          Grounded in your connections and their AI summaries. Flow can be wrong — verify before acting.
+          Grounded in up to 10,000 of your connections and their AI summaries. Answers can be wrong — verify before acting.
         </p>
       </div>
     </div>

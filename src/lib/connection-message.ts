@@ -24,7 +24,7 @@ export async function draftFollowUpMessage(
 ): Promise<string | null> {
   const text = await predict(buildFollowUpDraftPrompt(name, headline), {
     fullResponse: true,
-    maxTokens: 160,
+    maxTokens: 400,
     temperature: 0.6,
     systemPrompt: SYSTEM_PROMPT,
     tier: 'quality', // writing quality matters here — route to the stronger model

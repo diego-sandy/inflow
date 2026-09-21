@@ -66,7 +66,7 @@ export async function summarizeConversation(
   const prompt = buildConversationSummaryPrompt(name, messages);
   const text = await predict(prompt, {
     fullResponse: true,
-    maxTokens: 320,
+    maxTokens: 768,
     temperature: 0.3,
     systemPrompt: SYSTEM_PROMPT,
     tier: 'quality',

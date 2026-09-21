@@ -17,8 +17,14 @@ export interface ChatMessage {
   content: string;
 }
 
-/** Cap how many connections we serialize into one prompt, to bound tokens. */
-export const CHAT_CONTEXT_LIMIT = 600;
+/**
+ * How many connections we serialize into one prompt. Most people have well over
+ * 1,000 connections, so we ground answers in up to 10,000 — comfortably within
+ * the 1M-token context windows of the models we route chat to. Lines for
+ * connections without AI summaries are short (name + role + headline), so even
+ * a full network stays well under the window.
+ */
+export const CHAT_CONTEXT_LIMIT = 10000;
 
 /**
  * Output-token ceiling for a chat answer. Deliberately generous so long,

@@ -25,7 +25,7 @@ export async function summarizeConnection(
   if (!headline.trim()) return null;
   const text = await predict(buildSummaryPrompt(name, headline), {
     fullResponse: true,
-    maxTokens: 80,
+    maxTokens: 128,
     temperature: 0.2,
     systemPrompt: SYSTEM_PROMPT,
   });

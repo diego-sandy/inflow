@@ -66,7 +66,7 @@ export async function suggestInterestTags(
   if (headlines.length === 0) return [];
   const text = await predict(buildTagSuggestionPrompt(headlines, existing), {
     fullResponse: true,
-    maxTokens: 200,
+    maxTokens: 512,
     temperature: 0.4,
     systemPrompt: TAG_SYSTEM,
   });

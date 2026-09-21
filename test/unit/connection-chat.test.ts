@@ -4,7 +4,6 @@
 import {
   buildConnectionContext,
   answerConnectionQuestion,
-  CHAT_MAX_TOKENS,
 } from '@/lib/connection-chat';
 import type { Connection } from '@/types/connection';
 
@@ -71,9 +70,8 @@ describe('answerConnectionQuestion', () => {
     expect(answer).toBe('Ada Lovelace is an investor.');
     const opts = predict.mock.calls[0][1];
     expect(opts.fullResponse).toBe(true);
-    // A generous output cap so long answers aren't truncated mid-response.
-    expect(opts.maxTokens).toBe(CHAT_MAX_TOKENS);
-    expect(CHAT_MAX_TOKENS).toBeGreaterThanOrEqual(4096);
+    // Uncapped by default — the answer is never truncated on screen.
+    expect(opts.maxTokens).toBe(0);
     expect(opts.systemPrompt).toContain('Ada Lovelace');
     // The question is in the user prompt.
     expect(predict.mock.calls[0][0]).toContain('Who are my investors?');

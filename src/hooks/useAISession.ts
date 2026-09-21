@@ -192,7 +192,12 @@ async function predictGemini(
       body: JSON.stringify({
         system_instruction: { parts: [{ text: opts.systemPrompt }] },
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },
+        generationConfig: {
+          // maxTokens ≤ 0 → omit the cap so the model returns its full answer
+          // (up to the model's own maximum) instead of being cut off.
+          ...(opts.maxTokens > 0 ? { maxOutputTokens: opts.maxTokens } : {}),
+          temperature: opts.temperature,
+        },
       }),
     });
 

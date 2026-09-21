@@ -12,6 +12,12 @@
 
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
+/**
+ * Output ceiling when the caller doesn't cap (maxTokens ≤ 0). High enough that
+ * we never truncate an answer the user already paid for, and within every
+ * current Claude model's supported max so it can't 400.
+ */
+const ANTHROPIC_UNCAPPED_MAX = 8192;
 
 export interface AnthropicPredictOptions {
   signal?: AbortSignal;
@@ -63,7 +69,11 @@ export async function predictAnthropic(
   model: string,
   options?: AnthropicPredictOptions,
 ): Promise<string | null> {
-  const maxTokens = Math.max(options?.maxTokens ?? 256, 64);
+  // maxTokens ≤ 0 means "don't cap" → use the model's practical max so long
+  // answers aren't truncated. A positive value is an explicit cap (floored so a
+  // response can't be truncated to nothing).
+  const requested = options?.maxTokens;
+  const maxTokens = requested && requested > 0 ? Math.max(requested, 64) : ANTHROPIC_UNCAPPED_MAX;
   const thinking = /haiku/i.test(model) ? undefined : { type: 'disabled' as const };
   const stream = !!options?.onToken;
 

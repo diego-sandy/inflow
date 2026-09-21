@@ -6,7 +6,7 @@ import { useDbGeneration } from './useDbGeneration';
 import { db } from '@/db/database';
 import { useInsightChatStore } from '@/store/insight-chat-store';
 import { answerConnectionQuestion, CHAT_CONTEXT_LIMIT, type ChatMessage } from '@/lib/connection-chat';
-import { getAIChatMaxWords, getAIChatInstructions, wordsToMaxTokens } from '@/lib/ai-settings';
+import { getAIChatMaxWords, getAIChatInstructions } from '@/lib/ai-settings';
 import type { InsightChat } from '@/types/insight-chat';
 
 export interface ConnectionChatState {
@@ -94,11 +94,19 @@ export function useConnectionChat(): ConnectionChatState {
       await persist(id, withUser, title);
 
       try {
-        // Apply the user's Advanced AI settings (response length + extra instructions).
-        const [maxWords, extraInstructions] = await Promise.all([
+        // Apply the user's Advanced AI settings. The word target and custom
+        // instructions are folded into the prompt (guidance only) — we never cap
+        // the output tokens, so the model's answer is never truncated on screen.
+        const [targetWords, customInstructions] = await Promise.all([
           getAIChatMaxWords(),
           getAIChatInstructions(),
         ]);
+        const extraInstructions = [
+          customInstructions.trim(),
+          targetWords > 0 ? `Aim for approximately ${targetWords} words.` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
         // Stream the answer in live so the user sees it build instead of a blank
         // "Thinking…". We append an empty assistant turn and grow its content.
         let streamed = '';
@@ -109,7 +117,7 @@ export function useConnectionChat(): ConnectionChatState {
           ]);
         };
         const answer = await answerConnectionQuestion(connections, question, predict, history, CHAT_CONTEXT_LIMIT, {
-          maxTokens: wordsToMaxTokens(maxWords),
+          maxTokens: 0, // uncapped — never truncate the answer on screen
           extraInstructions,
           onToken: (chunk) => {
             streamed += chunk;

@@ -26,14 +26,6 @@ export interface ChatMessage {
  */
 export const CHAT_CONTEXT_LIMIT = 10000;
 
-/**
- * Output-token ceiling for a chat answer. Deliberately generous so long,
- * grounded answers (e.g. "list every investor") don't get cut off mid-sentence
- * — the earlier 2048 truncated multi-person lists. Applies to both providers
- * (Gemini `maxOutputTokens`, Anthropic `max_tokens`).
- */
-export const CHAT_MAX_TOKENS = 4096;
-
 const SYSTEM_PROMPT =
   'You answer questions about the user\'s LinkedIn connections using ONLY the ' +
   'provided list. Each line is: "name (role) — headline [interests: …] — about: ' +
@@ -75,7 +67,11 @@ export function buildConnectionContext(
  * Returns the answer text, or null if the model returned nothing.
  */
 export interface ChatAnswerOptions {
-  /** Override the output-token cap (from the user's "max words" setting). */
+  /**
+   * Output-token cap. Default 0 = uncapped (use the model's max), so we never
+   * truncate an answer on screen — conciseness is steered via the prompt, not a
+   * hard cutoff. A positive value caps explicitly.
+   */
   maxTokens?: number;
   /** Extra user instructions appended to the system prompt (tone, format, length). */
   extraInstructions?: string;
@@ -105,7 +101,7 @@ export async function answerConnectionQuestion(
 
   const answer = await predict(prompt, {
     fullResponse: true,
-    maxTokens: opts.maxTokens ?? CHAT_MAX_TOKENS,
+    maxTokens: opts.maxTokens ?? 0, // 0 = uncapped (model max)
     temperature: 0.3,
     systemPrompt: system,
     tier: 'quality', // reasoning over the network — route to the stronger model

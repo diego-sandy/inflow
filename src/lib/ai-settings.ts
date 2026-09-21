@@ -155,9 +155,13 @@ export async function clearGeminiApiKey(): Promise<void> {
 
 // --- AI Chat advanced options (apply to whichever provider is active) --------
 
-/** Default target length for a chat answer, in words (~4096 output tokens). */
-export const DEFAULT_CHAT_MAX_WORDS = 3000;
-export const CHAT_MAX_WORDS_MIN = 100;
+/**
+ * A *soft* target length for a chat answer, in words. This is guidance folded
+ * into the prompt (the model tries to comply) — it never truncates the response
+ * on screen. 0 = no target: the model answers at whatever length it needs.
+ */
+export const DEFAULT_CHAT_MAX_WORDS = 0;
+export const CHAT_MAX_WORDS_MIN = 0;
 export const CHAT_MAX_WORDS_MAX = 8000;
 /** Cap on the custom-instructions text, to keep the prompt bounded. */
 export const CHAT_INSTRUCTIONS_MAX_CHARS = 2000;
@@ -166,12 +170,7 @@ function clampWords(words: number): number {
   return Math.min(Math.max(Math.round(words), CHAT_MAX_WORDS_MIN), CHAT_MAX_WORDS_MAX);
 }
 
-/** Convert a word budget to an output-token cap (~1.5 tokens/word), floored/ceiled for safety. */
-export function wordsToMaxTokens(words: number): number {
-  return Math.min(Math.max(Math.round(clampWords(words) * 1.5), 128), 12000);
-}
-
-/** Max words the chat should aim for in a single answer. */
+/** Target word count the chat should aim for (0 = no target). */
 export async function getAIChatMaxWords(): Promise<number> {
   const stored = await readLocal<number>(CHAT_MAX_WORDS_KEY);
   return typeof stored === 'number' && Number.isFinite(stored) ? clampWords(stored) : DEFAULT_CHAT_MAX_WORDS;

@@ -75,15 +75,15 @@ function AIAdvancedSettings() {
 
   return (
     <div className="mt-8 border-t border-edge pt-6">
-      <h3 className="text-sm font-semibold text-fg-strong">Response length &amp; instructions</h3>
+      <h3 className="text-sm font-semibold text-fg-strong">Answer style</h3>
       <p className="mt-1 text-sm text-fg-secondary">
-        Controls how AI Chat answers — applies to whichever provider (Gemini or Claude) is active.
+        Guides how AI Chat answers — applies to whichever provider (Gemini or Claude) is active. Answers are never cut off; this only steers the model.
       </p>
 
       <div className="mt-4 space-y-4">
         <div>
           <label htmlFor="ai-max-words" className="text-sm font-medium text-fg-strong">
-            Max words per answer
+            Target answer length
           </label>
           <div className="mt-1.5 flex items-center gap-2">
             <input
@@ -91,7 +91,7 @@ function AIAdvancedSettings() {
               type="number"
               min={CHAT_MAX_WORDS_MIN}
               max={CHAT_MAX_WORDS_MAX}
-              step={100}
+              step={50}
               value={maxWords}
               onChange={(e) => setMaxWords(e.target.value === '' ? '' : Number(e.target.value))}
               className="w-32 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none focus:ring-blue-500/40"
@@ -99,7 +99,7 @@ function AIAdvancedSettings() {
             <span className="text-xs text-fg-muted">words</span>
           </div>
           <p className="mt-1 text-[11px] text-fg-faint">
-            {CHAT_MAX_WORDS_MIN}–{CHAT_MAX_WORDS_MAX}. Longer answers use more tokens (higher cost &amp; latency).
+            0 = no target (let the model decide). A number asks the model to aim for about that many words — it’s a hint, not a hard cutoff.
           </p>
         </div>
 

@@ -51,7 +51,7 @@ export function OutboxView() {
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-edge px-6 py-3">
         <h2 className="text-base font-semibold text-fg-strong">MCP connector</h2>
-        <span className="text-[11px] text-fg-faint">Claude reads your network and drafts outreach — you always send.</span>
+        <span className="text-[11px] text-fg-faint">It reads your network and executes actions from Claude via MCP.</span>
         <span className="flex-1" />
         <button
           onClick={openComposer}

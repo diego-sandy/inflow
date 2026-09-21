@@ -407,23 +407,21 @@ export function NavRail({ connectionsCount, inboxUnread, inboxQueue, outboxAtten
         {!collapsed && <span className="text-xs">Settings</span>}
       </button>
 
-      {/* Collapse / expand — a clear toggle pinned at the bottom of the rail. */}
+      {/* Collapse / expand — a pill "lid" straddling the rail's border, centered
+          vertically. Faint by default, brighter on hover. */}
       <button
         onClick={toggleNavRail}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         aria-expanded={!collapsed}
-        className={`mt-1 flex cursor-pointer items-center rounded-lg py-2 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary ${
-          collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5'
-        }`}
+        className="absolute right-0 top-1/2 z-20 flex h-11 w-[18px] -translate-y-1/2 translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-edge bg-surface-raised text-fg-faint opacity-60 shadow-sm transition-all hover:w-5 hover:text-fg-secondary hover:opacity-100"
       >
         <svg
-          className="h-[18px] w-[18px] shrink-0"
+          className="h-4 w-4 shrink-0"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
         >
           <path d={collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} />
         </svg>
-        {!collapsed && <span className="text-xs">Collapse</span>}
       </button>
     </nav>
   );

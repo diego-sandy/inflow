@@ -74,16 +74,27 @@ export function buildConnectionContext(
  * Ask one question, optionally with prior turns for follow-up context.
  * Returns the answer text, or null if the model returned nothing.
  */
+export interface ChatAnswerOptions {
+  /** Override the output-token cap (from the user's "max words" setting). */
+  maxTokens?: number;
+  /** Extra user instructions appended to the system prompt (tone, format, length). */
+  extraInstructions?: string;
+}
+
 export async function answerConnectionQuestion(
   connections: Connection[],
   question: string,
   predict: PredictFn,
   history: ChatMessage[] = [],
   limit: number = CHAT_CONTEXT_LIMIT,
+  opts: ChatAnswerOptions = {},
 ): Promise<string | null> {
   const { text, included, total } = buildConnectionContext(connections, limit);
   const note = total > included ? `\n\n(Showing ${included} of ${total} connections.)` : '';
-  const system = `${SYSTEM_PROMPT}\n\nConnections:\n${text}${note}`;
+  const extra = opts.extraInstructions?.trim()
+    ? `\n\nExtra instructions from the user (follow these):\n${opts.extraInstructions.trim()}`
+    : '';
+  const system = `${SYSTEM_PROMPT}${extra}\n\nConnections:\n${text}${note}`;
 
   const convo = history
     .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
@@ -92,7 +103,7 @@ export async function answerConnectionQuestion(
 
   const answer = await predict(prompt, {
     fullResponse: true,
-    maxTokens: CHAT_MAX_TOKENS,
+    maxTokens: opts.maxTokens ?? CHAT_MAX_TOKENS,
     temperature: 0.3,
     systemPrompt: system,
     tier: 'quality', // reasoning over the network — route to the stronger model

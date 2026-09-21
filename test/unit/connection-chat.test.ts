@@ -79,6 +79,21 @@ describe('answerConnectionQuestion', () => {
     expect(predict.mock.calls[0][0]).toContain('Who are my investors?');
   });
 
+  it('applies a custom output cap and extra instructions from Advanced settings', async () => {
+    const predict = vi.fn().mockResolvedValue('ok');
+    await answerConnectionQuestion(
+      [c({ fullName: 'Ada' })],
+      'Who?',
+      predict,
+      [],
+      undefined as any, // use default context limit
+      { maxTokens: 1234, extraInstructions: 'Answer only in emoji.' },
+    );
+    const opts = predict.mock.calls[0][1];
+    expect(opts.maxTokens).toBe(1234);
+    expect(opts.systemPrompt).toContain('Answer only in emoji.');
+  });
+
   it('includes prior turns for follow-up context', async () => {
     const predict = vi.fn().mockResolvedValue('Yes.');
     await answerConnectionQuestion(

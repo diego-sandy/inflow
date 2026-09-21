@@ -5,7 +5,8 @@ import { useAISession } from './useAISession';
 import { useDbGeneration } from './useDbGeneration';
 import { db } from '@/db/database';
 import { useInsightChatStore } from '@/store/insight-chat-store';
-import { answerConnectionQuestion, type ChatMessage } from '@/lib/connection-chat';
+import { answerConnectionQuestion, CHAT_CONTEXT_LIMIT, type ChatMessage } from '@/lib/connection-chat';
+import { getAIChatMaxWords, getAIChatInstructions, wordsToMaxTokens } from '@/lib/ai-settings';
 import type { InsightChat } from '@/types/insight-chat';
 
 export interface ConnectionChatState {
@@ -93,7 +94,15 @@ export function useConnectionChat(): ConnectionChatState {
       await persist(id, withUser, title);
 
       try {
-        const answer = await answerConnectionQuestion(connections, question, predict, history);
+        // Apply the user's Advanced AI settings (response length + extra instructions).
+        const [maxWords, extraInstructions] = await Promise.all([
+          getAIChatMaxWords(),
+          getAIChatInstructions(),
+        ]);
+        const answer = await answerConnectionQuestion(connections, question, predict, history, CHAT_CONTEXT_LIMIT, {
+          maxTokens: wordsToMaxTokens(maxWords),
+          extraInstructions,
+        });
         const withAnswer: ChatMessage[] = [
           ...withUser,
           { role: 'assistant', content: answer || "I couldn't find an answer in your connections." },

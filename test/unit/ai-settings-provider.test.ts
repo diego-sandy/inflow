@@ -18,6 +18,14 @@ import {
   DEFAULT_GEMINI_FAST_MODEL,
   DEFAULT_GEMINI_QUALITY_MODEL,
   GEMINI_MODELS,
+  getAIChatMaxWords,
+  setAIChatMaxWords,
+  getAIChatInstructions,
+  setAIChatInstructions,
+  wordsToMaxTokens,
+  DEFAULT_CHAT_MAX_WORDS,
+  CHAT_MAX_WORDS_MIN,
+  CHAT_MAX_WORDS_MAX,
 } from '@/lib/ai-settings';
 
 beforeEach(() => {
@@ -108,5 +116,30 @@ describe('Gemini model tiers', () => {
       'gemini-3.5-flash',
       'gemini-3.1-pro-preview',
     ]);
+  });
+});
+
+describe('AI Chat advanced settings', () => {
+  it('defaults max words and round-trips a clamped value', async () => {
+    expect(await getAIChatMaxWords()).toBe(DEFAULT_CHAT_MAX_WORDS);
+    await setAIChatMaxWords(999999);
+    expect(await getAIChatMaxWords()).toBe(CHAT_MAX_WORDS_MAX);
+    await setAIChatMaxWords(1);
+    expect(await getAIChatMaxWords()).toBe(CHAT_MAX_WORDS_MIN);
+    await setAIChatMaxWords(1500);
+    expect(await getAIChatMaxWords()).toBe(1500);
+  });
+
+  it('round-trips custom instructions (default empty)', async () => {
+    expect(await getAIChatInstructions()).toBe('');
+    await setAIChatInstructions('Answer in bullets.');
+    expect(await getAIChatInstructions()).toBe('Answer in bullets.');
+  });
+
+  it('maps words to a bounded output-token cap', () => {
+    expect(wordsToMaxTokens(1000)).toBe(1500);
+    // Clamped inputs stay within the token ceiling/floor.
+    expect(wordsToMaxTokens(999999)).toBeLessThanOrEqual(12000);
+    expect(wordsToMaxTokens(1)).toBeGreaterThanOrEqual(128);
   });
 });

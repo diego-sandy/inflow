@@ -10,6 +10,8 @@ const ANTHROPIC_FAST_MODEL_KEY = 'anthropicFastModel';
 const ANTHROPIC_QUALITY_MODEL_KEY = 'anthropicQualityModel';
 const GEMINI_FAST_MODEL_KEY = 'geminiFastModel';
 const GEMINI_QUALITY_MODEL_KEY = 'geminiQualityModel';
+const CHAT_MAX_WORDS_KEY = 'aiChatMaxWords';
+const CHAT_INSTRUCTIONS_KEY = 'aiChatInstructions';
 
 /** Default interest tags the connection classifier matches against. */
 export const DEFAULT_CONNECTION_INTERESTS = ['Investors'];
@@ -149,6 +151,43 @@ export async function setGeminiApiKey(key: string): Promise<void> {
 
 export async function clearGeminiApiKey(): Promise<void> {
   await chrome.storage.local.remove(STORAGE_KEY);
+}
+
+// --- AI Chat advanced options (apply to whichever provider is active) --------
+
+/** Default target length for a chat answer, in words (~4096 output tokens). */
+export const DEFAULT_CHAT_MAX_WORDS = 3000;
+export const CHAT_MAX_WORDS_MIN = 100;
+export const CHAT_MAX_WORDS_MAX = 8000;
+/** Cap on the custom-instructions text, to keep the prompt bounded. */
+export const CHAT_INSTRUCTIONS_MAX_CHARS = 2000;
+
+function clampWords(words: number): number {
+  return Math.min(Math.max(Math.round(words), CHAT_MAX_WORDS_MIN), CHAT_MAX_WORDS_MAX);
+}
+
+/** Convert a word budget to an output-token cap (~1.5 tokens/word), floored/ceiled for safety. */
+export function wordsToMaxTokens(words: number): number {
+  return Math.min(Math.max(Math.round(clampWords(words) * 1.5), 128), 12000);
+}
+
+/** Max words the chat should aim for in a single answer. */
+export async function getAIChatMaxWords(): Promise<number> {
+  const stored = await readLocal<number>(CHAT_MAX_WORDS_KEY);
+  return typeof stored === 'number' && Number.isFinite(stored) ? clampWords(stored) : DEFAULT_CHAT_MAX_WORDS;
+}
+
+export async function setAIChatMaxWords(words: number): Promise<void> {
+  await chrome.storage.local.set({ [CHAT_MAX_WORDS_KEY]: clampWords(words) });
+}
+
+/** Extra user instructions appended to the chat system prompt (tone, format, …). */
+export async function getAIChatInstructions(): Promise<string> {
+  return (await readLocal<string>(CHAT_INSTRUCTIONS_KEY)) || '';
+}
+
+export async function setAIChatInstructions(text: string): Promise<void> {
+  await chrome.storage.local.set({ [CHAT_INSTRUCTIONS_KEY]: text.slice(0, CHAT_INSTRUCTIONS_MAX_CHARS) });
 }
 
 export async function getAISuggestionsEnabled(): Promise<boolean> {

@@ -31,6 +31,14 @@ vi.mock('@/lib/ai-settings', () => ({
     tier === 'quality' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-lite',
   ),
   setGeminiModel: vi.fn(),
+  getAIChatMaxWords: vi.fn(async () => 3000),
+  setAIChatMaxWords: vi.fn(),
+  getAIChatInstructions: vi.fn(async () => ''),
+  setAIChatInstructions: vi.fn(),
+  DEFAULT_CHAT_MAX_WORDS: 3000,
+  CHAT_MAX_WORDS_MIN: 100,
+  CHAT_MAX_WORDS_MAX: 8000,
+  CHAT_INSTRUCTIONS_MAX_CHARS: 2000,
   ANTHROPIC_MODELS: [
     { id: 'claude-haiku-4-5', label: 'Haiku 4.5', blurb: 'cheap' },
     { id: 'claude-sonnet-5', label: 'Sonnet 5', blurb: 'balanced' },
@@ -84,7 +92,12 @@ it('verifies then saves a pasted key', async () => {
   await openSettings('ai');
   const input = await screen.findByPlaceholderText(/Paste your Gemini API key/i);
   fireEvent.change(input, { target: { value: 'AIzaTEST123' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  // The AI section now has its own (disabled-until-dirty) response-settings Save
+  // too — pick the enabled key Save.
+  const save = screen
+    .getAllByRole('button', { name: 'Save' })
+    .find((b) => !(b as HTMLButtonElement).disabled)!;
+  fireEvent.click(save);
 
   await waitFor(() => expect(setGeminiApiKey).toHaveBeenCalledWith('AIzaTEST123'));
   expect(fetchMock.mock.calls[0][0]).toContain('generativelanguage.googleapis.com');
@@ -107,10 +120,10 @@ it('switches to Appearance and changes the theme', async () => {
   expect(useUIStore.getState().theme).toBe('dark');
 });
 
-it('shows the Advanced demo-mode control', async () => {
+it('shows the Demo mode control', async () => {
   await openSettings('advanced');
-  expect(await screen.findByText('Demo mode')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /demo mode/i })).toBeInTheDocument();
+  expect(await screen.findByText(/Browse a synthetic inbox/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /enter demo mode|exit demo mode/i })).toBeInTheDocument();
 });
 
 it('closes on the close button and via Escape', async () => {

@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useUIStore, type SettingsSection, type Theme } from '@/store/ui-store';
 import { DEFAULT_INBOX_LABELS } from '@/lib/inbox-labels';
+import {
+  getAIChatMaxWords,
+  setAIChatMaxWords,
+  getAIChatInstructions,
+  setAIChatInstructions,
+  DEFAULT_CHAT_MAX_WORDS,
+  CHAT_MAX_WORDS_MIN,
+  CHAT_MAX_WORDS_MAX,
+  CHAT_INSTRUCTIONS_MAX_CHARS,
+} from '@/lib/ai-settings';
 import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { checkForUpdateAndToast } from '@/lib/check-update';
 import { AIKeySettings } from './AIKeySettings';
@@ -16,9 +26,112 @@ const SECTIONS: SectionDef[] = [
   { id: 'ai', label: 'AI' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'backup', label: 'Backup' },
-  { id: 'advanced', label: 'Advanced' },
+  { id: 'advanced', label: 'Demo mode' },
   { id: 'about', label: 'About' },
 ];
+
+/**
+ * Advanced AI-response controls: how long a chat answer should be, and any extra
+ * instructions to fold into the prompt. Applies to whichever provider is active
+ * (Gemini or Claude). Changes only take effect after Save.
+ */
+function AIAdvancedSettings() {
+  const showToast = useUIStore((s) => s.showToast);
+  const [maxWords, setMaxWords] = useState<number | ''>(DEFAULT_CHAT_MAX_WORDS);
+  const [instructions, setInstructions] = useState('');
+  const [saved, setSaved] = useState<{ maxWords: number; instructions: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getAIChatMaxWords(), getAIChatInstructions()]).then(([w, i]) => {
+      if (cancelled) return;
+      setMaxWords(w);
+      setInstructions(i);
+      setSaved({ maxWords: w, instructions: i });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const dirty = saved
+    ? (typeof maxWords === 'number' ? maxWords : DEFAULT_CHAT_MAX_WORDS) !== saved.maxWords ||
+      instructions !== saved.instructions
+    : false;
+
+  const save = async () => {
+    setBusy(true);
+    const words = typeof maxWords === 'number' && Number.isFinite(maxWords) ? maxWords : DEFAULT_CHAT_MAX_WORDS;
+    await Promise.all([setAIChatMaxWords(words), setAIChatInstructions(instructions)]);
+    // Reflect any clamping the store applied.
+    const stored = await getAIChatMaxWords();
+    setMaxWords(stored);
+    setSaved({ maxWords: stored, instructions });
+    setBusy(false);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2000);
+    showToast({ message: 'AI settings saved' });
+  };
+
+  return (
+    <div className="mt-8 border-t border-edge pt-6">
+      <h3 className="text-sm font-semibold text-fg-strong">Response length &amp; instructions</h3>
+      <p className="mt-1 text-sm text-fg-secondary">
+        Controls how AI Chat answers — applies to whichever provider (Gemini or Claude) is active.
+      </p>
+
+      <div className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="ai-max-words" className="text-sm font-medium text-fg-strong">
+            Max words per answer
+          </label>
+          <div className="mt-1.5 flex items-center gap-2">
+            <input
+              id="ai-max-words"
+              type="number"
+              min={CHAT_MAX_WORDS_MIN}
+              max={CHAT_MAX_WORDS_MAX}
+              step={100}
+              value={maxWords}
+              onChange={(e) => setMaxWords(e.target.value === '' ? '' : Number(e.target.value))}
+              className="w-32 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none focus:ring-blue-500/40"
+            />
+            <span className="text-xs text-fg-muted">words</span>
+          </div>
+          <p className="mt-1 text-[11px] text-fg-faint">
+            {CHAT_MAX_WORDS_MIN}–{CHAT_MAX_WORDS_MAX}. Longer answers use more tokens (higher cost &amp; latency).
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="ai-instructions" className="text-sm font-medium text-fg-strong">
+            Custom instructions <span className="font-normal text-fg-faint">(optional)</span>
+          </label>
+          <textarea
+            id="ai-instructions"
+            value={instructions}
+            maxLength={CHAT_INSTRUCTIONS_MAX_CHARS}
+            onChange={(e) => setInstructions(e.target.value)}
+            rows={3}
+            placeholder="e.g. Answer in bullet points, keep a warm tone, and always suggest a next step."
+            className="mt-1.5 w-full resize-y rounded-lg bg-surface-input px-3 py-2 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+          />
+          <p className="mt-1 text-[11px] text-fg-faint">
+            Folded into the AI Chat prompt. {instructions.length}/{CHAT_INSTRUCTIONS_MAX_CHARS}
+          </p>
+        </div>
+
+        <button
+          onClick={save}
+          disabled={!dirty || busy}
+          className="rounded-md bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
+        >
+          {justSaved ? 'Saved ✓' : busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function AppearanceSettings() {
   const theme = useUIStore((s) => s.theme);
@@ -275,7 +388,12 @@ export function SettingsModal() {
             </svg>
           </button>
 
-          {section === 'ai' && <AIKeySettings />}
+          {section === 'ai' && (
+            <>
+              <AIKeySettings />
+              <AIAdvancedSettings />
+            </>
+          )}
           {section === 'appearance' && <AppearanceSettings />}
           {section === 'backup' && <BackupSettings />}
           {section === 'advanced' && <AdvancedSettings />}

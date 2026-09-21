@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useConnectionChat } from '@/hooks/useConnectionChat';
 import { useChatPrompts } from '@/hooks/useChatPrompts';
 import { useUIStore } from '@/store/ui-store';
+import { getActiveChatModelLabel } from '@/lib/ai-settings';
 import { Markdown } from '@/components/common/Markdown';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
 
@@ -52,6 +53,22 @@ export function ChatThread() {
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const openSettings = useUIStore((s) => s.openSettings);
+
+  const [modelLabel, setModelLabel] = useState('');
+  useEffect(() => { getActiveChatModelLabel().then(setModelLabel).catch(() => {}); }, []);
+
+  // We're waiting on the model when a request is in flight but no answer text has
+  // streamed in yet (the last turn is still the user's).
+  const waiting = loading && messages[messages.length - 1]?.role !== 'assistant';
+  // Live elapsed-seconds counter so the wait reads as active, not frozen.
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!waiting) { setElapsed(0); return; }
+    const start = Date.now();
+    setElapsed(0);
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - start) / 1000)), 250);
+    return () => clearInterval(id);
+  }, [waiting]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo?.({ top: scrollRef.current.scrollHeight });
@@ -113,12 +130,18 @@ export function ChatThread() {
                   <AssistantMessage key={i} content={m.content} />
                 ),
               )}
-              {/* Only show the status while we're still waiting for the first
-                  token — once text streams in, the growing answer is the status. */}
-              {loading && messages[messages.length - 1]?.role !== 'assistant' && (
-                <div className="flex items-center gap-2 text-sm text-fg-muted">
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" />
-                  Reading your {connectionCount.toLocaleString()} connection{connectionCount === 1 ? '' : 's'}…
+              {/* Truthful wait status: one model call is in flight. Show which
+                  model and a live timer; once text streams, the answer replaces
+                  this. (There are no hidden steps — the chat is a single call.) */}
+              {waiting && (
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 text-sm text-fg-muted">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" />
+                    Waiting for {modelLabel || 'the model'}{elapsed > 0 ? ` · ${elapsed}s` : ''}
+                  </div>
+                  <p className="pl-5 text-[11px] text-fg-faint">
+                    Sent {connectionCount.toLocaleString()} connection{connectionCount === 1 ? '' : 's'} as context — the answer streams in as it’s written.
+                  </p>
                 </div>
               )}
             </div>

@@ -128,6 +128,20 @@ export async function setGeminiModel(tier: AIModelTier, modelId: string): Promis
 }
 
 /**
+ * Friendly name of the model the chat actually uses (the active provider's
+ * quality tier), e.g. "Sonnet 5" or "Flash-Lite" — for the "working…" status.
+ */
+export async function getActiveChatModelLabel(): Promise<string> {
+  const provider = await getAIProvider();
+  if (provider === 'anthropic') {
+    const id = await getAnthropicModel('quality');
+    return ANTHROPIC_MODELS.find((m) => m.id === id)?.label ?? id;
+  }
+  const id = await getGeminiModel('quality');
+  return GEMINI_MODELS.find((m) => m.id === id)?.label ?? id;
+}
+
+/**
  * How connections get categorized:
  *  - 'auto'   — classify new connections automatically after each sync (default)
  *  - 'manual' — only when the user asks ("Categorize now" / per-connection refresh)

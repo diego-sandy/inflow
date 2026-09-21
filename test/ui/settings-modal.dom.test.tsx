@@ -39,6 +39,11 @@ vi.mock('@/lib/ai-settings', () => ({
   CHAT_MAX_WORDS_MIN: 0,
   CHAT_MAX_WORDS_MAX: 8000,
   CHAT_INSTRUCTIONS_MAX_CHARS: 2000,
+  getChatPrompts: vi.fn(async () => ['Which of my connections are investors?']),
+  setChatPrompts: vi.fn(),
+  DEFAULT_CHAT_PROMPTS: ['Which of my connections are investors?'],
+  CHAT_PROMPTS_MAX: 12,
+  CHAT_PROMPT_MAX_CHARS: 200,
   ANTHROPIC_MODELS: [
     { id: 'claude-haiku-4-5', label: 'Haiku 4.5', blurb: 'cheap' },
     { id: 'claude-sonnet-5', label: 'Sonnet 5', blurb: 'balanced' },

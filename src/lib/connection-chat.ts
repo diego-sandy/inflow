@@ -109,11 +109,3 @@ export async function answerConnectionQuestion(
   });
   return (answer || '').trim() || null;
 }
-
-/** Starter questions shown before the user has asked anything. */
-export const SUGGESTED_QUESTIONS = [
-  'Which of my connections are investors?',
-  'Who works at a fintech company?',
-  'Summarize the kinds of people in my network.',
-  'Who might be a good intro to a founder?',
-];

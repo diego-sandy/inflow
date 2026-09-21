@@ -24,6 +24,11 @@ import {
   setAIChatInstructions,
   DEFAULT_CHAT_MAX_WORDS,
   CHAT_MAX_WORDS_MAX,
+  getChatPrompts,
+  setChatPrompts,
+  DEFAULT_CHAT_PROMPTS,
+  normalizeChatPrompts,
+  CHAT_PROMPTS_MAX,
 } from '@/lib/ai-settings';
 
 beforeEach(() => {
@@ -132,5 +137,20 @@ describe('AI Chat advanced settings', () => {
     expect(await getAIChatInstructions()).toBe('');
     await setAIChatInstructions('Answer in bullets.');
     expect(await getAIChatInstructions()).toBe('Answer in bullets.');
+  });
+});
+
+describe('editable chat starter questions', () => {
+  it('defaults until customized, then round-trips a cleaned list', async () => {
+    expect(await getChatPrompts()).toEqual(DEFAULT_CHAT_PROMPTS);
+    await setChatPrompts(['  Who should I reconnect with?  ', '', 'Any new founders?']);
+    expect(await getChatPrompts()).toEqual(['Who should I reconnect with?', 'Any new founders?']);
+  });
+
+  it('normalizes: trims, drops blanks, bounds count', () => {
+    expect(normalizeChatPrompts(null)).toEqual(DEFAULT_CHAT_PROMPTS);
+    expect(normalizeChatPrompts([' a ', '  ', 'b'])).toEqual(['a', 'b']);
+    const many = Array.from({ length: CHAT_PROMPTS_MAX + 5 }, (_, i) => `q${i}`);
+    expect(normalizeChatPrompts(many)).toHaveLength(CHAT_PROMPTS_MAX);
   });
 });

@@ -12,6 +12,7 @@ const GEMINI_FAST_MODEL_KEY = 'geminiFastModel';
 const GEMINI_QUALITY_MODEL_KEY = 'geminiQualityModel';
 const CHAT_MAX_WORDS_KEY = 'aiChatMaxWords';
 const CHAT_INSTRUCTIONS_KEY = 'aiChatInstructions';
+const CHAT_PROMPTS_KEY = 'aiChatPrompts';
 
 /** Default interest tags the connection classifier matches against. */
 export const DEFAULT_CONNECTION_INTERESTS = ['Investors'];
@@ -187,6 +188,39 @@ export async function getAIChatInstructions(): Promise<string> {
 
 export async function setAIChatInstructions(text: string): Promise<void> {
   await chrome.storage.local.set({ [CHAT_INSTRUCTIONS_KEY]: text.slice(0, CHAT_INSTRUCTIONS_MAX_CHARS) });
+}
+
+// --- Starter questions shown in an empty chat (user-editable) ----------------
+
+/** The built-in starter questions, used until the user customizes them. */
+export const DEFAULT_CHAT_PROMPTS = [
+  'Which of my connections are investors?',
+  'Who works at a fintech company?',
+  'Summarize the kinds of people in my network.',
+  'Who might be a good intro to a founder?',
+];
+export const CHAT_PROMPT_MAX_CHARS = 200;
+export const CHAT_PROMPTS_MAX = 12;
+
+/** Trim, drop blanks, and bound length/count. An explicit empty list is allowed. */
+export function normalizeChatPrompts(list: unknown): string[] {
+  if (!Array.isArray(list)) return [...DEFAULT_CHAT_PROMPTS];
+  return list
+    .filter((p): p is string => typeof p === 'string')
+    .map((p) => p.trim().slice(0, CHAT_PROMPT_MAX_CHARS))
+    .filter(Boolean)
+    .slice(0, CHAT_PROMPTS_MAX);
+}
+
+/** The user's starter questions (falls back to the defaults until customized). */
+export async function getChatPrompts(): Promise<string[]> {
+  const stored = await readLocal<string[]>(CHAT_PROMPTS_KEY);
+  if (stored === undefined) return [...DEFAULT_CHAT_PROMPTS];
+  return normalizeChatPrompts(stored);
+}
+
+export async function setChatPrompts(list: string[]): Promise<void> {
+  await chrome.storage.local.set({ [CHAT_PROMPTS_KEY]: normalizeChatPrompts(list) });
 }
 
 export async function getAISuggestionsEnabled(): Promise<boolean> {

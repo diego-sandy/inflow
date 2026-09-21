@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useConnectionChat } from '@/hooks/useConnectionChat';
+import { useChatPrompts } from '@/hooks/useChatPrompts';
 import { useUIStore } from '@/store/ui-store';
-import { SUGGESTED_QUESTIONS } from '@/lib/connection-chat';
 import { Markdown } from '@/components/common/Markdown';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
 
@@ -48,6 +48,7 @@ function AssistantMessage({ content }: { content: string }) {
  */
 export function ChatThread() {
   const { messages, loading, available, ask, connectionCount } = useConnectionChat();
+  const prompts = useChatPrompts();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const openSettings = useUIStore((s) => s.openSettings);
@@ -88,7 +89,7 @@ export function ChatThread() {
                 Ask anything about your {connectionCount} connection{connectionCount === 1 ? '' : 's'}.
               </p>
               <div className="flex flex-col gap-2">
-                {SUGGESTED_QUESTIONS.map((q) => (
+                {prompts.map((q) => (
                   <button
                     key={q}
                     onClick={() => submit(q)}

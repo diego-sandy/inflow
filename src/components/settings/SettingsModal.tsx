@@ -10,6 +10,11 @@ import {
   CHAT_MAX_WORDS_MIN,
   CHAT_MAX_WORDS_MAX,
   CHAT_INSTRUCTIONS_MAX_CHARS,
+  getChatPrompts,
+  setChatPrompts,
+  DEFAULT_CHAT_PROMPTS,
+  CHAT_PROMPTS_MAX,
+  CHAT_PROMPT_MAX_CHARS,
 } from '@/lib/ai-settings';
 import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { checkForUpdateAndToast } from '@/lib/check-update';
@@ -127,6 +132,101 @@ function AIAdvancedSettings() {
           className="rounded-md bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
         >
           {justSaved ? 'Saved ✓' : busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Manage the starter questions shown in an empty AI Chat. Add, edit, remove, and
+ * reset to the built-in set; saved explicitly and reflected live in the chat.
+ */
+function ChatPromptsSettings() {
+  const showToast = useUIStore((s) => s.showToast);
+  const [items, setItems] = useState<string[]>([]);
+  const [saved, setSaved] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getChatPrompts().then((p) => {
+      if (cancelled) return;
+      setItems(p.length ? p : ['']);
+      setSaved(p);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const cleaned = items.map((s) => s.trim()).filter(Boolean);
+  const dirty = saved ? JSON.stringify(cleaned) !== JSON.stringify(saved) : false;
+
+  const save = async () => {
+    setBusy(true);
+    await setChatPrompts(items);
+    const stored = await getChatPrompts();
+    setItems(stored.length ? stored : ['']);
+    setSaved(stored);
+    setBusy(false);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2000);
+    showToast({ message: 'Starter questions saved' });
+  };
+
+  return (
+    <div className="mt-8 border-t border-edge pt-6">
+      <h3 className="text-sm font-semibold text-fg-strong">Starter questions</h3>
+      <p className="mt-1 text-sm text-fg-secondary">
+        The suggestions shown in a new AI Chat. Edit them, add your own, or remove ones you don’t use.
+      </p>
+
+      <div className="mt-3 space-y-2">
+        {items.map((q, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={q}
+              maxLength={CHAT_PROMPT_MAX_CHARS}
+              onChange={(e) => setItems((cur) => cur.map((c, j) => (j === i ? e.target.value : c)))}
+              placeholder="e.g. Who should I reconnect with this month?"
+              className="min-w-0 flex-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+            />
+            <button
+              type="button"
+              onClick={() => setItems((cur) => (cur.length > 1 ? cur.filter((_, j) => j !== i) : ['']))}
+              aria-label="Remove question"
+              title="Remove"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-strong"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setItems((cur) => (cur.length >= CHAT_PROMPTS_MAX ? cur : [...cur, '']))}
+          disabled={items.length >= CHAT_PROMPTS_MAX}
+          className="rounded-md bg-surface-input px-3 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Add question
+        </button>
+        <button
+          type="button"
+          onClick={save}
+          disabled={!dirty || busy}
+          className="rounded-md bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
+        >
+          {justSaved ? 'Saved ✓' : busy ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setItems([...DEFAULT_CHAT_PROMPTS])}
+          className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
+        >
+          Reset to defaults
         </button>
       </div>
     </div>
@@ -411,6 +511,7 @@ export function SettingsModal() {
             <>
               <AIKeySettings />
               <AIAdvancedSettings />
+              <ChatPromptsSettings />
             </>
           )}
           {section === 'appearance' && <AppearanceSettings />}

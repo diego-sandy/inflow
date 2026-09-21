@@ -12,6 +12,7 @@ const GEMINI_FAST_MODEL_KEY = 'geminiFastModel';
 const GEMINI_QUALITY_MODEL_KEY = 'geminiQualityModel';
 const CHAT_MAX_WORDS_KEY = 'aiChatMaxWords';
 const CHAT_INSTRUCTIONS_KEY = 'aiChatInstructions';
+const CHAT_APPEND_KEY = 'aiChatAppend';
 const CHAT_PROMPTS_KEY = 'aiChatPrompts';
 
 /** Default interest tags the connection classifier matches against. */
@@ -178,8 +179,10 @@ export async function clearGeminiApiKey(): Promise<void> {
 export const DEFAULT_CHAT_MAX_WORDS = 0;
 export const CHAT_MAX_WORDS_MIN = 0;
 export const CHAT_MAX_WORDS_MAX = 8000;
-/** Cap on the instructions text, to keep the prompt bounded. */
+/** Cap on the base-instructions text, to keep the prompt bounded. */
 export const CHAT_INSTRUCTIONS_MAX_CHARS = 4000;
+/** Cap on the additional ("on top") instructions text. */
+export const CHAT_APPEND_MAX_CHARS = 2000;
 
 function clampWords(words: number): number {
   return Math.min(Math.max(Math.round(words), CHAT_MAX_WORDS_MIN), CHAT_MAX_WORDS_MAX);
@@ -202,6 +205,18 @@ export async function getAIChatInstructions(): Promise<string> {
 
 export async function setAIChatInstructions(text: string): Promise<void> {
   await chrome.storage.local.set({ [CHAT_INSTRUCTIONS_KEY]: text.slice(0, CHAT_INSTRUCTIONS_MAX_CHARS) });
+}
+
+/**
+ * The user's *additional* instructions, layered on top of the base prompt. Safe
+ * from app updates (unlike editing the base). Empty = none.
+ */
+export async function getAIChatAppendInstructions(): Promise<string> {
+  return (await readLocal<string>(CHAT_APPEND_KEY)) || '';
+}
+
+export async function setAIChatAppendInstructions(text: string): Promise<void> {
+  await chrome.storage.local.set({ [CHAT_APPEND_KEY]: text.slice(0, CHAT_APPEND_MAX_CHARS) });
 }
 
 // --- Starter questions shown in an empty chat (user-editable) ----------------

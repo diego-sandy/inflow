@@ -8,7 +8,7 @@ export type ViewMode = 'list' | 'thread';
 export type Theme = 'light' | 'dark' | 'system' | 'purple';
 export type InboxTab = 'focused' | 'other' | 'archived' | 'spam' | 'drafts' | 'scheduled';
 export type AppSection = 'inbox' | 'connections' | 'invitations' | 'insights' | 'chat' | 'outbox';
-export type SettingsSection = 'ai' | 'appearance' | 'backup' | 'advanced' | 'about';
+export type SettingsSection = 'ai' | 'chat' | 'appearance' | 'backup' | 'advanced' | 'about';
 
 /**
  * Active filter over the connections list (shared so Insights can drive it).

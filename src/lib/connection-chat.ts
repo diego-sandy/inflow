@@ -83,6 +83,8 @@ export interface ChatAnswerOptions {
    * default. The connection list is always appended after these.
    */
   instructions?: string;
+  /** The user's additional instructions, layered on top of the base. */
+  append?: string;
   /** Soft target length (words); appended as a hint when > 0. */
   targetWords?: number;
   /** Called with each text chunk as the answer streams in (for live display). */
@@ -100,10 +102,13 @@ export async function answerConnectionQuestion(
   const { text, included, total } = buildConnectionContext(connections, limit);
   const note = total > included ? `\n\n(Showing ${included} of ${total} connections.)` : '';
   const base = opts.instructions?.trim() || DEFAULT_CHAT_INSTRUCTIONS;
+  const append = opts.append?.trim()
+    ? `\n\nAdditional instructions from the user (follow these):\n${opts.append.trim()}`
+    : '';
   const wordsNote = opts.targetWords && opts.targetWords > 0
     ? `\n\nAim for approximately ${opts.targetWords} words.`
     : '';
-  const system = `${base}${wordsNote}\n\nConnections:\n${text}${note}`;
+  const system = `${base}${append}${wordsNote}\n\nConnections:\n${text}${note}`;
 
   const convo = history
     .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)

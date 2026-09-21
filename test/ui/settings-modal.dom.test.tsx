@@ -35,10 +35,13 @@ vi.mock('@/lib/ai-settings', () => ({
   setAIChatMaxWords: vi.fn(),
   getAIChatInstructions: vi.fn(async () => ''),
   setAIChatInstructions: vi.fn(),
+  getAIChatAppendInstructions: vi.fn(async () => ''),
+  setAIChatAppendInstructions: vi.fn(),
   DEFAULT_CHAT_MAX_WORDS: 0,
   CHAT_MAX_WORDS_MIN: 0,
   CHAT_MAX_WORDS_MAX: 8000,
-  CHAT_INSTRUCTIONS_MAX_CHARS: 2000,
+  CHAT_INSTRUCTIONS_MAX_CHARS: 4000,
+  CHAT_APPEND_MAX_CHARS: 2000,
   getChatPrompts: vi.fn(async () => ['Which of my connections are investors?']),
   setChatPrompts: vi.fn(),
   DEFAULT_CHAT_PROMPTS: ['Which of my connections are investors?'],
@@ -114,6 +117,16 @@ it('toggles categorization between auto and manual', async () => {
   await openSettings('ai');
   fireEvent.click(await screen.findByRole('button', { name: 'manual' }));
   expect(aiSettings.setCategorizeMode).toHaveBeenCalledWith('manual');
+});
+
+it('Chat section: shows "Your instructions" and reveals the default prompt with a warning', async () => {
+  await openSettings('chat' as any);
+  // The user's on-top instructions layer is visible.
+  expect(await screen.findByText('Your instructions')).toBeInTheDocument();
+  // The default prompt is behind an advanced disclosure — warning hidden until opened.
+  expect(screen.queryByText(/future app updates won’t change your copy/i)).toBeFalsy();
+  fireEvent.click(screen.getByRole('button', { name: /Default prompt/i }));
+  expect(await screen.findByText(/future app updates won’t change your copy/i)).toBeInTheDocument();
 });
 
 it('switches to Appearance and changes the theme on Save', async () => {

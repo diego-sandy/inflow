@@ -6,7 +6,7 @@ import { useDbGeneration } from './useDbGeneration';
 import { db } from '@/db/database';
 import { useInsightChatStore } from '@/store/insight-chat-store';
 import { answerConnectionQuestion, CHAT_CONTEXT_LIMIT, DEFAULT_CHAT_INSTRUCTIONS, type ChatMessage } from '@/lib/connection-chat';
-import { getAIChatMaxWords, getAIChatInstructions } from '@/lib/ai-settings';
+import { getAIChatMaxWords, getAIChatInstructions, getAIChatAppendInstructions } from '@/lib/ai-settings';
 import type { InsightChat } from '@/types/insight-chat';
 
 export interface ConnectionChatState {
@@ -97,9 +97,10 @@ export function useConnectionChat(): ConnectionChatState {
         // Apply the user's Advanced AI settings. Instructions are the base
         // prompt (their edited version, or the default); the word target is a
         // soft hint. We never cap output tokens, so answers aren't truncated.
-        const [targetWords, storedInstructions] = await Promise.all([
+        const [targetWords, storedInstructions, append] = await Promise.all([
           getAIChatMaxWords(),
           getAIChatInstructions(),
+          getAIChatAppendInstructions(),
         ]);
         const instructions = storedInstructions.trim() || DEFAULT_CHAT_INSTRUCTIONS;
         // Stream the answer in live so the user sees it build instead of a blank
@@ -114,6 +115,7 @@ export function useConnectionChat(): ConnectionChatState {
         const answer = await answerConnectionQuestion(connections, question, predict, history, CHAT_CONTEXT_LIMIT, {
           maxTokens: 0, // uncapped — never truncate the answer on screen
           instructions,
+          append,
           targetWords,
           onToken: (chunk) => {
             streamed += chunk;

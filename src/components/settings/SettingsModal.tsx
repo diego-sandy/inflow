@@ -11,10 +11,13 @@ import {
   setAIChatMaxWords,
   getAIChatInstructions,
   setAIChatInstructions,
+  getAIChatAppendInstructions,
+  setAIChatAppendInstructions,
   DEFAULT_CHAT_MAX_WORDS,
   CHAT_MAX_WORDS_MIN,
   CHAT_MAX_WORDS_MAX,
   CHAT_INSTRUCTIONS_MAX_CHARS,
+  CHAT_APPEND_MAX_CHARS,
   getChatPrompts,
   setChatPrompts,
   DEFAULT_CHAT_PROMPTS,
@@ -31,10 +34,12 @@ import { Logo } from '@/components/common/Wordmark';
 interface SectionDef {
   id: SettingsSection;
   label: string;
+  /** Nested sub-sections shown as an indented branch when expanded. */
+  children?: SectionDef[];
 }
 
 const SECTIONS: SectionDef[] = [
-  { id: 'ai', label: 'AI' },
+  { id: 'ai', label: 'AI', children: [{ id: 'chat', label: 'Chat' }] },
   { id: 'appearance', label: 'Appearance' },
   { id: 'backup', label: 'Backup' },
   { id: 'advanced', label: 'Demo mode' },
@@ -42,62 +47,81 @@ const SECTIONS: SectionDef[] = [
 ];
 
 /**
- * Advanced AI-response controls: how long a chat answer should be, and any extra
- * instructions to fold into the prompt. Applies to whichever provider is active
- * (Gemini or Claude). Changes only take effect after Save.
+ * All AI Chat behavior in one section, committed together on a single Save:
+ * answer length, the user's own instructions (layered on top of the default),
+ * the editable default prompt (advanced disclosure), and the starter questions.
  */
-function AIAdvancedSettings() {
+function ChatSettings() {
   const showToast = useUIStore((s) => s.showToast);
+
   const [maxWords, setMaxWords] = useState<number | ''>(DEFAULT_CHAT_MAX_WORDS);
-  const [instructions, setInstructions] = useState('');
-  const [saved, setSaved] = useState<{ maxWords: number; instructions: string } | null>(null);
+  const [append, setAppend] = useState('');
+  const [base, setBase] = useState(DEFAULT_CHAT_INSTRUCTIONS);
+  const [prompts, setPrompts] = useState<string[]>(['']);
+  const [saved, setSaved] = useState<{ maxWords: number; append: string; base: string; prompts: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getAIChatMaxWords(), getAIChatInstructions()]).then(([w, i]) => {
+    Promise.all([
+      getAIChatMaxWords(),
+      getAIChatAppendInstructions(),
+      getAIChatInstructions(),
+      getChatPrompts(),
+    ]).then(([w, ap, base0, p]) => {
       if (cancelled) return;
-      // Show the actual default instructions when the user hasn't customized them.
-      const inst = i.trim() || DEFAULT_CHAT_INSTRUCTIONS;
+      const baseText = base0.trim() || DEFAULT_CHAT_INSTRUCTIONS;
       setMaxWords(w);
-      setInstructions(inst);
-      setSaved({ maxWords: w, instructions: inst });
+      setAppend(ap);
+      setBase(baseText);
+      setPrompts(p.length ? p : ['']);
+      setSaved({ maxWords: w, append: ap, base: baseText, prompts: p });
     });
     return () => { cancelled = true; };
   }, []);
 
+  const wordsVal = typeof maxWords === 'number' && Number.isFinite(maxWords) ? maxWords : DEFAULT_CHAT_MAX_WORDS;
+  const cleanedPrompts = prompts.map((s) => s.trim()).filter(Boolean);
   const dirty = saved
-    ? (typeof maxWords === 'number' ? maxWords : DEFAULT_CHAT_MAX_WORDS) !== saved.maxWords ||
-      instructions !== saved.instructions
+    ? wordsVal !== saved.maxWords ||
+      append !== saved.append ||
+      base !== saved.base ||
+      JSON.stringify(cleanedPrompts) !== JSON.stringify(saved.prompts)
     : false;
 
   const save = async () => {
     setBusy(true);
-    const words = typeof maxWords === 'number' && Number.isFinite(maxWords) ? maxWords : DEFAULT_CHAT_MAX_WORDS;
-    await Promise.all([setAIChatMaxWords(words), setAIChatInstructions(instructions)]);
-    // Reflect any clamping the store applied.
-    const stored = await getAIChatMaxWords();
-    setMaxWords(stored);
-    setSaved({ maxWords: stored, instructions });
+    // Only persist a base override when it differs from the built-in default, so
+    // app updates keep flowing through when the user hasn't touched it.
+    const baseToStore = base.trim() === DEFAULT_CHAT_INSTRUCTIONS ? '' : base;
+    await Promise.all([
+      setAIChatMaxWords(wordsVal),
+      setAIChatAppendInstructions(append),
+      setAIChatInstructions(baseToStore),
+      setChatPrompts(prompts),
+    ]);
+    const [w, storedPrompts] = await Promise.all([getAIChatMaxWords(), getChatPrompts()]);
+    setMaxWords(w);
+    setPrompts(storedPrompts.length ? storedPrompts : ['']);
+    setSaved({ maxWords: w, append, base: base.trim() || DEFAULT_CHAT_INSTRUCTIONS, prompts: storedPrompts });
     setBusy(false);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
-    showToast({ message: 'AI settings saved' });
+    showToast({ message: 'Chat settings saved' });
   };
 
   return (
-    <div className="mt-8 border-t border-edge pt-6">
-      <h3 className="text-sm font-semibold text-fg-strong">Answer style</h3>
-      <p className="mt-1 text-sm text-fg-secondary">
-        Guides how AI Chat answers — applies to whichever provider (Gemini or Claude) is active. Answers are never cut off; this only steers the model.
-      </p>
-
-      <div className="mt-4 space-y-4">
-        <div>
-          <label htmlFor="ai-max-words" className="text-sm font-medium text-fg-strong">
-            Target answer length
-          </label>
+    <div className="flex min-h-full flex-col">
+      {/* Answer length */}
+      <div>
+        <h3 className="text-sm font-semibold text-fg-strong">Answer style</h3>
+        <p className="mt-1 text-sm text-fg-secondary">
+          How AI Chat answers — applies to whichever provider (Gemini or Claude) is active. Answers are never cut off; this only steers the model.
+        </p>
+        <div className="mt-3">
+          <label htmlFor="ai-max-words" className="text-sm font-medium text-fg-strong">Target answer length</label>
           <div className="mt-1.5 flex items-center gap-2">
             <input
               id="ai-max-words"
@@ -111,143 +135,99 @@ function AIAdvancedSettings() {
             />
             <span className="text-xs text-fg-muted">words</span>
           </div>
-          <p className="mt-1 text-[11px] text-fg-faint">
-            0 = no target (let the model decide). A number asks the model to aim for about that many words — it’s a hint, not a hard cutoff.
-          </p>
+          <p className="mt-1 text-[11px] text-fg-faint">0 = no target (let the model decide). A number nudges the model — a hint, not a hard cutoff.</p>
         </div>
-
-        <div>
-          <div className="flex items-baseline justify-between gap-3">
-            <label htmlFor="ai-instructions" className="text-sm font-medium text-fg-strong">
-              Instructions
-            </label>
-            {instructions !== DEFAULT_CHAT_INSTRUCTIONS && (
-              <button
-                type="button"
-                onClick={() => setInstructions(DEFAULT_CHAT_INSTRUCTIONS)}
-                className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
-              >
-                Reset to defaults
-              </button>
-            )}
-          </div>
-          <p className="mt-0.5 text-xs text-fg-muted">
-            The base prompt sent to the model. Your connection list is added automatically after it.
-          </p>
-          <textarea
-            id="ai-instructions"
-            value={instructions}
-            maxLength={CHAT_INSTRUCTIONS_MAX_CHARS}
-            onChange={(e) => setInstructions(e.target.value)}
-            rows={10}
-            className="mt-1.5 w-full resize-y rounded-lg bg-surface-input px-3 py-2 font-mono text-[13px] leading-relaxed text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
-          />
-          <p className="mt-1 text-[11px] text-fg-faint">
-            {instructions.length}/{CHAT_INSTRUCTIONS_MAX_CHARS}
-          </p>
-        </div>
-
-        <button
-          onClick={save}
-          disabled={!dirty || busy}
-          className="rounded-md bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
-        >
-          {justSaved ? 'Saved ✓' : busy ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Manage the starter questions shown in an empty AI Chat. Add, edit, remove, and
- * reset to the built-in set; saved explicitly and reflected live in the chat.
- */
-function ChatPromptsSettings() {
-  const showToast = useUIStore((s) => s.showToast);
-  const [items, setItems] = useState<string[]>([]);
-  const [saved, setSaved] = useState<string[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    getChatPrompts().then((p) => {
-      if (cancelled) return;
-      setItems(p.length ? p : ['']);
-      setSaved(p);
-    });
-    return () => { cancelled = true; };
-  }, []);
-
-  const cleaned = items.map((s) => s.trim()).filter(Boolean);
-  const dirty = saved ? JSON.stringify(cleaned) !== JSON.stringify(saved) : false;
-
-  const save = async () => {
-    setBusy(true);
-    await setChatPrompts(items);
-    const stored = await getChatPrompts();
-    setItems(stored.length ? stored : ['']);
-    setSaved(stored);
-    setBusy(false);
-    setJustSaved(true);
-    setTimeout(() => setJustSaved(false), 2000);
-    showToast({ message: 'Starter questions saved' });
-  };
-
-  return (
-    <div className="mt-8 border-t border-edge pt-6">
-      <h3 className="text-sm font-semibold text-fg-strong">Starter questions</h3>
-      <p className="mt-1 text-sm text-fg-secondary">
-        The suggestions shown in a new AI Chat. Edit them, add your own, or remove ones you don’t use.
-      </p>
-
-      <div className="mt-3 space-y-2">
-        {items.map((q, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={q}
-              maxLength={CHAT_PROMPT_MAX_CHARS}
-              onChange={(e) => setItems((cur) => cur.map((c, j) => (j === i ? e.target.value : c)))}
-              placeholder="e.g. Who should I reconnect with this month?"
-              className="min-w-0 flex-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
-            />
-            <button
-              type="button"
-              onClick={() => setItems((cur) => (cur.length > 1 ? cur.filter((_, j) => j !== i) : ['']))}
-              aria-label="Remove question"
-              title="Remove"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-strong"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            </button>
-          </div>
-        ))}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      {/* Additional (on top) instructions — the user's safe layer */}
+      <div className="mt-8 border-t border-edge pt-6">
+        <h3 className="text-sm font-semibold text-fg-strong">Your instructions</h3>
+        <p className="mt-1 text-sm text-fg-secondary">
+          Layered on top of the default prompt — this is your own, and app updates never touch it.
+        </p>
+        <textarea
+          value={append}
+          maxLength={CHAT_APPEND_MAX_CHARS}
+          onChange={(e) => setAppend(e.target.value)}
+          rows={4}
+          placeholder="e.g. Keep a warm tone, prefer short bullets, and always suggest a next step."
+          className="mt-2 w-full resize-y rounded-lg bg-surface-input px-3 py-2 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+        />
+        <p className="mt-1 text-[11px] text-fg-faint">{append.length}/{CHAT_APPEND_MAX_CHARS}</p>
+      </div>
+
+      {/* Default prompt — advanced disclosure */}
+      <div className="mt-8 border-t border-edge pt-6">
         <button
           type="button"
-          onClick={() => setItems((cur) => (cur.length >= CHAT_PROMPTS_MAX ? cur : [...cur, '']))}
-          disabled={items.length >= CHAT_PROMPTS_MAX}
-          className="rounded-md bg-surface-input px-3 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => setPromptOpen((v) => !v)}
+          aria-expanded={promptOpen}
+          className="flex items-center gap-2 text-sm font-semibold text-fg-strong"
         >
+          <svg className={`h-3.5 w-3.5 text-fg-faint transition-transform ${promptOpen ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+          Default prompt
+          <span className="font-normal text-fg-faint">(advanced)</span>
+        </button>
+        {promptOpen && (
+          <div className="mt-3 space-y-2">
+            <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:text-amber-300">
+              Heads up: this is the built-in base prompt. If you edit it, future app updates won’t change your copy. For most tweaks use “Your instructions” above — edit here only for full control. You can reset anytime.
+            </div>
+            <div className="flex justify-end">
+              {base.trim() !== DEFAULT_CHAT_INSTRUCTIONS && (
+                <button type="button" onClick={() => setBase(DEFAULT_CHAT_INSTRUCTIONS)} className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary">
+                  Reset to defaults
+                </button>
+              )}
+            </div>
+            <textarea
+              value={base}
+              maxLength={CHAT_INSTRUCTIONS_MAX_CHARS}
+              onChange={(e) => setBase(e.target.value)}
+              rows={10}
+              className="w-full resize-y rounded-lg bg-surface-input px-3 py-2 font-mono text-[13px] leading-relaxed text-fg-strong ring-1 ring-inset ring-edge outline-none focus:ring-blue-500/40"
+            />
+            <p className="text-[11px] text-fg-faint">The connection list is added automatically after this. {base.length}/{CHAT_INSTRUCTIONS_MAX_CHARS}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Starter questions */}
+      <div className="mt-8 border-t border-edge pt-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-sm font-semibold text-fg-strong">Starter questions</h3>
+          {JSON.stringify(cleanedPrompts) !== JSON.stringify(DEFAULT_CHAT_PROMPTS) && (
+            <button type="button" onClick={() => setPrompts([...DEFAULT_CHAT_PROMPTS])} className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary">
+              Reset to defaults
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-fg-secondary">The suggestions shown in a new chat. Edit, add, or remove them.</p>
+        <div className="mt-3 space-y-2">
+          {prompts.map((q, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                value={q}
+                maxLength={CHAT_PROMPT_MAX_CHARS}
+                onChange={(e) => setPrompts((cur) => cur.map((c, j) => (j === i ? e.target.value : c)))}
+                placeholder="e.g. Who should I reconnect with this month?"
+                className="min-w-0 flex-1 rounded-lg bg-surface-input px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+              />
+              <button type="button" onClick={() => setPrompts((cur) => (cur.length > 1 ? cur.filter((_, j) => j !== i) : ['']))} aria-label="Remove question" title="Remove" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-strong">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={() => setPrompts((cur) => (cur.length >= CHAT_PROMPTS_MAX ? cur : [...cur, '']))} disabled={prompts.length >= CHAT_PROMPTS_MAX} className="mt-2 rounded-md bg-surface-input px-3 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-40">
           Add question
         </button>
-        <button
-          type="button"
-          onClick={save}
-          disabled={!dirty || busy}
-          className="rounded-md bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
-        >
+      </div>
+
+      {/* One Save for the whole section, pinned bottom-right */}
+      <div className="mt-8 flex flex-1 items-end justify-end">
+        <button onClick={save} disabled={!dirty || busy} className="rounded-md bg-blue-500/15 px-4 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300">
           {justSaved ? 'Saved ✓' : busy ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setItems([...DEFAULT_CHAT_PROMPTS])}
-          className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:text-fg-secondary"
-        >
-          Reset to defaults
         </button>
       </div>
     </div>
@@ -498,6 +478,22 @@ export function SettingsModal() {
     [],
   );
 
+  // Expandable AI branch in the settings nav (mirrors the app's nav tree).
+  const [aiBranchOpen, setAiBranchOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('inflow-settings-ai-branch') !== '0'; } catch { return true; }
+  });
+  const toggleAiBranch = () => setAiBranchOpen((v) => {
+    const next = !v;
+    try { localStorage.setItem('inflow-settings-ai-branch', next ? '1' : '0'); } catch {}
+    return next;
+  });
+  const sectionBtnClass = (active: boolean) =>
+    `rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors ${
+      active
+        ? 'bg-blue-500/15 text-fg-strong ring-1 ring-inset ring-blue-500/30'
+        : 'text-fg-muted hover:bg-surface-hover hover:text-fg-secondary'
+    }`;
+
   // Escape to close
   useEffect(() => {
     if (!open) return;
@@ -528,20 +524,42 @@ export function SettingsModal() {
         {/* Section nav */}
         <nav className="flex w-40 shrink-0 flex-col gap-0.5 border-r border-edge bg-surface p-2">
           <p className="px-2 pb-1 pt-1 text-sm font-semibold text-fg-strong">Settings</p>
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSection(s.id)}
-              aria-current={section === s.id ? 'page' : undefined}
-              className={`rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors ${
-                section === s.id
-                  ? 'bg-blue-500/15 text-fg-strong ring-1 ring-inset ring-blue-500/30'
-                  : 'text-fg-muted hover:bg-surface-hover hover:text-fg-secondary'
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
+          {SECTIONS.map((s) => {
+            if (!s.children?.length) {
+              return (
+                <button key={s.id} onClick={() => setSection(s.id)} aria-current={section === s.id ? 'page' : undefined} className={sectionBtnClass(section === s.id)}>
+                  {s.label}
+                </button>
+              );
+            }
+            // A parent with a branch: the row navigates; the chevron toggles it.
+            return (
+              <div key={s.id}>
+                <div className="flex items-center">
+                  <button onClick={() => setSection(s.id)} aria-current={section === s.id ? 'page' : undefined} className={`flex-1 ${sectionBtnClass(section === s.id)}`}>
+                    {s.label}
+                  </button>
+                  <button
+                    onClick={toggleAiBranch}
+                    aria-label={aiBranchOpen ? `Collapse ${s.label}` : `Expand ${s.label}`}
+                    aria-expanded={aiBranchOpen}
+                    className="ml-0.5 shrink-0 rounded-md p-1 text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-secondary"
+                  >
+                    <svg className={`h-3.5 w-3.5 transition-transform ${aiBranchOpen ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+                {aiBranchOpen && (
+                  <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-edge pl-2">
+                    {s.children.map((c) => (
+                      <button key={c.id} onClick={() => setSection(c.id)} aria-current={section === c.id ? 'page' : undefined} className={sectionBtnClass(section === c.id)}>
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Section content */}
@@ -556,13 +574,8 @@ export function SettingsModal() {
             </svg>
           </button>
 
-          {section === 'ai' && (
-            <>
-              <AIKeySettings />
-              <AIAdvancedSettings />
-              <ChatPromptsSettings />
-            </>
-          )}
+          {section === 'ai' && <AIKeySettings />}
+          {section === 'chat' && <ChatSettings />}
           {section === 'appearance' && <AppearanceSettings />}
           {section === 'backup' && <BackupSettings />}
           {section === 'advanced' && <AdvancedSettings />}

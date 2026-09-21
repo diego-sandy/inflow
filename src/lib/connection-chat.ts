@@ -20,14 +20,28 @@ export interface ChatMessage {
 /** Cap how many connections we serialize into one prompt, to bound tokens. */
 export const CHAT_CONTEXT_LIMIT = 600;
 
+/**
+ * Output-token ceiling for a chat answer. Deliberately generous so long,
+ * grounded answers (e.g. "list every investor") don't get cut off mid-sentence
+ * — the earlier 2048 truncated multi-person lists. Applies to both providers
+ * (Gemini `maxOutputTokens`, Anthropic `max_tokens`).
+ */
+export const CHAT_MAX_TOKENS = 4096;
+
 const SYSTEM_PROMPT =
   'You answer questions about the user\'s LinkedIn connections using ONLY the ' +
   'provided list. Each line is: "name (role) — headline [interests: …] — about: ' +
   '<what they do> — history: <recap of past messages with them>". Use the ' +
-  '"about" and "history" notes to understand who each person is and your ' +
-  'relationship with them. Be concise and specific. When listing people, use ' +
-  'their names. If the list lacks the info to answer, say so plainly. Never ' +
-  'invent connections or facts.';
+  '"about" and "history" notes to understand who each person is and the user\'s ' +
+  'relationship with them.\n\n' +
+  'Answer completely: when a question covers many people, include every relevant ' +
+  'one — never stop early, cut the list short, or end with "and more". Give the ' +
+  'full answer in one response.\n\n' +
+  'Format for readability: use short Markdown bullets for lists (one person per ' +
+  'bullet, their name in **bold**, then a few words of why), and brief prose ' +
+  'otherwise. Be specific, and don\'t pad, repeat the question, or add filler ' +
+  'preambles. If the list lacks the info to answer, say so plainly. Never invent ' +
+  'connections or facts.';
 
 /** Compact one-line-per-person serialization for the prompt context. */
 export function buildConnectionContext(
@@ -72,7 +86,7 @@ export async function answerConnectionQuestion(
 
   const answer = await predict(prompt, {
     fullResponse: true,
-    maxTokens: 2048, // was 700 — answers were getting cut off mid-response
+    maxTokens: CHAT_MAX_TOKENS,
     temperature: 0.3,
     systemPrompt: system,
     tier: 'quality', // reasoning over the network — route to the stronger model

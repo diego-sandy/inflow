@@ -209,8 +209,15 @@ async function predictGemini(
           if (!line.startsWith('data: ')) continue;
           try {
             const json = JSON.parse(line.slice(6));
-            const part = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (part) text += part;
+            // Concatenate every text part in the chunk — a candidate's content
+            // can carry more than one part, and reading only parts[0] silently
+            // dropped the rest (a source of truncated answers).
+            const parts = json?.candidates?.[0]?.content?.parts;
+            if (Array.isArray(parts)) {
+              for (const p of parts) {
+                if (typeof p?.text === 'string') text += p.text;
+              }
+            }
           } catch {
             // skip malformed SSE lines
           }

@@ -37,9 +37,10 @@ Use the bundled extension. This is the whole story for the desktop app — no np
 
 1. In inflow → **MCP connector → Connect Claude**, copy your **pairing code** and click **Download inflow.mcpb**.
 2. In Claude Desktop → **Settings → Extensions**, install the downloaded `inflow.mcpb`.
-3. When prompted, paste the pairing code, then restart Claude.
+3. When prompted, paste the **pairing code**. Optionally, paste an **Anthropic API key** in the second field to enable inflow's **in-app Claude agent** (the AI Chat tool-use agent). Leave it blank if you only want the Claude Desktop integration.
+4. Restart Claude.
 
-inflow connects on its own.
+inflow connects on its own. The Anthropic key (if you set it) stays inside the companion — it's never sent to the browser.
 
 ### B · CLI / other MCP clients (Claude Code CLI, Codex, Cline, …)
 
@@ -54,14 +55,17 @@ npm install
 npm install -g .      # puts `inflow-mcp` on your PATH (or use `node <path>` below)
 ```
 
-Then point the client at it, with your pairing code from inflow:
+Then point the client at it, with your pairing code from inflow (and, optionally, an Anthropic key to power inflow's in-app Claude agent):
 
 ```json
 {
   "mcpServers": {
     "inflow": {
       "command": "inflow-mcp",
-      "env": { "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE" }
+      "env": {
+        "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE",
+        "ANTHROPIC_API_KEY": "sk-ant-...   (optional — only for the in-app agent)"
+      }
     }
   }
 }
@@ -75,10 +79,22 @@ If you skip the global install, use the file directly:
     "inflow": {
       "command": "node",
       "args": ["/absolute/path/to/inflow/mcp-companion/src/index.mjs"],
-      "env": { "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE" }
+      "env": {
+        "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE",
+        "ANTHROPIC_API_KEY": "sk-ant-...   (optional)"
+      }
     }
   }
 }
+```
+
+`ANTHROPIC_API_KEY` is only needed for inflow's in-app AI Chat agent; omit it for the Claude Desktop / tool-relay use. It stays in the companion's environment — never sent to the browser.
+
+**Run it standalone (in-app agent without Claude Desktop):** the companion binds its localhost socket whenever it runs, so you can start it directly and inflow's AI Chat agent will use it:
+
+```bash
+INFLOW_PAIRING_CODE=PASTE-YOUR-CODE ANTHROPIC_API_KEY=sk-ant-... inflow-mcp
+# or, from a clone: … node mcp-companion/src/index.mjs
 ```
 
 **B2 · Via npm (only after publishing — see below):** once `inflow-mcp` is on npm, the command becomes `npx -y inflow-mcp` (same `env`). No clone needed.

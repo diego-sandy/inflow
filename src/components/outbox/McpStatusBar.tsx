@@ -65,7 +65,11 @@ export function McpStatusBar() {
         inflow: {
           command: 'node',
           args: ['/absolute/path/to/inflow/mcp-companion/src/index.mjs'],
-          env: { INFLOW_PAIRING_CODE: pairCode },
+          env: {
+            INFLOW_PAIRING_CODE: pairCode,
+            // Optional — only for inflow's in-app AI Chat agent.
+            ANTHROPIC_API_KEY: 'sk-ant-...',
+          },
         },
       },
     },
@@ -177,7 +181,8 @@ export function McpStatusBar() {
             <ol className="mt-1 ml-4 list-decimal space-y-1 marker:text-fg-faint">
               <li>Download the inflow companion below.</li>
               <li>In Claude Desktop → Settings → Extensions, install the downloaded <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow.mcpb</code>.</li>
-              <li>When it asks for the pairing code, paste the one above, then restart Claude. No terminal.</li>
+              <li>When it asks for the pairing code, paste the one above. To also use the in-app AI Chat agent, paste an Anthropic API key in the optional second field (it stays in the companion, never the browser).</li>
+              <li>Restart Claude. No terminal.</li>
             </ol>
             <a
               href={mcpbUrl}

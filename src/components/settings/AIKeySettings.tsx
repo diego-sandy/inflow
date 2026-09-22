@@ -355,6 +355,9 @@ export function AIKeySettings() {
         <div className="space-y-5 border-t border-edge pt-5">
           <div>
             <h3 className="text-sm font-semibold text-fg-strong">Claude API key</h3>
+            <p className="mt-1 text-sm text-fg-secondary">
+              Recommended: set your Anthropic key in the <span className="font-medium text-fg-strong">MCP connector</span> — it stays off the browser and works even if your org blocks browser access. A key pasted here uses a direct browser call, which some orgs (incl. BAA/HIPAA) block.
+            </p>
             {anthSaved ? (
               <div className="mt-3 flex items-center gap-2">
                 <span className="rounded-md bg-surface px-3 py-1.5 font-mono text-sm text-fg-secondary ring-1 ring-ring">
@@ -388,11 +391,11 @@ export function AIKeySettings() {
                     <li>
                       Click <span className="font-medium text-fg">Create Key</span> and copy it.
                     </li>
-                    <li>Paste it below and click Save.</li>
+                    <li>Set it in the MCP connector (recommended), or paste it below for a direct browser call.</li>
                   </ol>
                   <p className="mt-2 text-[11px] text-fg-faint">
-                    Requires a small amount of billing credit. Your key is stored only on this device
-                    and sent directly to Anthropic.
+                    Requires a small amount of billing credit. A key pasted here is stored unencrypted on
+                    this device and sent directly to Anthropic — the companion path keeps it off the browser.
                   </p>
                 </div>
 

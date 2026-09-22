@@ -176,17 +176,28 @@ export function useConnectionChat(): ConnectionChatState {
           finalText = answer || streamed;
         }
 
+        // Empty result: give a reason instead of a dead-end. A Claude request
+        // that returned nothing without the companion is almost always the org's
+        // browser/CORS block — point at the fix.
+        let fallback = "I couldn't find an answer in your connections.";
+        if (!finalText && provider === 'anthropic' && !useAgent) {
+          fallback = 'Claude couldn’t be reached from the browser (your org may block it). Open the MCP connector and connect the companion to run Claude.';
+        }
+
         const withAnswer: ChatMessage[] = [
           ...withUser,
-          { role: 'assistant', content: finalText || "I couldn't find an answer in your connections." },
+          { role: 'assistant', content: finalText || fallback },
         ];
         useInsightChatStore.getState().setMessages(withAnswer);
         await persist(id, withAnswer);
       } catch (e: any) {
-        useInsightChatStore.getState().setError(e?.message || 'Something went wrong');
+        // Surface the real reason (no key in companion, Anthropic error, companion
+        // dropped, timeout…) so failures are debuggable, not a generic message.
+        const reason = e?.message || 'Something went wrong.';
+        useInsightChatStore.getState().setError(reason);
         const withErr: ChatMessage[] = [
           ...withUser,
-          { role: 'assistant', content: 'Sorry — that request failed. Please try again.' },
+          { role: 'assistant', content: `Sorry — that request failed.\n\n${reason}` },
         ];
         useInsightChatStore.getState().setMessages(withErr);
         await persist(id, withErr);

@@ -518,7 +518,7 @@ export function SettingsModal() {
       <div
         role="dialog"
         aria-label="Settings"
-        className="flex h-[32rem] max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl bg-surface-raised shadow-2xl ring-1 ring-ring"
+        className="flex h-[85vh] max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-xl bg-surface-raised shadow-2xl ring-1 ring-ring"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Section nav */}

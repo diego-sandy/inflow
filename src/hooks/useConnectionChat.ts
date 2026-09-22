@@ -1,8 +1,9 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useConnections } from './useConnections';
 import { useAISession } from './useAISession';
 import { useDbGeneration } from './useDbGeneration';
+import { useUIStore } from '@/store/ui-store';
 import { db } from '@/db/database';
 import { useInsightChatStore } from '@/store/insight-chat-store';
 import { answerConnectionQuestion, CHAT_CONTEXT_LIMIT, DEFAULT_CHAT_INSTRUCTIONS, type ChatMessage } from '@/lib/connection-chat';
@@ -68,9 +69,27 @@ async function persist(id: string, messages: ChatMessage[], title?: string): Pro
  */
 export function useConnectionChat(): ConnectionChatState {
   const { connections } = useConnections();
-  const { available, predict } = useAISession();
+  const { available: aiAvailable, predict } = useAISession();
   const dbGen = useDbGeneration();
   const { messages, loading, error, activeId, status } = useInsightChatStore();
+
+  // The Claude agent (Phase 2) runs through the companion, so the chat is usable
+  // when the provider is Claude and the companion is connected — even with no
+  // browser-stored key (the key lives in the companion). Otherwise fall back to
+  // the normal "active provider has a key" availability.
+  const mcpConnected = useUIStore((s) => s.mcpStatus) === 'connected';
+  const [isAnthropic, setIsAnthropic] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => getAIProvider().then((p) => { if (!cancelled) setIsAnthropic(p === 'anthropic'); });
+    load();
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if ('aiProvider' in changes) load();
+    };
+    chrome?.storage?.local?.onChanged?.addListener?.(listener);
+    return () => { cancelled = true; chrome?.storage?.local?.onChanged?.removeListener?.(listener); };
+  }, []);
+  const available = aiAvailable || (isAnthropic && mcpConnected);
 
   const chats = useLiveQuery(async () => {
     if (!db) return [] as InsightChat[];

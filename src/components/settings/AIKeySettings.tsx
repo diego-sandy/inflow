@@ -7,19 +7,18 @@ import {
   getAnthropicApiKey,
   setAnthropicApiKey,
   clearAnthropicApiKey,
-  getAIProvider,
-  setAIProvider,
+  getTierProvider,
+  setTierProvider,
   getAnthropicModel,
   setAnthropicModel,
   getGeminiModel,
   setGeminiModel,
   getAISuggestionsEnabled,
   setAISuggestionsEnabled,
-  ANTHROPIC_MODELS,
-  GEMINI_MODELS,
+  AI_MODEL_CATALOG,
   type AIProvider,
   type AIModelTier,
-  type ModelOption,
+  type ProviderModelOption,
 } from '@/lib/ai-settings';
 import { ANTHROPIC_URL, anthropicErrorMessage } from '@/lib/anthropic-client';
 import { useCategorizeMode } from '@/hooks/useCategorizeMode';
@@ -52,36 +51,100 @@ function ToggleRow({
   );
 }
 
-/** A dropdown that picks a model (for either provider) for one tier. */
-function ModelSelect({
-  label,
-  hint,
-  value,
-  models,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  models: ModelOption[];
-  onChange: (id: string) => void;
-}) {
+/** Small provider mark (approximate — not the exact brand logos). */
+function ProviderGlyph({ provider, className }: { provider: AIProvider; className?: string }) {
+  if (provider === 'anthropic') {
+    // Clay burst for Claude / Anthropic.
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#c96442" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+        <path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19" />
+      </svg>
+    );
+  }
+  // Four-point sparkle for Gemini / Google.
   return (
-    <label className="block">
-      <span className="text-sm font-medium text-fg-strong">{label}</span>
-      <span className="mt-0.5 block text-xs text-fg-muted">{hint}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full rounded-md bg-surface px-3 py-2 text-sm text-fg ring-1 ring-ring focus:outline-none focus:ring-2 focus:ring-blue-500"
+    <svg className={className} viewBox="0 0 24 24" fill="#3b82f6" aria-hidden="true">
+      <path d="M12 2c.5 4.5 3 7 7.5 7.5-4.5.5-7 3-7.5 7.5-.5-4.5-3-7-7.5-7.5C9 9 11.5 6.5 12 2Z" />
+    </svg>
+  );
+}
+
+const providerName = (p: AIProvider) => (p === 'anthropic' ? 'Claude' : 'Gemini');
+
+/** Custom dropdown to pick a provider+model together, grouped, with logos + tags. */
+function ProviderModelSelect({
+  tier,
+  provider,
+  value,
+  onSelect,
+}: {
+  tier: AIModelTier;
+  provider: AIProvider;
+  value: string;
+  onSelect: (provider: AIProvider, modelId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current: ProviderModelOption =
+    AI_MODEL_CATALOG.find((m) => m.provider === provider && m.id === value) ??
+    AI_MODEL_CATALOG.find((m) => m.provider === provider) ??
+    AI_MODEL_CATALOG[0];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg bg-surface-input px-3 py-2 text-left text-sm ring-1 ring-inset ring-edge transition-colors hover:ring-fg-faint"
       >
-        {models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.label} — {m.blurb}
-          </option>
-        ))}
-      </select>
-    </label>
+        <ProviderGlyph provider={current.provider} className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-fg-strong">{current.label}</span>
+        <span className="shrink-0 text-xs text-fg-faint">{providerName(current.provider)}</span>
+        <svg className={`h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div role="listbox" className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-xl border border-edge bg-surface-raised p-1 shadow-lg">
+            {(['gemini', 'anthropic'] as const).map((prov) => (
+              <div key={prov}>
+                <p className="flex items-center gap-1.5 px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">
+                  <ProviderGlyph provider={prov} className="h-3 w-3" />
+                  {providerName(prov)}{prov === 'gemini' ? ' · Google' : ' · Anthropic'}
+                </p>
+                {AI_MODEL_CATALOG.filter((m) => m.provider === prov).map((m) => {
+                  const active = m.provider === provider && m.id === value;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => { onSelect(m.provider, m.id); setOpen(false); }}
+                      className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${active ? 'bg-blue-500/15' : 'hover:bg-surface-hover'}`}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-medium text-fg-strong">{m.label}</span>
+                          {m.recommendedFor === tier && (
+                            <span className="rounded-full bg-emerald-500/15 px-1.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">recommended</span>
+                          )}
+                        </span>
+                        <span className="block text-[11px] text-fg-muted">{m.blurb}</span>
+                      </span>
+                      {active && (
+                        <svg className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -95,7 +158,8 @@ function ModelSelect({
 export function AIKeySettings() {
   const showToast = useUIStore((s) => s.showToast);
 
-  const [provider, setProvider] = useState<AIProvider>('gemini');
+  const [fastProvider, setFastProviderState] = useState<AIProvider>('gemini');
+  const [qualityProvider, setQualityProviderState] = useState<AIProvider>('gemini');
 
   // Gemini key state
   const [geminiInput, setGeminiInput] = useState('');
@@ -119,7 +183,8 @@ export function AIKeySettings() {
   const [categorizeMode, setCategorizeMode] = useCategorizeMode();
 
   useEffect(() => {
-    getAIProvider().then(setProvider);
+    getTierProvider('fast').then(setFastProviderState);
+    getTierProvider('quality').then(setQualityProviderState);
     getGeminiApiKey().then(setGeminiSaved);
     getAnthropicApiKey().then(setAnthSaved);
     getAnthropicModel('fast').then(setFastModel);
@@ -129,9 +194,26 @@ export function AIKeySettings() {
     getAISuggestionsEnabled().then(setSuggestionsOn);
   }, []);
 
-  const changeProvider = (next: AIProvider) => {
-    setProvider(next);
-    setAIProvider(next);
+  const usesGemini = fastProvider === 'gemini' || qualityProvider === 'gemini';
+  const usesAnthropic = fastProvider === 'anthropic' || qualityProvider === 'anthropic';
+
+  // Pick a provider+model for one tier (persists both, updates local state).
+  const chooseModel = (tier: AIModelTier, provider: AIProvider, modelId: string) => {
+    setTierProvider(tier, provider);
+    if (provider === 'anthropic') {
+      setAnthropicModel(tier, modelId);
+      if (tier === 'fast') setFastModel(modelId); else setQualityModel(modelId);
+    } else {
+      setGeminiModel(tier, modelId);
+      if (tier === 'fast') setGeminiFastModel(modelId); else setGeminiQualityModel(modelId);
+    }
+    if (tier === 'fast') setFastProviderState(provider); else setQualityProviderState(provider);
+  };
+
+  const tierModelId = (tier: AIModelTier): string => {
+    const p = tier === 'fast' ? fastProvider : qualityProvider;
+    if (p === 'anthropic') return tier === 'fast' ? fastModel : qualityModel;
+    return tier === 'fast' ? geminiFastModel : geminiQualityModel;
   };
 
   // --- Gemini save / remove ------------------------------------------------
@@ -229,58 +311,47 @@ export function AIKeySettings() {
     showToast({ message: 'Claude API key removed' });
   };
 
-  const changeModel = (tier: AIModelTier, id: string) => {
-    if (tier === 'quality') setQualityModel(id);
-    else setFastModel(id);
-    setAnthropicModel(tier, id);
-  };
-
-  const changeGeminiModel = (tier: AIModelTier, id: string) => {
-    if (tier === 'quality') setGeminiQualityModel(id);
-    else setGeminiFastModel(id);
-    setGeminiModel(tier, id);
-  };
-
   const toggleSuggestions = (next: boolean) => {
     setSuggestionsOn(next);
     setAISuggestionsEnabled(next);
   };
 
   const mask = (k: string) => k.slice(0, 6) + '…' + k.slice(-4);
-  const activeKey = provider === 'anthropic' ? anthSaved : geminiSaved;
+  // Reply suggestions (a fast-tier feature) need whatever the Fast tier uses.
+  const hasAnyKey = !!geminiSaved || !!anthSaved;
 
   return (
     <div className="space-y-6">
-      {/* Provider picker */}
+      {/* Model picker — one provider+model per job */}
       <div>
-        <h3 className="text-sm font-semibold text-fg-strong">AI provider</h3>
+        <h3 className="text-sm font-semibold text-fg-strong">AI models</h3>
         <p className="mt-1 text-sm text-fg-secondary">
-          Powers connection categorization, summaries, the insights chat, and reply drafting.
+          Pick which model powers each job. Mix providers freely, or use one for both. Gemini runs in the browser; Claude runs through the companion.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {([
-            { id: 'anthropic', name: 'Claude', note: 'Anthropic' },
-            { id: 'gemini', name: 'Gemini', note: 'Google — recommended' },
-          ] as const).map((p) => (
-            <button
-              key={p.id}
-              onClick={() => changeProvider(p.id)}
-              aria-pressed={provider === p.id}
-              className={`rounded-lg px-3 py-2.5 text-left ring-1 transition-colors ${
-                provider === p.id
-                  ? 'bg-blue-600/10 ring-blue-500'
-                  : 'bg-surface ring-ring hover:ring-fg-faint'
-              }`}
-            >
-              <span className="block text-sm font-medium text-fg-strong">{p.name}</span>
-              <span className="block text-xs text-fg-muted">{p.note}</span>
-            </button>
-          ))}
+        <div className="mt-3 space-y-3">
+          <div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-medium text-fg-strong">Fast — cheap, high-volume</span>
+              <span className="text-[11px] text-fg-faint">categorization · summaries · autocomplete</span>
+            </div>
+            <div className="mt-1.5">
+              <ProviderModelSelect tier="fast" provider={fastProvider} value={tierModelId('fast')} onSelect={(p, m) => chooseModel('fast', p, m)} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-medium text-fg-strong">Quality — chat &amp; drafting</span>
+              <span className="text-[11px] text-fg-faint">AI Chat · message drafts</span>
+            </div>
+            <div className="mt-1.5">
+              <ProviderModelSelect tier="quality" provider={qualityProvider} value={tierModelId('quality')} onSelect={(p, m) => chooseModel('quality', p, m)} />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Claude (Anthropic) */}
-      {provider === 'anthropic' && (
+      {usesAnthropic && (
         <div className="space-y-5 border-t border-edge pt-5">
           <div>
             <h3 className="text-sm font-semibold text-fg-strong">Claude API key</h3>
@@ -374,32 +445,11 @@ export function AIKeySettings() {
               </div>
             )}
           </div>
-
-          {/* Model tiers */}
-          <div className="space-y-4">
-            <p className="text-xs text-fg-muted">
-              Route cheap, high-volume work to a small model and reserve a stronger one for writing.
-            </p>
-            <ModelSelect
-              label="Fast model"
-              hint="Categorization, summaries, autocomplete — pick the cheapest that works."
-              value={fastModel}
-              models={ANTHROPIC_MODELS}
-              onChange={(id) => changeModel('fast', id)}
-            />
-            <ModelSelect
-              label="Quality model"
-              hint="Drafting messages and the insights chat."
-              value={qualityModel}
-              models={ANTHROPIC_MODELS}
-              onChange={(id) => changeModel('quality', id)}
-            />
-          </div>
         </div>
       )}
 
       {/* Gemini */}
-      {provider === 'gemini' && (
+      {usesGemini && (
         <div className="border-t border-edge pt-5">
           <h3 className="text-sm font-semibold text-fg-strong">Gemini API key</h3>
           <p className="mt-1 text-sm text-fg-secondary">
@@ -488,27 +538,6 @@ export function AIKeySettings() {
               </div>
             </div>
           )}
-
-          {/* Model tiers */}
-          <div className="mt-5 space-y-4">
-            <p className="text-xs text-fg-muted">
-              Route cheap, high-volume work to a small model and reserve a stronger one for writing.
-            </p>
-            <ModelSelect
-              label="Fast model"
-              hint="Categorization, summaries, autocomplete — pick the cheapest that works."
-              value={geminiFastModel}
-              models={GEMINI_MODELS}
-              onChange={(id) => changeGeminiModel('fast', id)}
-            />
-            <ModelSelect
-              label="Quality model"
-              hint="Drafting messages and the insights chat."
-              value={geminiQualityModel}
-              models={GEMINI_MODELS}
-              onChange={(id) => changeGeminiModel('quality', id)}
-            />
-          </div>
         </div>
       )}
 
@@ -543,10 +572,10 @@ export function AIKeySettings() {
           label="AI reply suggestions"
           description="Suggest replies and inline autocomplete while composing."
           checked={suggestionsOn}
-          disabled={!activeKey}
+          disabled={!hasAnyKey}
           onChange={toggleSuggestions}
         />
-        {!activeKey && (
+        {!hasAnyKey && (
           <p className="mt-2 text-[11px] text-fg-faint">Add an API key above to enable.</p>
         )}
       </div>

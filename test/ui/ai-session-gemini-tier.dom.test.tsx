@@ -8,6 +8,7 @@ vi.mock('@/lib/anthropic-client', () => ({ predictAnthropic: vi.fn() }));
 vi.mock('@/lib/ai-settings', () => ({
   getGeminiApiKey: async () => 'gm-test-key',
   getAIProvider: async () => 'gemini',
+  getTierProvider: async () => 'gemini',
   getAnthropicApiKey: async () => null,
   getAnthropicModel: async () => 'claude-haiku-4-5',
   getGeminiModel: async (tier: string) =>

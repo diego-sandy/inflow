@@ -11,6 +11,7 @@ vi.mock('@/lib/anthropic-client', () => ({
 vi.mock('@/lib/ai-settings', () => ({
   getGeminiApiKey: async () => null,
   getAIProvider: async () => 'anthropic',
+  getTierProvider: async () => 'anthropic',
   getAnthropicApiKey: async () => 'sk-ant-test',
   getAnthropicModel: async (tier: string) =>
     tier === 'quality' ? 'claude-opus-5' : 'claude-haiku-4-5',

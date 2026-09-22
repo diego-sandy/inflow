@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
   getGeminiApiKey,
-  getAIProvider,
   getAnthropicApiKey,
   getAnthropicModel,
   getGeminiModel,
+  getTierProvider,
   DEFAULT_GEMINI_FAST_MODEL,
   DEFAULT_GEMINI_QUALITY_MODEL,
   type AIProvider,
   type AIModelTier,
 } from '@/lib/ai-settings';
 import { predictAnthropic } from '@/lib/anthropic-client';
+import { requestAnthropicViaCompanion, isCompanionConnected } from '@/lib/mcp/bridge-client';
 
 const SYSTEM_PROMPT =
   'You are an autocomplete assistant. Given conversation history and a partial message, predict the next few words. Output ONLY the completion text. Keep it short (2-8 words). If unsure, output nothing.';
@@ -48,7 +49,9 @@ interface AISession {
 // ---------------------------------------------------------------------------
 
 interface AIConfig {
-  provider: AIProvider;
+  /** Per-tier provider selection (fast = bulk, quality = chat/drafting). */
+  fastProvider: AIProvider;
+  qualityProvider: AIProvider;
   geminiKey: string | null;
   anthropicKey: string | null;
   fastModel: string;
@@ -59,7 +62,8 @@ interface AIConfig {
 
 // Cache config in memory so we don't hit chrome.storage on every keystroke.
 const config: AIConfig = {
-  provider: 'gemini',
+  fastProvider: 'gemini',
+  qualityProvider: 'gemini',
   geminiKey: null,
   anthropicKey: null,
   fastModel: 'claude-haiku-4-5',
@@ -70,9 +74,15 @@ const config: AIConfig = {
 let initialized = false;
 const availabilitySubscribers = new Set<(available: boolean) => void>();
 
-/** True when the *active* provider has a usable API key. */
+/** A provider is usable if it can actually run: Gemini needs a browser key;
+ * Claude needs either a browser key or the companion (which holds the key). */
+function providerUsable(p: AIProvider): boolean {
+  return p === 'anthropic' ? !!config.anthropicKey || isCompanionConnected() : !!config.geminiKey;
+}
+
+/** True when at least one tier can run. */
 function isAvailable(): boolean {
-  return config.provider === 'anthropic' ? !!config.anthropicKey : !!config.geminiKey;
+  return providerUsable(config.fastProvider) || providerUsable(config.qualityProvider);
 }
 
 function notifyAvailability(): void {
@@ -82,9 +92,10 @@ function notifyAvailability(): void {
 
 /** Reload all AI settings into the in-memory cache, then notify subscribers. */
 async function reloadConfig(): Promise<void> {
-  const [provider, geminiKey, anthropicKey, fastModel, qualityModel, geminiFastModel, geminiQualityModel] =
+  const [fastProvider, qualityProvider, geminiKey, anthropicKey, fastModel, qualityModel, geminiFastModel, geminiQualityModel] =
     await Promise.all([
-      getAIProvider(),
+      getTierProvider('fast'),
+      getTierProvider('quality'),
       getGeminiApiKey(),
       getAnthropicApiKey(),
       getAnthropicModel('fast'),
@@ -92,7 +103,8 @@ async function reloadConfig(): Promise<void> {
       getGeminiModel('fast'),
       getGeminiModel('quality'),
     ]);
-  config.provider = provider;
+  config.fastProvider = fastProvider;
+  config.qualityProvider = qualityProvider;
   config.geminiKey = geminiKey;
   config.anthropicKey = anthropicKey;
   config.fastModel = fastModel;
@@ -112,6 +124,8 @@ function ensureConfigSync(): void {
   // Any AI-related storage change re-reads config; one listener serves every hook.
   const WATCHED = [
     'aiProvider',
+    'aiFastProvider',
+    'aiQualityProvider',
     'geminiApiKey',
     'anthropicApiKey',
     'anthropicFastModel',
@@ -158,14 +172,52 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
   const tier: AIModelTier = isOpts ? options.tier ?? 'fast' : 'fast';
   const onToken = isOpts ? options.onToken : undefined;
 
-  if (config.provider === 'anthropic') {
-    if (!config.anthropicKey) return null;
+  const provider = tier === 'quality' ? config.qualityProvider : config.fastProvider;
+
+  if (provider === 'anthropic') {
     const model = tier === 'quality' ? config.qualityModel : config.fastModel;
+    // Prefer the companion (server-side — works on BAA/CORS orgs, key off-browser).
+    if (isCompanionConnected()) {
+      return predictAnthropicViaCompanion(prompt, model, { maxTokens, systemPrompt, onToken });
+    }
+    // Fall back to a direct browser call (only works if the org allows CORS).
+    if (!config.anthropicKey) return null;
     return predictAnthropic(prompt, config.anthropicKey, model, { signal, maxTokens, systemPrompt, onToken });
   }
 
   const model = tier === 'quality' ? config.geminiQualityModel : config.geminiFastModel;
   return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model, onToken });
+}
+
+/**
+ * Run one Anthropic completion through the companion (non-streaming; it returns
+ * the full message). Used for bulk/fast Anthropic work so it works on orgs that
+ * block browser CORS. Returns the text, or null on any failure.
+ */
+async function predictAnthropicViaCompanion(
+  prompt: string,
+  model: string,
+  opts: { maxTokens: number; systemPrompt: string; onToken?: (chunk: string) => void },
+): Promise<string | null> {
+  try {
+    const maxTokens = opts.maxTokens && opts.maxTokens > 0 ? Math.max(opts.maxTokens, 64) : 1024;
+    const payload: Record<string, unknown> = {
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+      ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
+      ...(/haiku/i.test(model) ? {} : { thinking: { type: 'disabled' } }),
+    };
+    const data = await requestAnthropicViaCompanion(payload);
+    const text = Array.isArray(data?.content)
+      ? data.content.filter((b: any) => b?.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('')
+      : '';
+    const out = text.trim() || null;
+    if (out && opts.onToken) opts.onToken(out); // non-streaming: deliver once
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /** Gemini streaming prediction (the original provider). */

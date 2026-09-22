@@ -9,6 +9,7 @@ const getGeminiApiKey = vi.fn();
 vi.mock('@/lib/ai-settings', () => ({
   getGeminiApiKey: () => getGeminiApiKey(),
   getAIProvider: async () => 'gemini',
+  getTierProvider: async () => 'gemini',
   getAnthropicApiKey: async () => null,
   getAnthropicModel: async (tier: string) =>
     tier === 'quality' ? 'claude-sonnet-5' : 'claude-haiku-4-5',

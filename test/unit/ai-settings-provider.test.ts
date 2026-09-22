@@ -15,6 +15,9 @@ import {
   ANTHROPIC_MODELS,
   getGeminiModel,
   setGeminiModel,
+  getTierProvider,
+  setTierProvider,
+  AI_MODEL_CATALOG,
   DEFAULT_GEMINI_FAST_MODEL,
   DEFAULT_GEMINI_QUALITY_MODEL,
   GEMINI_MODELS,
@@ -137,6 +140,30 @@ describe('AI Chat advanced settings', () => {
     expect(await getAIChatInstructions()).toBe('');
     await setAIChatInstructions('Answer in bullets.');
     expect(await getAIChatInstructions()).toBe('Answer in bullets.');
+  });
+});
+
+describe('per-tier provider selection', () => {
+  it('defaults each tier to the legacy provider (gemini) and round-trips per tier', async () => {
+    expect(await getTierProvider('fast')).toBe('gemini');
+    expect(await getTierProvider('quality')).toBe('gemini');
+    await setTierProvider('quality', 'anthropic');
+    expect(await getTierProvider('quality')).toBe('anthropic');
+    expect(await getTierProvider('fast')).toBe('gemini'); // independent
+  });
+
+  it('migrates from the old single provider when a tier is unset', async () => {
+    await setAIProvider('anthropic');
+    expect(await getTierProvider('fast')).toBe('anthropic');
+    await setTierProvider('fast', 'gemini'); // explicit overrides the legacy fallback
+    expect(await getTierProvider('fast')).toBe('gemini');
+  });
+
+  it('the model catalog covers both providers and tags recommendations', () => {
+    expect(AI_MODEL_CATALOG.some((m) => m.provider === 'gemini')).toBe(true);
+    expect(AI_MODEL_CATALOG.some((m) => m.provider === 'anthropic')).toBe(true);
+    expect(AI_MODEL_CATALOG.some((m) => m.recommendedFor === 'fast')).toBe(true);
+    expect(AI_MODEL_CATALOG.some((m) => m.recommendedFor === 'quality')).toBe(true);
   });
 });
 

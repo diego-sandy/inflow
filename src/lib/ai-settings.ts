@@ -84,6 +84,48 @@ export async function setAIProvider(provider: AIProvider): Promise<void> {
   await chrome.storage.local.set({ [PROVIDER_KEY]: provider });
 }
 
+// --- Per-tier provider selection ------------------------------------------
+// Each tier (fast = cheap bulk work; quality = chat & drafting) chooses its own
+// provider, so you can mix (Gemini for bulk, Claude for chat) or use one provider
+// for everything. Falls back to the legacy global provider for existing users.
+const FAST_PROVIDER_KEY = 'aiFastProvider';
+const QUALITY_PROVIDER_KEY = 'aiQualityProvider';
+
+export async function getTierProvider(tier: AIModelTier): Promise<AIProvider> {
+  const stored = await readLocal<AIProvider>(tier === 'quality' ? QUALITY_PROVIDER_KEY : FAST_PROVIDER_KEY);
+  if (stored === 'anthropic' || stored === 'gemini') return stored;
+  return getAIProvider(); // migrate from the old single toggle (defaults to gemini)
+}
+
+export async function setTierProvider(tier: AIModelTier, provider: AIProvider): Promise<void> {
+  await chrome.storage.local.set({ [tier === 'quality' ? QUALITY_PROVIDER_KEY : FAST_PROVIDER_KEY]: provider });
+}
+
+/** Resolve the model id for a tier, given its selected provider. */
+export async function getTierModel(tier: AIModelTier): Promise<string> {
+  const provider = await getTierProvider(tier);
+  return provider === 'anthropic' ? getAnthropicModel(tier) : getGeminiModel(tier);
+}
+
+/** One selectable provider+model option for the tier dropdowns. */
+export interface ProviderModelOption extends ModelOption {
+  provider: AIProvider;
+  /** Which tier this is the recommended pick for, if any. */
+  recommendedFor?: AIModelTier;
+}
+
+/** Every provider+model the tier dropdowns offer (Gemini first — cheaper). */
+export const AI_MODEL_CATALOG: ProviderModelOption[] = [
+  ...GEMINI_MODELS.map((m) => ({ ...m, provider: 'gemini' as const })),
+  ...ANTHROPIC_MODELS.map((m) => ({ ...m, provider: 'anthropic' as const })),
+].map((m) =>
+  m.id === DEFAULT_GEMINI_FAST_MODEL
+    ? { ...m, recommendedFor: 'fast' as const }
+    : m.id === 'claude-sonnet-5'
+      ? { ...m, recommendedFor: 'quality' as const }
+      : m,
+);
+
 export async function getAnthropicApiKey(): Promise<string | null> {
   return (await readLocal<string>(ANTHROPIC_KEY)) || null;
 }
@@ -133,7 +175,7 @@ export async function setGeminiModel(tier: AIModelTier, modelId: string): Promis
  * quality tier), e.g. "Sonnet 5" or "Flash-Lite" — for the "working…" status.
  */
 export async function getActiveChatModelLabel(): Promise<string> {
-  const provider = await getAIProvider();
+  const provider = await getTierProvider('quality');
   if (provider === 'anthropic') {
     const id = await getAnthropicModel('quality');
     return ANTHROPIC_MODELS.find((m) => m.id === id)?.label ?? id;

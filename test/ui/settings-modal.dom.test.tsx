@@ -20,6 +20,12 @@ vi.mock('@/lib/ai-settings', () => ({
   // Provider defaults to Gemini so the existing Gemini-focused assertions hold.
   getAIProvider: vi.fn(async () => 'gemini'),
   setAIProvider: vi.fn(),
+  getTierProvider: vi.fn(async () => 'gemini'),
+  setTierProvider: vi.fn(),
+  AI_MODEL_CATALOG: [
+    { provider: 'gemini', id: 'gemini-3.1-flash-lite', label: 'Flash-Lite', blurb: 'cheap', recommendedFor: 'fast' },
+    { provider: 'anthropic', id: 'claude-sonnet-5', label: 'Sonnet 5', blurb: 'balanced', recommendedFor: 'quality' },
+  ],
   getAnthropicApiKey: vi.fn(async () => null),
   setAnthropicApiKey: vi.fn(),
   clearAnthropicApiKey: vi.fn(),

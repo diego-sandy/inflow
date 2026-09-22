@@ -11,7 +11,7 @@ import { smartRetrieve } from '@/lib/connection-retrieval';
 import { answerWithClaudeAgent } from '@/lib/agent/network-agent';
 import { isCompanionConnected } from '@/lib/mcp/bridge-client';
 import { activityLabel } from '@/lib/mcp/bridge-protocol';
-import { getAIChatMaxWords, getAIChatInstructions, getAIChatAppendInstructions, getAIProvider, getAnthropicModel } from '@/lib/ai-settings';
+import { getAIChatMaxWords, getAIChatInstructions, getAIChatAppendInstructions, getTierProvider, getAnthropicModel } from '@/lib/ai-settings';
 import type { InsightChat } from '@/types/insight-chat';
 
 export interface ConnectionChatState {
@@ -81,10 +81,10 @@ export function useConnectionChat(): ConnectionChatState {
   const [isAnthropic, setIsAnthropic] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    const load = () => getAIProvider().then((p) => { if (!cancelled) setIsAnthropic(p === 'anthropic'); }).catch(() => {});
+    const load = () => getTierProvider('quality').then((p) => { if (!cancelled) setIsAnthropic(p === 'anthropic'); }).catch(() => {});
     load();
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if ('aiProvider' in changes) load();
+      if ('aiQualityProvider' in changes || 'aiProvider' in changes) load();
     };
     chrome?.storage?.local?.onChanged?.addListener?.(listener);
     return () => { cancelled = true; chrome?.storage?.local?.onChanged?.removeListener?.(listener); };
@@ -123,7 +123,7 @@ export function useConnectionChat(): ConnectionChatState {
         // run the tool-use agent (Claude calls inflow's tools via the companion —
         // no CORS, key stays out of the browser). Otherwise use the Phase 1
         // retrieval + single-call path (Gemini, or Claude without the companion).
-        const provider = await getAIProvider();
+        const provider = await getTierProvider('quality');
         const useAgent = provider === 'anthropic' && isCompanionConnected();
 
         let finalText = '';

@@ -48,7 +48,7 @@ function AssistantMessage({ content }: { content: string }) {
  * useConnectionChat so it stays in sync with the history sidebar.
  */
 export function ChatThread() {
-  const { messages, loading, available, ask, connectionCount } = useConnectionChat();
+  const { messages, loading, available, ask, connectionCount, status } = useConnectionChat();
   const prompts = useChatPrompts();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -137,10 +137,10 @@ export function ChatThread() {
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2 text-sm text-fg-muted">
                     <span className="h-3 w-3 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" />
-                    Waiting for {modelLabel || 'the model'}{elapsed > 0 ? ` · ${elapsed}s` : ''}
+                    {status || `Waiting for ${modelLabel || 'the model'}`}{elapsed > 0 ? ` · ${elapsed}s` : ''}
                   </div>
                   <p className="pl-5 text-[11px] text-fg-faint">
-                    Sent {connectionCount.toLocaleString()} connection{connectionCount === 1 ? '' : 's'} as context — the answer streams in as it’s written.
+                    The answer streams in as it’s written.
                   </p>
                 </div>
               )}

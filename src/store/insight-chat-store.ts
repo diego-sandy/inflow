@@ -14,10 +14,13 @@ interface InsightChatStore {
   messages: ChatMessage[];
   loading: boolean;
   error: string | null;
+  /** Transient phase text while a turn is in flight (retrieval → answering). */
+  status: string;
   setActiveId: (id: string | null) => void;
   setMessages: (m: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setStatus: (status: string) => void;
   /** Start a fresh, unsaved conversation. */
   reset: () => void;
 }
@@ -27,9 +30,11 @@ export const useInsightChatStore = create<InsightChatStore>((set) => ({
   messages: [],
   loading: false,
   error: null,
+  status: '',
   setActiveId: (activeId) => set({ activeId }),
   setMessages: (m) => set((s) => ({ messages: typeof m === 'function' ? m(s.messages) : m })),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
-  reset: () => set({ activeId: null, messages: [], error: null }),
+  setStatus: (status) => set({ status }),
+  reset: () => set({ activeId: null, messages: [], error: null, status: '' }),
 }));

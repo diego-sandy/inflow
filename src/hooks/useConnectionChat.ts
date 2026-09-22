@@ -6,6 +6,7 @@ import { useDbGeneration } from './useDbGeneration';
 import { db } from '@/db/database';
 import { useInsightChatStore } from '@/store/insight-chat-store';
 import { answerConnectionQuestion, CHAT_CONTEXT_LIMIT, DEFAULT_CHAT_INSTRUCTIONS, type ChatMessage } from '@/lib/connection-chat';
+import { smartRetrieve } from '@/lib/connection-retrieval';
 import { getAIChatMaxWords, getAIChatInstructions, getAIChatAppendInstructions } from '@/lib/ai-settings';
 import type { InsightChat } from '@/types/insight-chat';
 
@@ -15,6 +16,8 @@ export interface ConnectionChatState {
   loading: boolean;
   available: boolean;
   error: string | null;
+  /** Live phase text while a turn is in flight (retrieval → answering). */
+  status: string;
   connectionCount: number;
   /** All saved conversations, most recent first (for the history sidebar). */
   chats: InsightChat[];
@@ -64,7 +67,7 @@ export function useConnectionChat(): ConnectionChatState {
   const { connections } = useConnections();
   const { available, predict } = useAISession();
   const dbGen = useDbGeneration();
-  const { messages, loading, error, activeId } = useInsightChatStore();
+  const { messages, loading, error, activeId, status } = useInsightChatStore();
 
   const chats = useLiveQuery(async () => {
     if (!db) return [] as InsightChat[];
@@ -103,6 +106,17 @@ export function useConnectionChat(): ConnectionChatState {
           getAIChatAppendInstructions(),
         ]);
         const instructions = storedInstructions.trim() || DEFAULT_CHAT_INSTRUCTIONS;
+
+        // Phase 1 retrieval: narrow to the relevant connections for a targeted
+        // question (broad questions still see everything). Surface the step.
+        store.setStatus('Searching your network…');
+        const { subset, info } = await smartRetrieve(connections, question, predict);
+        if (info.mode === 'targeted') {
+          store.setStatus(`Focused on ${info.used} of ${info.total} connections · ${info.keywords.slice(0, 4).join(', ')}`);
+        } else {
+          store.setStatus(`Reading your ${info.total.toLocaleString()} connections…`);
+        }
+
         // Stream the answer in live so the user sees it build instead of a blank
         // "Thinking…". We append an empty assistant turn and grow its content.
         let streamed = '';
@@ -112,7 +126,7 @@ export function useConnectionChat(): ConnectionChatState {
             { role: 'assistant', content: streamed },
           ]);
         };
-        const answer = await answerConnectionQuestion(connections, question, predict, history, CHAT_CONTEXT_LIMIT, {
+        const answer = await answerConnectionQuestion(subset, question, predict, history, CHAT_CONTEXT_LIMIT, {
           maxTokens: 0, // uncapped — never truncate the answer on screen
           instructions,
           append,
@@ -138,6 +152,7 @@ export function useConnectionChat(): ConnectionChatState {
         await persist(id, withErr);
       } finally {
         useInsightChatStore.getState().setLoading(false);
+        useInsightChatStore.getState().setStatus('');
       }
     },
     [connections, predict],
@@ -168,6 +183,7 @@ export function useConnectionChat(): ConnectionChatState {
     loading,
     available,
     error,
+    status,
     connectionCount: connections.length,
     chats,
     activeId,

@@ -199,7 +199,16 @@ export function AIKeySettings() {
           messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }],
         }),
       });
-      if (!res.ok) throw new Error(anthropicErrorMessage(res.status));
+      if (!res.ok) {
+        // Surface Anthropic's actual reason (e.g. "credit balance is too low")
+        // instead of a generic status message, so the fix is obvious.
+        let detail = '';
+        try {
+          const body = await res.json();
+          detail = typeof body?.error?.message === 'string' ? body.error.message : '';
+        } catch {}
+        throw new Error(detail || anthropicErrorMessage(res.status));
+      }
       await setAnthropicApiKey(key);
       setAnthSaved(key);
       setAnthInput('');

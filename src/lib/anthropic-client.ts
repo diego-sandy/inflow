@@ -98,7 +98,12 @@ export async function predictAnthropic(
     });
 
     if (!res.ok) {
-      console.warn('[inflow] Anthropic request failed:', res.status, anthropicErrorMessage(res.status));
+      let detail = '';
+      try {
+        const body = await res.json();
+        detail = typeof body?.error?.message === 'string' ? body.error.message : '';
+      } catch {}
+      console.warn('[inflow] Anthropic request failed:', res.status, detail || anthropicErrorMessage(res.status));
       return null;
     }
 

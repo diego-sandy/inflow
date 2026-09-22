@@ -350,7 +350,16 @@ export function AIKeySettings() {
                 </div>
 
                 {anthStatus === 'error' && (
-                  <p className="mt-2 text-xs text-red-500">{anthError || 'Test failed'}</p>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs text-red-500">{anthError || 'Test failed'}</p>
+                    {/CORS/i.test(anthError) && (
+                      <p className="text-[11px] leading-relaxed text-fg-muted">
+                        inflow calls Claude directly from your browser, which your Anthropic organization blocks.
+                        Enable browser access in the Anthropic Console (Settings → Organization), or use a personal-account
+                        key. Gemini works from the browser without this restriction.
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 <div className="mt-3 flex justify-end">

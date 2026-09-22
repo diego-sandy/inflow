@@ -81,7 +81,7 @@ export function useConnectionChat(): ConnectionChatState {
   const [isAnthropic, setIsAnthropic] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    const load = () => getAIProvider().then((p) => { if (!cancelled) setIsAnthropic(p === 'anthropic'); });
+    const load = () => getAIProvider().then((p) => { if (!cancelled) setIsAnthropic(p === 'anthropic'); }).catch(() => {});
     load();
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
       if ('aiProvider' in changes) load();

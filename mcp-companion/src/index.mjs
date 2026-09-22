@@ -31,6 +31,16 @@ const CONFIG_DIR = join(homedir(), '.inflow-mcp');
 const TOKEN_FILE = join(CONFIG_DIR, 'token');
 const CALL_TIMEOUT_MS = 30_000;
 
+// --- Anthropic proxy (for the in-app Claude agent) ------------------------
+// The companion calls Anthropic server-side, so the browser's CORS restriction
+// (which blocks BAA/enterprise orgs) never applies and the API key stays OUT of
+// the browser. The key is read from the companion's own environment — set
+// ANTHROPIC_API_KEY (via the .mcpb install prompt or the shell), never sent from
+// the extension.
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_VERSION = '2023-06-01';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY?.trim() || '';
+
 /** All logging goes to stderr — stdout is reserved for the MCP protocol. */
 const log = (...a) => console.error('[inflow-mcp]', ...a);
 
@@ -66,6 +76,7 @@ function printSetup() {
   console.error('  inflow MCP companion');
   console.error('  ─────────────────────');
   console.error(`  Pairing code:  ${PAIRING_CODE}`);
+  console.error(`  Claude agent:  ${ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY set ✓' : 'no ANTHROPIC_API_KEY (in-app Claude agent disabled)'}`);
   console.error('  Paste this code into inflow → Outbox → Connect Claude.');
   console.error('');
   console.error('  Add to Claude Desktop config (claude_desktop_config.json):');
@@ -147,6 +158,11 @@ function onConnection(socket) {
       else p.reject(new Error(msg.error || 'Tool failed'));
       return;
     }
+    // Extension → companion → Anthropic (the in-app Claude agent's transport).
+    if (msg.type === 'anthropic') {
+      void handleAnthropic(socket, msg);
+      return;
+    }
     if (msg.type === 'pong') return;
   });
 
@@ -161,6 +177,41 @@ function onConnection(socket) {
 }
 
 bindWs();
+
+/**
+ * Proxy one Messages API request for the extension's Claude agent. The key is
+ * added here (server-side) — the extension only sends the request body. Replies
+ * with `anthropic_result` { id, ok, data|error } on the same socket.
+ */
+async function handleAnthropic(socket, msg) {
+  const id = msg.id;
+  const reply = (obj) => {
+    try { socket.send(JSON.stringify({ type: 'anthropic_result', id, ...obj })); } catch {}
+  };
+  if (!ANTHROPIC_API_KEY) {
+    reply({ ok: false, error: 'No Anthropic key in the companion. Set ANTHROPIC_API_KEY and restart it.' });
+    return;
+  }
+  try {
+    const res = await fetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify(msg.payload || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      reply({ ok: false, error: data?.error?.message || `Anthropic HTTP ${res.status}` });
+      return;
+    }
+    reply({ ok: true, data });
+  } catch (e) {
+    reply({ ok: false, error: e?.message || 'Anthropic request failed' });
+  }
+}
 
 /** Relay a tool call to the paired extension and await its result. */
 function relayCall(name, args) {

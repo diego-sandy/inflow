@@ -18,6 +18,60 @@ let retry = 0;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
 let activeToken = '';
 let activeUrl = DEFAULT_MCP_URL;
+let connected = false;
+
+// Pending Anthropic proxy requests (id → settlers), for the in-app Claude agent.
+const anthropicPending = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+let anthropicSeq = 0;
+const ANTHROPIC_TIMEOUT_MS = 120_000;
+
+/** True when the companion socket is open and paired. */
+export function isCompanionConnected(): boolean {
+  return connected && !!ws && ws.readyState === WebSocket.OPEN;
+}
+
+/**
+ * Ask the companion to run one Anthropic Messages API request (it adds the key
+ * server-side). Resolves with the parsed response, or rejects on error/timeout.
+ */
+export function requestAnthropicViaCompanion(payload: object): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (!isCompanionConnected()) {
+      reject(new Error('The companion is not connected. Open the MCP connector and connect it.'));
+      return;
+    }
+    const id = `an-${Date.now()}-${anthropicSeq++}`;
+    const timer = setTimeout(() => {
+      anthropicPending.delete(id);
+      reject(new Error('The companion did not respond in time.'));
+    }, ANTHROPIC_TIMEOUT_MS);
+    anthropicPending.set(id, { resolve, reject, timer });
+    try {
+      ws!.send(JSON.stringify({ type: 'anthropic', id, payload }));
+    } catch (e: any) {
+      anthropicPending.delete(id);
+      clearTimeout(timer);
+      reject(new Error(e?.message || 'Could not reach the companion.'));
+    }
+  });
+}
+
+function settleAnthropic(id: string, ok: boolean, data: any, error?: string) {
+  const p = anthropicPending.get(id);
+  if (!p) return;
+  anthropicPending.delete(id);
+  clearTimeout(p.timer);
+  if (ok) p.resolve(data);
+  else p.reject(new Error(error || 'Anthropic request failed'));
+}
+
+function rejectAllAnthropic(reason: string) {
+  for (const [, p] of anthropicPending) {
+    clearTimeout(p.timer);
+    p.reject(new Error(reason));
+  }
+  anthropicPending.clear();
+}
 // Track transitions so the activity feed shows connection progress without
 // spamming a line on every backoff tick.
 let wasConnected = false;
@@ -68,12 +122,14 @@ function open() {
     },
     onStatus: (s, e) => {
       setStatus(s, e);
+      connected = s === 'connected';
       if (s === 'connected') {
         wasConnected = true;
         loggedWaiting = false;
       }
     },
     onActivity: (t) => pushActivity(t),
+    onAnthropicResult: (id, ok, data, error) => settleAnthropic(id, ok, data, error),
   });
 
   setStatus('connecting');
@@ -91,6 +147,8 @@ function open() {
   };
   ws.onclose = () => {
     ws = null;
+    connected = false;
+    rejectAllAnthropic('The companion connection dropped.');
     if (stopped) {
       setStatus('disconnected');
       return;
@@ -129,6 +187,8 @@ export function startMcpBridge(token: string, url: string = DEFAULT_MCP_URL) {
 /** Stop the bridge and mark disconnected. */
 export function stopMcpBridge() {
   stopped = true;
+  connected = false;
+  rejectAllAnthropic('The companion was disconnected.');
   clearTimeout(retryTimer);
   try {
     ws?.close();

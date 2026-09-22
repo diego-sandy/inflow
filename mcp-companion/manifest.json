@@ -12,7 +12,10 @@
     "mcp_config": {
       "command": "node",
       "args": ["${__dirname}/src/index.mjs"],
-      "env": { "INFLOW_PAIRING_CODE": "${user_config.pairing_code}" }
+      "env": {
+        "INFLOW_PAIRING_CODE": "${user_config.pairing_code}",
+        "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}"
+      }
     }
   },
   "user_config": {
@@ -21,6 +24,13 @@
       "title": "inflow pairing code",
       "description": "Copy it from inflow → MCP connector → Connect Claude.",
       "required": true,
+      "sensitive": true
+    },
+    "anthropic_api_key": {
+      "type": "string",
+      "title": "Anthropic API key (optional)",
+      "description": "Only needed for inflow's in-app Claude agent. The key stays here in the companion and is never sent to the browser. Leave blank if you don't use the in-app agent.",
+      "required": false,
       "sensitive": true
     }
   }

@@ -17,6 +17,16 @@ MCP client  ──stdio (MCP)──▶  inflow-mcp  ──ws://127.0.0.1:8123─
 
 inflow generates a **pairing code** and shows it in the app (MCP connector → Connect Claude). The client passes that code to the companion (`INFLOW_PAIRING_CODE`); the companion only accepts the extension's WebSocket handshake when the codes match. It notifies the client when tools appear/disappear, exits when the client quits (no orphaned port holders), and retries the port if a stale instance is still up.
 
+### In-app Claude agent (optional)
+
+The companion can also power inflow's **in-app AI Chat agent** (Claude calling inflow's tools directly, without Claude Desktop). Because the companion calls Anthropic **server-side**, this works even when your Anthropic org blocks browser/CORS access (e.g. BAA/enterprise orgs), and your API key never enters the browser.
+
+Set `ANTHROPIC_API_KEY` in the companion's environment (via the `.mcpb` install prompt, or export it before `node src/index.mjs`). The extension sends chat requests over the localhost socket; the companion adds the key and relays to Anthropic. Leave it unset to disable the in-app agent (Claude Desktop / MCP still work).
+
+```
+inflow extension  ──ws (anthropic request)──▶  inflow-mcp  ──https──▶  api.anthropic.com
+```
+
 ---
 
 ## Install

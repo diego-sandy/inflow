@@ -18,7 +18,9 @@ export type InboundMessage =
   | { type: 'hello_ack' }
   | { type: 'error'; message?: string }
   | { type: 'call'; id: string; name: string; args?: Record<string, any> }
-  | { type: 'ping' };
+  | { type: 'ping' }
+  // Reply to an `anthropic` request the extension sent (the in-app Claude agent).
+  | { type: 'anthropic_result'; id: string; ok: boolean; data?: any; error?: string };
 
 export interface BridgeHandlers {
   token: string;
@@ -27,6 +29,8 @@ export interface BridgeHandlers {
   send: (msg: object) => void;
   onStatus: (status: BridgeStatus, error?: string) => void;
   onActivity: (text: string) => void;
+  /** Resolve a pending Anthropic proxy request (bridge-client owns the map). */
+  onAnthropicResult?: (id: string, ok: boolean, data: any, error?: string) => void;
 }
 
 /** Friendly one-line description of a tool call for the activity feed. */
@@ -75,6 +79,9 @@ export function createBridgeSession(h: BridgeHandlers) {
           return;
         case 'ping':
           h.send({ type: 'pong' });
+          return;
+        case 'anthropic_result':
+          h.onAnthropicResult?.(msg.id, msg.ok, msg.data, msg.error);
           return;
         case 'call': {
           h.onActivity(activityLabel(msg.name, msg.args));

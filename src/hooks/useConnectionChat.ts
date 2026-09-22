@@ -7,7 +7,10 @@ import { db } from '@/db/database';
 import { useInsightChatStore } from '@/store/insight-chat-store';
 import { answerConnectionQuestion, CHAT_CONTEXT_LIMIT, DEFAULT_CHAT_INSTRUCTIONS, type ChatMessage } from '@/lib/connection-chat';
 import { smartRetrieve } from '@/lib/connection-retrieval';
-import { getAIChatMaxWords, getAIChatInstructions, getAIChatAppendInstructions } from '@/lib/ai-settings';
+import { answerWithClaudeAgent } from '@/lib/agent/network-agent';
+import { isCompanionConnected } from '@/lib/mcp/bridge-client';
+import { activityLabel } from '@/lib/mcp/bridge-protocol';
+import { getAIChatMaxWords, getAIChatInstructions, getAIChatAppendInstructions, getAIProvider, getAnthropicModel } from '@/lib/ai-settings';
 import type { InsightChat } from '@/types/insight-chat';
 
 export interface ConnectionChatState {
@@ -97,48 +100,66 @@ export function useConnectionChat(): ConnectionChatState {
       await persist(id, withUser, title);
 
       try {
-        // Apply the user's Advanced AI settings. Instructions are the base
-        // prompt (their edited version, or the default); the word target is a
-        // soft hint. We never cap output tokens, so answers aren't truncated.
-        const [targetWords, storedInstructions, append] = await Promise.all([
-          getAIChatMaxWords(),
-          getAIChatInstructions(),
-          getAIChatAppendInstructions(),
-        ]);
-        const instructions = storedInstructions.trim() || DEFAULT_CHAT_INSTRUCTIONS;
+        // Phase 2: when Claude is the provider AND the companion is connected,
+        // run the tool-use agent (Claude calls inflow's tools via the companion —
+        // no CORS, key stays out of the browser). Otherwise use the Phase 1
+        // retrieval + single-call path (Gemini, or Claude without the companion).
+        const provider = await getAIProvider();
+        const useAgent = provider === 'anthropic' && isCompanionConnected();
 
-        // Phase 1 retrieval: narrow to the relevant connections for a targeted
-        // question (broad questions still see everything). Surface the step.
-        store.setStatus('Searching your network…');
-        const { subset, info } = await smartRetrieve(connections, question, predict);
-        if (info.mode === 'targeted') {
-          store.setStatus(`Focused on ${info.used} of ${info.total} connections · ${info.keywords.slice(0, 4).join(', ')}`);
+        let finalText = '';
+        if (useAgent) {
+          const model = await getAnthropicModel('quality');
+          store.setStatus('Claude is working…');
+          finalText = await answerWithClaudeAgent({
+            question,
+            model,
+            onStep: (s) => useInsightChatStore.getState().setStatus(activityLabel(s.tool, s.input)),
+          });
         } else {
-          store.setStatus(`Reading your ${info.total.toLocaleString()} connections…`);
+          // Apply the user's Advanced AI settings (base prompt, on-top
+          // instructions, soft word target). Output is never capped.
+          const [targetWords, storedInstructions, append] = await Promise.all([
+            getAIChatMaxWords(),
+            getAIChatInstructions(),
+            getAIChatAppendInstructions(),
+          ]);
+          const instructions = storedInstructions.trim() || DEFAULT_CHAT_INSTRUCTIONS;
+
+          // Phase 1 retrieval: narrow to the relevant connections for a targeted
+          // question (broad questions still see everything). Surface the step.
+          store.setStatus('Searching your network…');
+          const { subset, info } = await smartRetrieve(connections, question, predict);
+          if (info.mode === 'targeted') {
+            store.setStatus(`Focused on ${info.used} of ${info.total} connections · ${info.keywords.slice(0, 4).join(', ')}`);
+          } else {
+            store.setStatus(`Reading your ${info.total.toLocaleString()} connections…`);
+          }
+
+          // Stream the answer in live so the user sees it build.
+          let streamed = '';
+          const renderStream = () => {
+            useInsightChatStore.getState().setMessages([
+              ...withUser,
+              { role: 'assistant', content: streamed },
+            ]);
+          };
+          const answer = await answerConnectionQuestion(subset, question, predict, history, CHAT_CONTEXT_LIMIT, {
+            maxTokens: 0, // uncapped — never truncate the answer on screen
+            instructions,
+            append,
+            targetWords,
+            onToken: (chunk) => {
+              streamed += chunk;
+              renderStream();
+            },
+          });
+          finalText = answer || streamed;
         }
 
-        // Stream the answer in live so the user sees it build instead of a blank
-        // "Thinking…". We append an empty assistant turn and grow its content.
-        let streamed = '';
-        const renderStream = () => {
-          useInsightChatStore.getState().setMessages([
-            ...withUser,
-            { role: 'assistant', content: streamed },
-          ]);
-        };
-        const answer = await answerConnectionQuestion(subset, question, predict, history, CHAT_CONTEXT_LIMIT, {
-          maxTokens: 0, // uncapped — never truncate the answer on screen
-          instructions,
-          append,
-          targetWords,
-          onToken: (chunk) => {
-            streamed += chunk;
-            renderStream();
-          },
-        });
         const withAnswer: ChatMessage[] = [
           ...withUser,
-          { role: 'assistant', content: answer || streamed || "I couldn't find an answer in your connections." },
+          { role: 'assistant', content: finalText || "I couldn't find an answer in your connections." },
         ];
         useInsightChatStore.getState().setMessages(withAnswer);
         await persist(id, withAnswer);

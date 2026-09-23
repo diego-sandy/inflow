@@ -91,6 +91,8 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
     const textareaRef = useReactRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useReactRef<HTMLInputElement | null>(null);
     const photoInputRef = useReactRef<HTMLInputElement | null>(null);
+    // Tracks whether AI compose mode is on, for stale-closure send listeners.
+    const aiModeRef = useReactRef(false);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     // Outbox actions (Save draft / Schedule) — only on the new-message flow,
     // where recipients are unambiguous (a draft-* conversation).
@@ -151,6 +153,8 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
 
     // Re-measure when body changes (e.g. draft restore)
     useEffect(() => { autoResize(); }, [body, autoResize]);
+    // Re-measure when the reused field switches to/holds the AI instruction.
+    useEffect(() => { autoResize(); }, [ai?.enabled, ai?.instruction, autoResize]);
 
     // Stable object URLs for image previews (created once per file, revoked on removal)
     const prevUrls = useReactRef<Map<File, string>>(new Map());
@@ -479,6 +483,9 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
     // Listen for send (Enter) and send+archive (Cmd+Enter) from keyboard manager
     useEffect(() => {
       function onSend() {
+        // In AI mode the field holds an instruction, not a message — Enter
+        // generates instead (handled on the textarea). Never send here.
+        if (aiModeRef.current) return;
         handleSend();
       }
       // AI Compose: Approve sends the generated draft directly (one click). The
@@ -490,6 +497,7 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       }
       document.addEventListener('inflow:ai-compose-send', onAiSend);
       function onSendAndArchive() {
+        if (aiModeRef.current) return;
         const text = body.trim();
         const filesToSend = attachments.length > 0 ? [...attachments] : undefined;
         if (!text && !filesToSend) return;
@@ -530,6 +538,13 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
 
     const hasContent = !!(body.trim() || attachments.length > 0);
 
+    // AI compose mode: the reply field is reused as the instruction box, and the
+    // Send arrow becomes Generate. A ref lets the (stale-closure) send listeners
+    // bail so a stray Enter never sends a leftover message while instructing.
+    const aiMode = !!ai?.enabled;
+    const displayValue = aiMode ? (ai?.instruction ?? '') : body;
+    aiModeRef.current = aiMode;
+
     return (
       <div className="border-t border-edge p-3">
         {/* Reply preview banner */}
@@ -564,8 +579,8 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
           </div>
         )}
 
-        {/* AI reply suggestion chips */}
-        {body.length === 0 && (replySuggestions.suggestions.length > 0 || replySuggestions.isLoading) && (
+        {/* AI reply suggestion chips (not while instructing in AI compose mode) */}
+        {!aiMode && body.length === 0 && (replySuggestions.suggestions.length > 0 || replySuggestions.isLoading) && (
           <div className="mb-2 flex gap-1.5">
             {replySuggestions.isLoading ? (
               <>
@@ -624,43 +639,6 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
           }}
         />
 
-        {/* AI compose: describe the message; the model drafts it as a pending
-            bubble above for approval. Only shown when the mode is toggled on. */}
-        {ai?.enabled && (
-          <div className="mb-2 rounded-xl border border-blue-500/40 bg-surface-input p-2">
-            <div className="flex items-center gap-2 px-0.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">
-                <SparkleIcon className="h-3 w-3" /> AI compose
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[11px] text-fg-faint">Describe the message — the AI drafts it above for your approval.</span>
-            </div>
-            <div className="mt-1.5 flex items-end gap-2">
-              <input
-                value={ai.instruction}
-                onChange={(e) => ai.setInstruction(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (ai.instruction.trim() && ai.status !== 'generating') void ai.generate();
-                  }
-                }}
-                placeholder="e.g. Thank them, sound professional, and offer a few new times"
-                aria-label="Describe the message for the AI to write"
-                className="min-w-0 flex-1 rounded-lg bg-surface px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
-              />
-              <button
-                type="button"
-                onClick={() => void ai.generate()}
-                disabled={!ai.instruction.trim() || ai.status === 'generating'}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
-              >
-                <SparkleIcon className="h-4 w-4" />
-                {ai.status === 'generating' ? 'Writing…' : 'Generate'}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Unified composer field: attachments, textarea, and a slim action row
             all share one rounded surface (iMessage / Slack style). */}
         <div className="rounded-2xl bg-surface-input px-2.5 pb-1.5 pt-2 ring-1 ring-inset ring-ring-muted transition-colors focus-within:ring-blue-500/50">
@@ -714,7 +692,7 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
 
           {/* Textarea + overlays (ghost autocomplete, emoji popup) */}
           <div className="relative flex items-end">
-            {autocomplete.suggestion && (
+            {!aiMode && autocomplete.suggestion && (
               <div
                 className="pointer-events-none absolute inset-0 overflow-hidden px-1.5 py-1 text-sm"
                 style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}
@@ -725,9 +703,16 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
             )}
             <textarea
               ref={setRefs}
-              value={body}
+              value={displayValue}
               onChange={(e) => {
                 const val = e.target.value;
+                // AI mode: the field is the instruction box — no message state,
+                // no emoji shortcodes, no autocomplete.
+                if (aiMode) {
+                  ai?.setInstruction(val);
+                  autoResize();
+                  return;
+                }
                 setBody(val);
                 autoResize();
                 // Track whether cursor is at the end of the text
@@ -751,7 +736,8 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
               }}
               onFocus={() => setComposeActive(true)}
               onBlur={() => { setComposeActive(false); setEmojiQuery(null); }}
-              placeholder="Reply..."
+              placeholder={aiMode ? 'Describe the message the AI should write…' : 'Reply...'}
+              aria-label={aiMode ? 'Describe the message for the AI to write' : undefined}
               rows={1}
               data-compose-input=""
               data-emoji-open={emojiOpen ? '' : undefined}
@@ -765,6 +751,16 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                 }
               }}
               onKeyDown={(e) => {
+                // AI mode: Enter generates from the instruction (Shift+Enter =
+                // newline). Nothing else in the composer's key handling applies.
+                if (aiMode) {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if ((ai?.instruction ?? '').trim() && ai?.status !== 'generating') void ai?.generate();
+                  }
+                  return;
+                }
                 // Emoji autocomplete keyboard handling (when popup is open)
                 if (emojiQuery !== null && emojiResults.length > 0) {
                   if (e.key === 'ArrowDown') {
@@ -839,9 +835,10 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
+              disabled={aiMode}
               title="Attach a file"
               aria-label="Attach a file"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary disabled:pointer-events-none disabled:opacity-40"
             >
               <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -851,9 +848,10 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
             <button
               type="button"
               onClick={() => photoInputRef.current?.click()}
+              disabled={aiMode}
               title="Attach a photo"
               aria-label="Attach a photo"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary disabled:pointer-events-none disabled:opacity-40"
             >
               <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -873,10 +871,11 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
               <button
                 type="button"
                 onClick={() => setEmojiPickerOpen((v) => !v)}
+                disabled={aiMode}
                 title="Emoji"
                 aria-label="Emoji"
                 aria-expanded={emojiPickerOpen}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover ${emojiPickerOpen ? 'text-fg-secondary' : 'text-fg-muted hover:text-fg-secondary'}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-40 ${emojiPickerOpen ? 'text-fg-secondary' : 'text-fg-muted hover:text-fg-secondary'}`}
               >
                 <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
@@ -908,7 +907,8 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
 
             <div className="flex-1" />
 
-            {/* Save-as-draft / schedule — for new messages and replies alike */}
+            {/* Save-as-draft / schedule — hidden while instructing in AI mode */}
+            {!aiMode && (
             <div className="relative shrink-0">
                 <button
                   type="button"
@@ -960,8 +960,23 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                   </>
                 )}
               </div>
+            )}
 
-            {/* Send — hold ⌘ to send and archive (hint lives in the tooltip) */}
+            {/* AI mode: the Send arrow becomes Generate (runs the instruction). */}
+            {aiMode ? (
+              <button
+                type="button"
+                onClick={() => void ai?.generate()}
+                disabled={!(ai?.instruction ?? '').trim() || ai?.status === 'generating'}
+                aria-label="Generate a draft"
+                title="Generate a draft from your instruction"
+                className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-blue-500 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <SparkleIcon className="h-4 w-4" />
+                {ai?.status === 'generating' ? 'Writing…' : 'Generate'}
+              </button>
+            ) : (
+            /* Send — hold ⌘ to send and archive (hint lives in the tooltip) */
             <button
               onClick={() => {
                 if (cmdHeld) {
@@ -989,6 +1004,7 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                 </svg>
               )}
             </button>
+            )}
           </div>
         </div>
       </div>

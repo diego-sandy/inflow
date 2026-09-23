@@ -78,13 +78,23 @@ it('hides the AI toggle when no provider is available', async () => {
   expect(screen.queryByRole('button', { name: /AI compose/i })).not.toBeInTheDocument();
 });
 
-it('when enabled, shows the instruction field and Generate runs generation', async () => {
+it('when enabled, reuses the reply field for the instruction and swaps Send for Generate', async () => {
   const ai = mockAi({ enabled: true, instruction: 'Thank them and offer times' });
   await renderCompose(ai);
+  // The same composer textarea is now the instruction box.
   const input = screen.getByLabelText(/Describe the message/i);
-  expect(input).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /^Generate$/i }));
+  expect(input).toHaveAttribute('data-compose-input');
+  // Send is gone; Generate takes its place and runs generation.
+  expect(screen.queryByRole('button', { name: /^Send/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Generate a draft/i }));
   expect(ai.generate).toHaveBeenCalled();
+});
+
+it('typing in the reused field updates the instruction (not the message body)', async () => {
+  const ai = mockAi({ enabled: true });
+  await renderCompose(ai);
+  fireEvent.change(screen.getByLabelText(/Describe the message/i), { target: { value: 'Reschedule politely' } });
+  expect(ai.setInstruction).toHaveBeenCalledWith('Reschedule politely');
 });
 
 it('approving a draft sends it directly — one click, no extra send step', async () => {

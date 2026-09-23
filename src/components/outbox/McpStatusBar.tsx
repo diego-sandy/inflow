@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { useUIStore, type McpStatus } from '@/store/ui-store';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
+import { StatusLight, type StatusTone } from '@/components/common/StatusLight';
 import { getOrCreatePairingCode, getMcpEnabled, setMcpEnabled } from '@/lib/mcp/pairing';
 import { startMcpBridge, stopMcpBridge } from '@/lib/mcp/bridge-client';
 
-const STATUS_META: Record<McpStatus, { label: string; dot: string }> = {
-  disconnected: { label: 'Claude not connected', dot: 'bg-fg-faint' },
-  connecting: { label: 'Connecting to Claude…', dot: 'bg-amber-500 animate-pulse' },
-  connected: { label: 'Claude connected', dot: 'bg-emerald-500' },
-  error: { label: 'Claude connection error', dot: 'bg-red-500' },
+const STATUS_META: Record<McpStatus, { label: string; tone: StatusTone }> = {
+  disconnected: { label: 'Claude not connected', tone: 'red' },
+  connecting: { label: 'Connecting to Claude…', tone: 'yellow' },
+  connected: { label: 'Claude connected', tone: 'green' },
+  error: { label: 'Claude connection error', tone: 'red' },
 };
 
 /**
@@ -95,7 +96,7 @@ export function McpStatusBar() {
           title="Show activity log"
           className="flex items-center gap-1.5 text-sm font-medium text-fg-strong"
         >
-          <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
+          <StatusLight tone={meta.tone} />
           {meta.label}
           {activity.length > 0 && (
             <span className="rounded-full bg-surface-input px-1.5 text-[10px] font-semibold tabular-nums text-fg-muted">

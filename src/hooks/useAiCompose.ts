@@ -1,12 +1,15 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAISession } from './useAISession';
 import { useAiComposeStore, type AiComposeStatus } from '@/store/ai-compose-store';
 import { buildComposePrompt, COMPOSE_SYSTEM_PROMPT, COMPOSE_MAX_TOKENS } from '@/lib/ai-compose-prompt';
+import { getAIComposeHideWhenUnavailable } from '@/lib/ai-settings';
 import type { Message } from '@/types/message';
 
 export interface AiComposeApi {
   /** Whether any AI provider is usable (a key or the companion). */
   available: boolean;
+  /** When true, hide the button entirely if unavailable (user preference). */
+  hideWhenUnavailable: boolean;
   enabled: boolean;
   instruction: string;
   draft: string | null;
@@ -38,6 +41,7 @@ export function useAiCompose({
   participantNames: string[];
 }): AiComposeApi {
   const { available, predict } = useAISession();
+  const [hideWhenUnavailable, setHideWhenUnavailable] = useState(false);
   const enabled = useAiComposeStore((s) => s.enabled);
   const instruction = useAiComposeStore((s) => s.instruction);
   const draft = useAiComposeStore((s) => s.draft);
@@ -51,6 +55,19 @@ export function useAiCompose({
   useEffect(() => {
     useAiComposeStore.getState().focusConversation(conversationId);
   }, [conversationId]);
+
+  // Load + watch the "hide when unavailable" preference.
+  useEffect(() => {
+    let cancelled = false;
+    getAIComposeHideWhenUnavailable().then((v) => { if (!cancelled) setHideWhenUnavailable(v); }).catch(() => {});
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if ('aiComposeHideWhenUnavailable' in changes) {
+        setHideWhenUnavailable(changes.aiComposeHideWhenUnavailable.newValue === true);
+      }
+    };
+    chrome?.storage?.local?.onChanged?.addListener?.(listener);
+    return () => { cancelled = true; chrome?.storage?.local?.onChanged?.removeListener?.(listener); };
+  }, []);
 
   const generate = useCallback(async () => {
     const store = useAiComposeStore.getState();
@@ -101,6 +118,7 @@ export function useAiCompose({
 
   return {
     available,
+    hideWhenUnavailable,
     enabled,
     instruction,
     draft,

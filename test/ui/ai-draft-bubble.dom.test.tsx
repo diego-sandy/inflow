@@ -9,7 +9,7 @@ import type { AiComposeApi } from '@/hooks/useAiCompose';
 
 function mockAi(over: Partial<AiComposeApi> = {}): AiComposeApi {
   return {
-    available: true, enabled: true, instruction: '', draft: null, status: 'idle', error: null,
+    available: true, hideWhenUnavailable: false, enabled: true, instruction: '', draft: null, status: 'idle', error: null,
     setEnabled: vi.fn(), setInstruction: vi.fn(), generate: vi.fn(), approve: vi.fn(), discard: vi.fn(),
     ...over,
   };

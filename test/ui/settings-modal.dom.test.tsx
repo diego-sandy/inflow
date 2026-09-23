@@ -15,6 +15,8 @@ vi.mock('@/lib/ai-settings', () => ({
   }),
   getAISuggestionsEnabled: vi.fn(async () => true),
   setAISuggestionsEnabled: vi.fn(),
+  getAIComposeHideWhenUnavailable: vi.fn(async () => false),
+  setAIComposeHideWhenUnavailable: vi.fn(),
   getCategorizeMode: vi.fn(async () => 'auto'),
   setCategorizeMode: vi.fn(),
   // Provider defaults to Gemini so the existing Gemini-focused assertions hold.

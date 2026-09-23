@@ -886,8 +886,10 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
               </button>
             </div>
 
-            {/* AI compose toggle — flips the composer into "describe it" mode. */}
-            {ai?.available && (
+            {/* AI compose toggle. Active when a provider is available; otherwise
+                greyed with a hint that links to setup — or hidden entirely if the
+                user turned that on in Settings (for people who don't use AI). */}
+            {ai && (ai.available ? (
               <button
                 type="button"
                 onClick={() => ai.setEnabled(!ai.enabled)}
@@ -903,7 +905,26 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                 <SparkleIcon className="h-[18px] w-[18px]" />
                 <span className="hidden sm:inline">AI</span>
               </button>
-            )}
+            ) : !ai.hideWhenUnavailable ? (
+              <span className="group/aineed relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => useUIStore.getState().openSettings('ai')}
+                  aria-label="AI compose — set up AI to use it"
+                  className="flex h-8 shrink-0 cursor-help items-center gap-1 rounded-lg px-2 text-xs font-medium text-fg-faint opacity-60 transition-opacity hover:bg-surface-hover hover:opacity-100"
+                >
+                  <SparkleIcon className="h-[18px] w-[18px]" />
+                  <span className="hidden sm:inline">AI</span>
+                </button>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 w-56 -translate-x-1/2 rounded-lg bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-fg-secondary opacity-0 shadow-lg ring-1 ring-inset ring-edge transition-opacity group-hover/aineed:opacity-100"
+                >
+                  AI compose needs a provider — add a key or connect the companion.
+                  <span className="mt-0.5 block font-medium text-blue-500 dark:text-blue-300">Open AI settings →</span>
+                </span>
+              </span>
+            ) : null)}
 
             <div className="flex-1" />
 

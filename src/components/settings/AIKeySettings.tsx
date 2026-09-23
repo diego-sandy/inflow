@@ -15,6 +15,8 @@ import {
   setGeminiModel,
   getAISuggestionsEnabled,
   setAISuggestionsEnabled,
+  getAIComposeHideWhenUnavailable,
+  setAIComposeHideWhenUnavailable,
   AI_MODEL_CATALOG,
   type AIProvider,
   type AIModelTier,
@@ -223,6 +225,7 @@ export function AIKeySettings() {
   const [qualityModel, setQualityModel] = useState('claude-sonnet-5');
 
   const [suggestionsOn, setSuggestionsOn] = useState(true);
+  const [hideAiCompose, setHideAiCompose] = useState(false);
   const [categorizeMode, setCategorizeMode] = useCategorizeMode();
 
   useEffect(() => {
@@ -235,6 +238,7 @@ export function AIKeySettings() {
     getGeminiModel('fast').then(setGeminiFastModel);
     getGeminiModel('quality').then(setGeminiQualityModel);
     getAISuggestionsEnabled().then(setSuggestionsOn);
+    getAIComposeHideWhenUnavailable().then(setHideAiCompose);
   }, []);
 
   const usesGemini = fastProvider === 'gemini' || qualityProvider === 'gemini';
@@ -686,6 +690,13 @@ export function AIKeySettings() {
         {!hasAnyKey && (
           <p className="mt-2 text-[11px] text-fg-faint">Add an API key above to enable.</p>
         )}
+
+        <ToggleRow
+          label="Hide AI compose when unavailable"
+          description="Hide the ✦ AI button in the message composer when no AI provider is set up. Off shows it greyed with a hint."
+          checked={hideAiCompose}
+          onChange={(next) => { setHideAiCompose(next); setAIComposeHideWhenUnavailable(next); }}
+        />
       </div>
     </div>
   );

@@ -33,6 +33,7 @@ vi.mock('@/hooks/useReplySuggestions', () => ({
 function mockAi(over: Partial<AiComposeApi> = {}): AiComposeApi {
   return {
     available: true,
+    hideWhenUnavailable: false,
     enabled: false,
     instruction: '',
     draft: null,
@@ -73,9 +74,19 @@ it('shows the AI toggle when a provider is available; toggling calls setEnabled'
   expect(ai.setEnabled).toHaveBeenCalledWith(true);
 });
 
-it('hides the AI toggle when no provider is available', async () => {
-  await renderCompose(mockAi({ available: false }));
-  expect(screen.queryByRole('button', { name: /AI compose/i })).not.toBeInTheDocument();
+it('greys the AI button when no provider is available and links to setup', async () => {
+  await renderCompose(mockAi({ available: false, hideWhenUnavailable: false }));
+  const btn = screen.getByRole('button', { name: /set up AI/i });
+  expect(btn).toBeInTheDocument();
+  fireEvent.click(btn);
+  const s = useUIStore.getState();
+  expect(s.settingsOpen).toBe(true);
+  expect(s.settingsSection).toBe('ai');
+});
+
+it('hides the AI button entirely when unavailable and the user opted to hide it', async () => {
+  await renderCompose(mockAi({ available: false, hideWhenUnavailable: true }));
+  expect(screen.queryByRole('button', { name: /AI compose|set up AI/i })).not.toBeInTheDocument();
 });
 
 it('when enabled, reuses the reply field for the instruction and swaps Send for Generate', async () => {

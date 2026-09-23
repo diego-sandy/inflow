@@ -2,6 +2,7 @@ import { readLocal } from './storage';
 
 const STORAGE_KEY = 'geminiApiKey';
 const SUGGESTIONS_KEY = 'aiSuggestionsEnabled';
+const AI_COMPOSE_HIDE_KEY = 'aiComposeHideWhenUnavailable';
 const INTERESTS_KEY = 'connectionInterests';
 const CATEGORIZE_MODE_KEY = 'categorizeMode';
 const PROVIDER_KEY = 'aiProvider';
@@ -301,6 +302,18 @@ export async function getAISuggestionsEnabled(): Promise<boolean> {
 
 export async function setAISuggestionsEnabled(enabled: boolean): Promise<void> {
   await chrome.storage.local.set({ [SUGGESTIONS_KEY]: enabled });
+}
+
+/**
+ * When true, the AI compose button is hidden entirely if no AI provider is set
+ * up (for users who don't use AI). Default false: show it greyed with a hint.
+ */
+export async function getAIComposeHideWhenUnavailable(): Promise<boolean> {
+  return (await readLocal<boolean>(AI_COMPOSE_HIDE_KEY)) === true;
+}
+
+export async function setAIComposeHideWhenUnavailable(hide: boolean): Promise<void> {
+  await chrome.storage.local.set({ [AI_COMPOSE_HIDE_KEY]: hide });
 }
 
 /**

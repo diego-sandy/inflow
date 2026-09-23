@@ -80,7 +80,16 @@ async function openSettings(section?: 'ai' | 'appearance' | 'advanced' | 'about'
 beforeEach(() => {
   mockSavedKey = null;
   setGeminiApiKey.mockClear();
-  act(() => useUIStore.setState({ settingsOpen: false, settingsSection: 'ai' }));
+  // Default: Gemini for both tiers, companion disconnected.
+  vi.mocked(aiSettings.getTierProvider).mockImplementation(async () => 'gemini');
+  act(() =>
+    useUIStore.setState({
+      settingsOpen: false,
+      settingsSection: 'ai',
+      mcpStatus: 'disconnected',
+      mcpKeys: { anthropic: false, gemini: false },
+    }),
+  );
 });
 
 it('is hidden until opened', () => {
@@ -151,6 +160,33 @@ it('shows the Demo mode control', async () => {
   await openSettings('advanced');
   expect(await screen.findByText(/Browse a synthetic inbox/i)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /enter demo mode|exit demo mode/i })).toBeInTheDocument();
+});
+
+it('AI section: connector status reads "Not connected" when the companion is down', async () => {
+  await openSettings('ai');
+  expect(await screen.findByText(/MCP connector: Not connected/i)).toBeInTheDocument();
+});
+
+it('AI section: when the companion holds the Claude key, shows it active and hides the paste box', async () => {
+  // Quality tier = Claude so the Claude key section renders.
+  vi.mocked(aiSettings.getTierProvider).mockImplementation(async (tier) =>
+    tier === 'quality' ? 'anthropic' : 'gemini',
+  );
+  act(() => useUIStore.setState({ mcpStatus: 'connected', mcpKeys: { anthropic: true, gemini: false } }));
+
+  await openSettings('ai');
+
+  // Connector status line reflects the live connection.
+  expect(await screen.findByText(/MCP connector: Connected/i)).toBeInTheDocument();
+  expect(screen.getByText(/Running Claude server-side/i)).toBeInTheDocument();
+
+  // Claude key shows as active in the companion, and the paste box is gone.
+  expect(screen.getByText(/Active · in the MCP connector/i)).toBeInTheDocument();
+  expect(screen.queryByPlaceholderText(/Paste your Claude API key/i)).not.toBeInTheDocument();
+
+  // "Use a browser key instead" reveals the paste box on demand.
+  fireEvent.click(screen.getByRole('button', { name: /Use a browser key instead/i }));
+  expect(await screen.findByPlaceholderText(/Paste your Claude API key/i)).toBeInTheDocument();
 });
 
 it('closes on the close button and via Escape', async () => {

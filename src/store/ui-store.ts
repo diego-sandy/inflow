@@ -87,6 +87,9 @@ interface UIState {
   mcpStatus: McpStatus;
   mcpError: string | null;
   mcpActivity: McpActivityEntry[];
+  /** Which provider keys the connected companion holds (advertised on connect).
+   * Lets Settings show a key as "active in the companion" vs. in the browser. */
+  mcpKeys: { anthropic: boolean; gemini: boolean };
 
   setDemoMode: (active: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -122,6 +125,7 @@ interface UIState {
   toggleNavRail: () => void;
   setSelectedConnectionUrn: (urn: string | null) => void;
   setMcpStatus: (status: McpStatus, error?: string | null) => void;
+  setMcpKeys: (keys: { anthropic: boolean; gemini: boolean }) => void;
   pushMcpActivity: (text: string) => void;
   clearMcpActivity: () => void;
   setConnectionsFilter: (filter: ConnectionFilter) => void;
@@ -270,6 +274,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   mcpStatus: 'disconnected',
   mcpError: null,
   mcpActivity: [],
+  mcpKeys: { anthropic: false, gemini: false },
   tabMemory: {},
   _pendingRestore: null,
 
@@ -382,7 +387,14 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ navRailCollapsed: next });
   },
   setSelectedConnectionUrn: (urn) => set({ selectedConnectionUrn: urn }),
-  setMcpStatus: (status, error = null) => set({ mcpStatus: status, mcpError: status === 'error' ? error : null }),
+  setMcpStatus: (status, error = null) =>
+    set({
+      mcpStatus: status,
+      mcpError: status === 'error' ? error : null,
+      // Advertised keys are only meaningful while connected; drop them otherwise.
+      ...(status === 'connected' ? {} : { mcpKeys: { anthropic: false, gemini: false } }),
+    }),
+  setMcpKeys: (keys) => set({ mcpKeys: keys }),
   pushMcpActivity: (text) =>
     set((s) => ({
       // Cap the feed so it can't grow unbounded during a long session.

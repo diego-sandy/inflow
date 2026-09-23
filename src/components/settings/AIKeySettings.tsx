@@ -71,6 +71,46 @@ function ProviderGlyph({ provider, className }: { provider: AIProvider; classNam
 
 const providerName = (p: AIProvider) => (p === 'anthropic' ? 'Claude' : 'Gemini');
 
+/** Small green check. */
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+/** Status shown in place of the paste box when the companion holds this key. */
+function CompanionKeyStatus({ provider, onUseBrowser }: { provider: AIProvider; onUseBrowser: () => void }) {
+  const name = providerName(provider);
+  return (
+    <div className="mt-3 rounded-lg bg-emerald-500/5 p-3 ring-1 ring-inset ring-emerald-500/25">
+      <div className="flex items-center gap-2">
+        <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+        <p className="text-sm font-medium text-fg-strong">Active · in the MCP connector</p>
+      </div>
+      <p className="mt-1 pl-6 text-xs text-fg-muted">
+        Your {name} key stays in the companion, off the browser. inflow runs {name} server-side while the connector is connected.
+      </p>
+      <button
+        onClick={onUseBrowser}
+        className="mt-2 pl-6 text-xs font-medium text-blue-500 transition-colors hover:text-blue-400"
+      >
+        Use a browser key instead
+      </button>
+    </div>
+  );
+}
+
+/** Compact "back to the companion key" link, shown when the browser override is open. */
+function UseCompanionLink({ onBack }: { onBack: () => void }) {
+  return (
+    <button onClick={onBack} className="mt-3 text-xs font-medium text-blue-500 transition-colors hover:text-blue-400">
+      ← Use the key in the MCP connector instead
+    </button>
+  );
+}
+
 /** Custom dropdown to pick a provider+model together, grouped, with logos + tags. */
 function ProviderModelSelect({
   tier,
@@ -157,6 +197,15 @@ function ProviderModelSelect({
  */
 export function AIKeySettings() {
   const showToast = useUIStore((s) => s.showToast);
+  // Live companion state: is the connector up, and which keys does it hold?
+  const mcpConnected = useUIStore((s) => s.mcpStatus) === 'connected';
+  const mcpKeys = useUIStore((s) => s.mcpKeys);
+  const anthCompanion = mcpConnected && mcpKeys.anthropic;
+  const geminiCompanion = mcpConnected && mcpKeys.gemini;
+  // When the companion holds a key, we hide the browser paste box; these let the
+  // user reveal it anyway ("use a browser key instead").
+  const [anthUseBrowser, setAnthUseBrowser] = useState(false);
+  const [geminiUseBrowser, setGeminiUseBrowser] = useState(false);
 
   const [fastProvider, setFastProviderState] = useState<AIProvider>('gemini');
   const [qualityProvider, setQualityProviderState] = useState<AIProvider>('gemini');
@@ -317,11 +366,32 @@ export function AIKeySettings() {
   };
 
   const mask = (k: string) => k.slice(0, 6) + '…' + k.slice(-4);
-  // Reply suggestions (a fast-tier feature) need whatever the Fast tier uses.
-  const hasAnyKey = !!geminiSaved || !!anthSaved;
+  // Reply suggestions (a fast-tier feature) need whatever the Fast tier uses —
+  // a key in the browser OR one the companion holds counts.
+  const hasAnyKey = !!geminiSaved || !!anthSaved || anthCompanion || geminiCompanion;
+
+  // One-line summary of what the connector is running server-side.
+  const companionProviders = [anthCompanion && 'Claude', geminiCompanion && 'Gemini'].filter(Boolean) as string[];
 
   return (
     <div className="space-y-6">
+      {/* MCP connector status — where server-side keys live */}
+      <div className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 ring-1 ring-inset ${mcpConnected ? 'bg-emerald-500/5 ring-emerald-500/25' : 'bg-surface ring-ring'}`}>
+        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${mcpConnected ? 'bg-emerald-500' : 'bg-fg-faint'}`} />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-fg-strong">
+            MCP connector: {mcpConnected ? 'Connected' : 'Not connected'}
+          </p>
+          <p className="text-xs text-fg-muted">
+            {mcpConnected
+              ? companionProviders.length
+                ? `Running ${companionProviders.join(' & ')} server-side — ${companionProviders.length > 1 ? 'those keys stay' : 'that key stays'} off the browser.`
+                : 'Connected, but no provider key is set in the companion — keys below run from the browser.'
+              : 'Connect it from the MCP connector to run a provider server-side, with its key off the browser.'}
+          </p>
+        </div>
+      </div>
+
       {/* Model picker — one provider+model per job */}
       <div>
         <h3 className="text-sm font-semibold text-fg-strong">AI models</h3>
@@ -355,9 +425,18 @@ export function AIKeySettings() {
         <div className="space-y-5 border-t border-edge pt-5">
           <div>
             <h3 className="text-sm font-semibold text-fg-strong">Claude API key</h3>
+            {anthCompanion && !anthUseBrowser ? (
+              <CompanionKeyStatus provider="anthropic" onUseBrowser={() => setAnthUseBrowser(true)} />
+            ) : (
+            <>
             <p className="mt-1 text-sm text-fg-secondary">
-              Recommended: set your Anthropic key in the <span className="font-medium text-fg-strong">MCP connector</span> — it stays off the browser and works even if your org blocks browser access. A key pasted here uses a direct browser call, which some orgs (incl. BAA/HIPAA) block.
+              {anthCompanion ? (
+                'The companion holds your Claude key. You can override it with a browser key below — a direct browser call that some orgs (incl. BAA/HIPAA) block.'
+              ) : (
+                <>Recommended: set your Anthropic key in the <span className="font-medium text-fg-strong">MCP connector</span> — it stays off the browser and works even if your org blocks browser access. A key pasted here uses a direct browser call, which some orgs (incl. BAA/HIPAA) block.</>
+              )}
             </p>
+            {anthCompanion && <UseCompanionLink onBack={() => setAnthUseBrowser(false)} />}
             {anthSaved ? (
               <div className="mt-3 flex items-center gap-2">
                 <span className="rounded-md bg-surface px-3 py-1.5 font-mono text-sm text-fg-secondary ring-1 ring-ring">
@@ -447,6 +526,8 @@ export function AIKeySettings() {
                 </div>
               </div>
             )}
+            </>
+            )}
           </div>
         </div>
       )}
@@ -456,18 +537,29 @@ export function AIKeySettings() {
         <div className="border-t border-edge pt-5">
           <div className="flex items-center gap-1.5">
             <h3 className="text-sm font-semibold text-fg-strong">Gemini API key</h3>
-            <span className="group/warn relative inline-flex">
-              <svg className="h-3.5 w-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="Storage warning">
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 w-56 -translate-x-1/2 rounded-lg bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-fg-secondary opacity-0 shadow-lg ring-1 ring-inset ring-edge transition-opacity group-hover/warn:opacity-100">
-                Stored unencrypted on this device. Need it secure? Move this key to the MCP companion.
+            {(!geminiCompanion || geminiUseBrowser) && (
+              <span className="group/warn relative inline-flex">
+                <svg className="h-3.5 w-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="Storage warning">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 w-56 -translate-x-1/2 rounded-lg bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-fg-secondary opacity-0 shadow-lg ring-1 ring-inset ring-edge transition-opacity group-hover/warn:opacity-100">
+                  Stored unencrypted on this device. Need it secure? Move this key to the MCP companion.
+                </span>
               </span>
-            </span>
+            )}
           </div>
+          {geminiCompanion && !geminiUseBrowser ? (
+            <CompanionKeyStatus provider="gemini" onUseBrowser={() => setGeminiUseBrowser(true)} />
+          ) : (
+          <>
           <p className="mt-1 text-sm text-fg-secondary">
-            Bring your own key&nbsp;&mdash; it&rsquo;s free and takes a minute. Paste it here for a direct browser call, or set it in the <span className="font-medium text-fg-strong">MCP connector</span> to keep it off the browser.
+            {geminiCompanion ? (
+              'The companion holds your Gemini key. You can override it with a browser key below.'
+            ) : (
+              <>Bring your own key&nbsp;&mdash; it&rsquo;s free and takes a minute. Paste it here for a direct browser call, or set it in the <span className="font-medium text-fg-strong">MCP connector</span> to keep it off the browser.</>
+            )}
           </p>
+          {geminiCompanion && <UseCompanionLink onBack={() => setGeminiUseBrowser(false)} />}
 
           {geminiSaved ? (
             <div className="mt-3 flex items-center gap-2">
@@ -550,6 +642,8 @@ export function AIKeySettings() {
                 </button>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       )}

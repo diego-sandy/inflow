@@ -159,7 +159,11 @@ function open() {
       }
     },
     onActivity: (t) => pushActivity(t),
-    onCompanionKeys: (keys) => { companionKeys = keys; },
+    onCompanionKeys: (keys) => {
+      companionKeys = keys;
+      // Mirror into the store so Settings can show where each key lives, live.
+      useUIStore.getState().setMcpKeys(keys);
+    },
     onAnthropicResult: (id, ok, data, error) => settleProxy(id, ok, data, error),
     onGeminiResult: (id, ok, data, error) => settleProxy(id, ok, data, error),
   });

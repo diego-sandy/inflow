@@ -232,23 +232,6 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       return () => document.removeEventListener('inflow:attach-files', onAttach);
     }, [conversationId]);
 
-    // AI Compose: when the user approves a generated draft, load it into the
-    // composer so they can edit and send it — it is never sent automatically.
-    useEffect(() => {
-      function onApprove(e: Event) {
-        const detail = (e as CustomEvent).detail as { conversationId?: string; text?: string } | undefined;
-        if (!detail || detail.conversationId !== conversationId || !detail.text) return;
-        setBody(detail.text);
-        saveDraft(conversationId, detail.text, attachmentsRef.current);
-        document.dispatchEvent(new CustomEvent('inflow:draft-change', { detail: conversationId }));
-        requestAnimationFrame(() => {
-          autoResize();
-          textareaRef.current?.focus();
-        });
-      }
-      document.addEventListener('inflow:ai-compose-approve', onApprove);
-      return () => document.removeEventListener('inflow:ai-compose-approve', onApprove);
-    }, [conversationId, autoResize]);
 
     // Periodically save draft to IndexedDB and notify ConversationRow
     useEffect(() => {
@@ -307,27 +290,31 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       });
     }
 
-    async function handleSend() {
-      const text = body.trim();
-      const filesToSend = attachments.length > 0 ? [...attachments] : undefined;
+    // `overrideText` sends that exact text (used by AI Compose's one-click
+    // Approve) instead of the composer body, and leaves the composer state alone.
+    async function handleSend(overrideText?: string) {
+      const text = (overrideText ?? body).trim();
+      const filesToSend = overrideText ? undefined : (attachments.length > 0 ? [...attachments] : undefined);
       if (!text && !filesToSend) return;
 
       // Read reply state directly from store to avoid stale closure
       // (the inflow:send event listener may hold an old handleSend reference)
-      const currentReply = useUIStore.getState().replyingTo;
+      const currentReply = overrideText ? null : useUIStore.getState().replyingTo;
 
-      setBody('');
-      setAttachments([]);
-      useUIStore.getState().setReplyingTo(null);
-      saveDraft(conversationId, '', []);
-      document.dispatchEvent(new CustomEvent('inflow:draft-change', { detail: conversationId }));
-      // Reset textarea height
-      if (textareaRef.current) textareaRef.current.style.height = 'auto';
-      // Keep focus in the composer so the user can immediately type the next
-      // message (iMessage-style rapid sends). Escape still exits to the list
-      // for j/k navigation.
-      const ta = textareaRef.current;
-      if (ta) ta.focus();
+      if (!overrideText) {
+        setBody('');
+        setAttachments([]);
+        useUIStore.getState().setReplyingTo(null);
+        saveDraft(conversationId, '', []);
+        document.dispatchEvent(new CustomEvent('inflow:draft-change', { detail: conversationId }));
+        // Reset textarea height
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        // Keep focus in the composer so the user can immediately type the next
+        // message (iMessage-style rapid sends). Escape still exits to the list
+        // for j/k navigation.
+        const ta = textareaRef.current;
+        if (ta) ta.focus();
+      }
 
       if (conversationId.startsWith('draft-')) {
         // Draft conversation → CREATE_CONVERSATION instead of SEND_MESSAGE
@@ -494,6 +481,14 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       function onSend() {
         handleSend();
       }
+      // AI Compose: Approve sends the generated draft directly (one click). The
+      // user's Approve click is the send confirmation — nothing sends without it.
+      function onAiSend(e: Event) {
+        const detail = (e as CustomEvent).detail as { conversationId?: string; text?: string } | undefined;
+        if (!detail || detail.conversationId !== conversationId || !detail.text) return;
+        void handleSend(detail.text);
+      }
+      document.addEventListener('inflow:ai-compose-send', onAiSend);
       function onSendAndArchive() {
         const text = body.trim();
         const filesToSend = attachments.length > 0 ? [...attachments] : undefined;
@@ -527,6 +522,7 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       document.addEventListener('inflow:send', onSend);
       document.addEventListener('inflow:send-and-archive', onSendAndArchive);
       return () => {
+        document.removeEventListener('inflow:ai-compose-send', onAiSend);
         document.removeEventListener('inflow:send', onSend);
         document.removeEventListener('inflow:send-and-archive', onSendAndArchive);
       };

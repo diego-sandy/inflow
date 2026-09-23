@@ -16,7 +16,7 @@ export interface AiComposeApi {
   setInstruction: (v: string) => void;
   /** Generate (or regenerate) a draft from the current instruction. */
   generate: () => Promise<void>;
-  /** Approve the draft: hand it to the composer and exit AI mode. */
+  /** Approve the draft: send it now (one click). Never sends without this click. */
   approve: () => void;
   /** Discard the pending draft (stay in AI mode). */
   discard: () => void;
@@ -90,11 +90,13 @@ export function useAiCompose({
   const approve = useCallback(() => {
     const text = (useAiComposeStore.getState().draft || '').trim();
     if (!text) return;
+    // One click: send it now, through the composer's normal send path (the user's
+    // explicit approval IS the human-in-the-loop confirmation — nothing sends
+    // without this click). Clear the pending draft; keep AI mode on for the next.
     document.dispatchEvent(
-      new CustomEvent('inflow:ai-compose-approve', { detail: { conversationId, text } }),
+      new CustomEvent('inflow:ai-compose-send', { detail: { conversationId, text } }),
     );
-    // Return to normal typing with the approved text loaded in the composer.
-    useAiComposeStore.setState({ draft: null, instruction: '', status: 'idle', error: null, enabled: false });
+    useAiComposeStore.setState({ draft: null, instruction: '', status: 'idle', error: null });
   }, [conversationId]);
 
   return {

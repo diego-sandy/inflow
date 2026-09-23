@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // AI Compose: a toggle flips the composer into "describe it" mode; the model
-// writes a pending draft bubble the user approves (→ loads into the composer to
-// edit and send) or discards. Nothing here ever sends automatically.
+// writes a pending draft bubble the user approves (→ sends it, one click) or
+// discards. Nothing sends without the explicit Approve click.
 import '../dom-setup';
 
 import Dexie from 'dexie';
@@ -13,12 +13,14 @@ import type { AiComposeApi } from '@/hooks/useAiCompose';
 
 let testDb: any;
 
+const { sendMessageMock } = vi.hoisted(() => ({ sendMessageMock: vi.fn() }));
+
 vi.mock('@/db/database', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/db/database')>();
   return { ...original, get db() { return testDb; } };
 });
 vi.mock('@/hooks/useOptimisticAction', () => ({
-  useOptimisticAction: () => ({ sendMessage: vi.fn(), sendAndArchive: vi.fn(), archiveConversation: vi.fn() }),
+  useOptimisticAction: () => ({ sendMessage: sendMessageMock, sendAndArchive: vi.fn(), archiveConversation: vi.fn() }),
 }));
 vi.mock('@/lib/bridge', () => ({ sendBridgeMessage: vi.fn().mockResolvedValue({ success: true }) }));
 vi.mock('@/hooks/useAutocomplete', () => ({
@@ -50,6 +52,7 @@ beforeEach(async () => {
   applySchema(testDb);
   await testDb.open();
   act(() => useUIStore.setState({ toast: null }));
+  sendMessageMock.mockClear();
 });
 afterEach(async () => {
   if (testDb) { testDb.close(); await Dexie.delete(testDb.name); }
@@ -84,24 +87,25 @@ it('when enabled, shows the instruction field and Generate runs generation', asy
   expect(ai.generate).toHaveBeenCalled();
 });
 
-it('approving a draft loads the text into the composer (never auto-sends)', async () => {
+it('approving a draft sends it directly — one click, no extra send step', async () => {
   await renderCompose(mockAi());
   act(() => {
     document.dispatchEvent(
-      new CustomEvent('inflow:ai-compose-approve', { detail: { conversationId: 'c1', text: 'Hi Ada — great to connect!' } }),
+      new CustomEvent('inflow:ai-compose-send', { detail: { conversationId: 'c1', text: 'Hi Ada — great to connect!' } }),
     );
   });
-  const textarea = await screen.findByDisplayValue('Hi Ada — great to connect!');
-  expect(textarea).toHaveAttribute('data-compose-input');
+  await waitFor(() =>
+    expect(sendMessageMock).toHaveBeenCalledWith('c1', 'Hi Ada — great to connect!', undefined, undefined),
+  );
 });
 
-it('ignores an approve event addressed to a different conversation', async () => {
+it('ignores a send event addressed to a different conversation', async () => {
   await renderCompose(mockAi());
   act(() => {
     document.dispatchEvent(
-      new CustomEvent('inflow:ai-compose-approve', { detail: { conversationId: 'OTHER', text: 'nope' } }),
+      new CustomEvent('inflow:ai-compose-send', { detail: { conversationId: 'OTHER', text: 'nope' } }),
     );
   });
   await waitFor(() => Promise.resolve());
-  expect(screen.queryByDisplayValue('nope')).not.toBeInTheDocument();
+  expect(sendMessageMock).not.toHaveBeenCalled();
 });

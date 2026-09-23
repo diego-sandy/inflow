@@ -562,24 +562,29 @@ export function SettingsModal() {
           })}
         </nav>
 
-        {/* Section content */}
-        <div className="relative min-w-0 flex-1 overflow-y-auto p-6">
-          <button
-            onClick={close}
-            aria-label="Close settings"
-            className="absolute right-4 top-4 rounded-md p-1 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-strong"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+        {/* Section content — a fixed top bar holds the close button so it never
+            overlaps a section's content (a full-width banner used to collide). */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 justify-end px-3 pt-3">
+            <button
+              onClick={close}
+              aria-label="Close settings"
+              className="rounded-md p-1 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-strong"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-          {section === 'ai' && <AIKeySettings />}
-          {section === 'chat' && <ChatSettings />}
-          {section === 'appearance' && <AppearanceSettings />}
-          {section === 'backup' && <BackupSettings />}
-          {section === 'advanced' && <AdvancedSettings />}
-          {section === 'about' && <AboutSettings />}
+          <div className="min-w-0 flex-1 overflow-y-auto px-6 pb-6 pt-1">
+            {section === 'ai' && <AIKeySettings />}
+            {section === 'chat' && <ChatSettings />}
+            {section === 'appearance' && <AppearanceSettings />}
+            {section === 'backup' && <BackupSettings />}
+            {section === 'advanced' && <AdvancedSettings />}
+            {section === 'about' && <AboutSettings />}
+          </div>
         </div>
       </div>
     </div>

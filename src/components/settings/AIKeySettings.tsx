@@ -71,30 +71,32 @@ function ProviderGlyph({ provider, className }: { provider: AIProvider; classNam
 
 const providerName = (p: AIProvider) => (p === 'anthropic' ? 'Claude' : 'Gemini');
 
-/** Small green check. */
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
+/** A status "light" — a small glowing dot, like a connection LED in native apps.
+ * green = connected/active, yellow = connecting (pulses), red = off/error. */
+function StatusLight({ tone, className }: { tone: 'green' | 'yellow' | 'red'; className?: string }) {
+  const map = {
+    green: 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]',
+    yellow: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.18)] animate-pulse',
+    red: 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]',
+  } as const;
+  return <span className={`h-2 w-2 shrink-0 rounded-full ${map[tone]} ${className ?? ''}`} aria-hidden="true" />;
 }
 
 /** Status shown in place of the paste box when the companion holds this key. */
 function CompanionKeyStatus({ provider, onUseBrowser }: { provider: AIProvider; onUseBrowser: () => void }) {
   const name = providerName(provider);
   return (
-    <div className="mt-3 rounded-lg bg-emerald-500/5 p-3 ring-1 ring-inset ring-emerald-500/25">
+    <div className="mt-3 rounded-lg bg-surface px-3 py-2.5 ring-1 ring-inset ring-ring">
       <div className="flex items-center gap-2">
-        <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+        <StatusLight tone="green" />
         <p className="text-sm font-medium text-fg-strong">Active · in the MCP connector</p>
       </div>
-      <p className="mt-1 pl-6 text-xs text-fg-muted">
+      <p className="mt-1 pl-4 text-xs text-fg-muted">
         Your {name} key stays in the companion, off the browser. inflow runs {name} server-side while the connector is connected.
       </p>
       <button
         onClick={onUseBrowser}
-        className="mt-2 pl-6 text-xs font-medium text-blue-500 transition-colors hover:text-blue-400"
+        className="mt-2 pl-4 text-xs font-medium text-blue-500 transition-colors hover:text-blue-400"
       >
         Use a browser key instead
       </button>
@@ -198,7 +200,9 @@ function ProviderModelSelect({
 export function AIKeySettings() {
   const showToast = useUIStore((s) => s.showToast);
   // Live companion state: is the connector up, and which keys does it hold?
-  const mcpConnected = useUIStore((s) => s.mcpStatus) === 'connected';
+  const mcpStatus = useUIStore((s) => s.mcpStatus);
+  const mcpError = useUIStore((s) => s.mcpError);
+  const mcpConnected = mcpStatus === 'connected';
   const mcpKeys = useUIStore((s) => s.mcpKeys);
   const anthCompanion = mcpConnected && mcpKeys.anthropic;
   const geminiCompanion = mcpConnected && mcpKeys.gemini;
@@ -372,23 +376,30 @@ export function AIKeySettings() {
 
   // One-line summary of what the connector is running server-side.
   const companionProviders = [anthCompanion && 'Claude', geminiCompanion && 'Gemini'].filter(Boolean) as string[];
+  const statusTone: 'green' | 'yellow' | 'red' =
+    mcpStatus === 'connected' ? 'green' : mcpStatus === 'connecting' ? 'yellow' : 'red';
+  const statusLabel =
+    mcpStatus === 'connected' ? 'Connected'
+    : mcpStatus === 'connecting' ? 'Connecting…'
+    : mcpStatus === 'error' ? 'Connection error'
+    : 'Not connected';
+  const statusSub =
+    mcpStatus === 'connected'
+      ? companionProviders.length
+        ? `Running ${companionProviders.join(' & ')} server-side — ${companionProviders.length > 1 ? 'those keys stay' : 'that key stays'} off the browser.`
+        : 'Connected, but no provider key is set in the companion — keys below run from the browser.'
+      : mcpStatus === 'connecting' ? 'Reaching the companion on 127.0.0.1…'
+      : mcpStatus === 'error' ? (mcpError || 'Couldn’t reach the companion.')
+      : 'Connect it from the MCP connector to run a provider server-side, with its key off the browser.';
 
   return (
     <div className="space-y-6">
-      {/* MCP connector status — where server-side keys live */}
-      <div className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 ring-1 ring-inset ${mcpConnected ? 'bg-emerald-500/5 ring-emerald-500/25' : 'bg-surface ring-ring'}`}>
-        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${mcpConnected ? 'bg-emerald-500' : 'bg-fg-faint'}`} />
+      {/* MCP connector status — a native-style status light on a neutral surface */}
+      <div className="flex items-start gap-2.5 rounded-lg bg-surface px-3 py-2.5 ring-1 ring-inset ring-ring">
+        <StatusLight tone={statusTone} className="mt-1.5" />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-fg-strong">
-            MCP connector: {mcpConnected ? 'Connected' : 'Not connected'}
-          </p>
-          <p className="text-xs text-fg-muted">
-            {mcpConnected
-              ? companionProviders.length
-                ? `Running ${companionProviders.join(' & ')} server-side — ${companionProviders.length > 1 ? 'those keys stay' : 'that key stays'} off the browser.`
-                : 'Connected, but no provider key is set in the companion — keys below run from the browser.'
-              : 'Connect it from the MCP connector to run a provider server-side, with its key off the browser.'}
-          </p>
+          <p className="text-sm font-medium text-fg-strong">MCP connector: {statusLabel}</p>
+          <p className="text-xs text-fg-muted">{statusSub}</p>
         </div>
       </div>
 
@@ -442,7 +453,7 @@ export function AIKeySettings() {
                 <span className="rounded-md bg-surface px-3 py-1.5 font-mono text-sm text-fg-secondary ring-1 ring-ring">
                   {mask(anthSaved)}
                 </span>
-                <span className="text-xs text-green-500">Active</span>
+                <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary"><StatusLight tone="green" />Active · in this browser</span>
                 <button
                   onClick={removeAnthropic}
                   className="ml-auto rounded-md px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"

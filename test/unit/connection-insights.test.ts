@@ -64,6 +64,17 @@ describe('computeInsights', () => {
     expect(res.uncategorized).toBe(1);
   });
 
+  it('bases role percentages on categorized connections, not the whole list', () => {
+    // 2 with a role + 2 without → Investor is 100% of the categorized, not 50%.
+    const { roles } = computeInsights([
+      c({ roleCategory: 'Investor', categorizedAt: 1 }),
+      c({ roleCategory: 'Investor', categorizedAt: 1 }),
+      c({}),
+      c({}),
+    ]);
+    expect(roles[0]).toMatchObject({ role: 'Investor', count: 2, pct: 1 });
+  });
+
   it('clusters firms with 2+ people and ignores singletons', () => {
     const res = computeInsights([
       c({ headline: 'Partner at Acme Ventures' }),

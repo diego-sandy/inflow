@@ -136,7 +136,7 @@ export function InsightsView() {
                   {topRole && (
                     <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-transparent p-5 ring-1 ring-inset ring-blue-500/20">
                       <p className="text-2xl font-semibold text-fg-strong">
-                        Your network is {pctLabel(topRole.pct)} {topRole.role.toLowerCase()}s
+                        Your network is {pctLabel(topRole.pct)} {topRole.role}
                       </p>
                       {companies.length > 0 && (
                         <p className="mt-1 text-sm text-fg-secondary">

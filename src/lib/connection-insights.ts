@@ -10,7 +10,7 @@ import type { Connection } from '@/types/connection';
 export interface RoleSlice {
   role: ConnectionRole;
   count: number;
-  /** Share of all connections, 0–1. */
+  /** Share of categorized (role-having) connections, 0–1. */
   pct: number;
 }
 
@@ -69,10 +69,14 @@ export function computeInsights(connections: Connection[]): NetworkInsights {
     }
   }
 
+  // Percentages are relative to connections that actually have a role (i.e. the
+  // categorized ones), not the whole list — otherwise a big uncategorized tail
+  // deflates every share. This also makes the role slices sum to ~100%.
+  const rolesTotal = [...roleCounts.values()].reduce((sum, n) => sum + n, 0);
   const roles: RoleSlice[] = ROLE_CATEGORIES
     .map((role) => ({ role, count: roleCounts.get(role) ?? 0 }))
     .filter((r) => r.count > 0)
-    .map((r) => ({ ...r, pct: total ? r.count / total : 0 }))
+    .map((r) => ({ ...r, pct: rolesTotal ? r.count / rolesTotal : 0 }))
     .sort((a, b) => b.count - a.count);
 
   const interests: CountItem[] = [...interestCounts.entries()]

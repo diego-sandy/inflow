@@ -51,7 +51,7 @@ it('leads with the dominant-role composition stat', () => {
     c({ roleCategory: 'Engineering', categorizedAt: 1, headline: 'Eng at Solo Co' }),
   ];
   render(<InsightsView />);
-  expect(screen.getByText(/Your network is 50% investors/i)).toBeInTheDocument();
+  expect(screen.getByText(/Your network is 50% Investor/i)).toBeInTheDocument();
   // Firm clustering surfaces the 2-person firm.
   expect(screen.getByText(/Clustered around Acme Ventures/i)).toBeInTheDocument();
 });

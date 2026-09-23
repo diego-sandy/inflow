@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The Outbox is a pure status view: groups drafts/scheduled/sent, resurfaces due
-// messages as "Ready to send" (never auto-sends), one-click send, delete, opens
-// the shared composer for New message, and reopens a draft in the composer.
+// messages as "Ready to send" (never auto-sends), one-click send, delete, and
+// reopens a draft in the composer.
 import '../dom-setup';
 import Dexie from 'dexie';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
@@ -109,14 +109,6 @@ it('deletes a draft', async () => {
   await screen.findByText('Ada Lovelace');
   fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }));
   await waitFor(async () => expect(await db!.scheduledMessages.get('d2')).toBeUndefined());
-});
-
-it('New message opens the shared composer', async () => {
-  render(<OutboxView />);
-  fireEvent.click(await screen.findByRole('button', { name: /New message/i }));
-  const s = useUIStore.getState();
-  expect(s.activeSection).toBe('inbox');
-  expect(s.composeNewActive).toBe(true);
 });
 
 it('Edit reopens a draft in the composer and removes the Outbox row', async () => {

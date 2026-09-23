@@ -31,13 +31,6 @@ function Section({ title, count, hint, children }: { title: string; count?: numb
 export function OutboxView() {
   const { ready, scheduled, drafts, failed } = useOutbox();
 
-  const openComposer = () => {
-    const store = useUIStore.getState();
-    store.setActiveSection('inbox');
-    store.setSelectedConversationId(null);
-    store.setComposeNewActive(true);
-  };
-
   const goToInboxTab = (tab: 'drafts' | 'scheduled') => {
     const store = useUIStore.getState();
     store.setActiveSection('inbox');
@@ -52,13 +45,6 @@ export function OutboxView() {
       <div className="flex items-center gap-2 border-b border-edge px-6 py-3">
         <h2 className="text-base font-semibold text-fg-strong">MCP connector</h2>
         <span className="text-[11px] text-fg-faint">It reads your network and executes actions from Claude via MCP.</span>
-        <span className="flex-1" />
-        <button
-          onClick={openComposer}
-          className="rounded-md bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
-        >
-          New message
-        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

@@ -17,14 +17,18 @@ MCP client  ──stdio (MCP)──▶  inflow-mcp  ──ws://127.0.0.1:8123─
 
 inflow generates a **pairing code** and shows it in the app (MCP connector → Connect Claude). The client passes that code to the companion (`INFLOW_PAIRING_CODE`); the companion only accepts the extension's WebSocket handshake when the codes match. It notifies the client when tools appear/disappear, exits when the client quits (no orphaned port holders), and retries the port if a stale instance is still up.
 
-### In-app Claude agent (optional)
+### Running AI keys through the companion (optional)
 
-The companion can also power inflow's **in-app AI Chat agent** (Claude calling inflow's tools directly, without Claude Desktop). Because the companion calls Anthropic **server-side**, this works even when your Anthropic org blocks browser/CORS access (e.g. BAA/enterprise orgs), and your API key never enters the browser.
+The companion can also run inflow's AI requests **server-side**, so your API key stays **out of the browser**. This is optional for both providers — inflow works with keys pasted directly into the app — but routing through the companion is more secure, and for **Claude** it's the only path when your Anthropic org blocks browser/CORS access (e.g. BAA/enterprise orgs).
 
-Set `ANTHROPIC_API_KEY` in the companion's environment (via the `.mcpb` install prompt, or export it before `node src/index.mjs`). The extension sends chat requests over the localhost socket; the companion adds the key and relays to Anthropic. Leave it unset to disable the in-app agent (Claude Desktop / MCP still work).
+- `ANTHROPIC_API_KEY` — powers inflow's **in-app AI Chat agent** (Claude calling inflow's tools directly, without Claude Desktop) and any other Claude work. Required to run Claude on CORS-blocked orgs.
+- `GEMINI_API_KEY` — runs Gemini server-side instead of from the browser.
+
+Set either (or both) in the companion's environment — via the `.mcpb` install prompts, or export them before `node src/index.mjs`. The extension sends each request over the localhost socket; the companion adds the matching key and relays it. On connect, the companion tells the extension which keys it holds, so inflow routes a provider through the companion only when the key is actually set there — otherwise it uses the key you pasted in the app. Leave both unset to use browser keys only (Claude Desktop / MCP tool-relay still work).
 
 ```
 inflow extension  ──ws (anthropic request)──▶  inflow-mcp  ──https──▶  api.anthropic.com
+inflow extension  ──ws (gemini request)─────▶  inflow-mcp  ──https──▶  generativelanguage.googleapis.com
 ```
 
 ---
@@ -37,10 +41,10 @@ Use the bundled extension. This is the whole story for the desktop app — no np
 
 1. In inflow → **MCP connector → Connect Claude**, copy your **pairing code** and click **Download inflow.mcpb**.
 2. In Claude Desktop → **Settings → Extensions**, install the downloaded `inflow.mcpb`.
-3. When prompted, paste the **pairing code**. Optionally, paste an **Anthropic API key** in the second field to enable inflow's **in-app Claude agent** (the AI Chat tool-use agent). Leave it blank if you only want the Claude Desktop integration.
+3. When prompted, paste the **pairing code**. Optionally, paste an **Anthropic API key** and/or a **Gemini API key** in the fields below it to run those providers server-side (required for Claude on orgs that block browser access). Leave them blank if you only want the Claude Desktop integration or you keep your keys in the app.
 4. Restart Claude.
 
-inflow connects on its own. The Anthropic key (if you set it) stays inside the companion — it's never sent to the browser.
+inflow connects on its own. Any keys you set stay inside the companion — they're never sent to the browser.
 
 ### B · CLI / other MCP clients (Claude Code CLI, Codex, Cline, …)
 
@@ -55,7 +59,7 @@ npm install
 npm install -g .      # puts `inflow-mcp` on your PATH (or use `node <path>` below)
 ```
 
-Then point the client at it, with your pairing code from inflow (and, optionally, an Anthropic key to power inflow's in-app Claude agent):
+Then point the client at it, with your pairing code from inflow (and, optionally, an Anthropic and/or Gemini key to run those providers server-side):
 
 ```json
 {
@@ -64,7 +68,8 @@ Then point the client at it, with your pairing code from inflow (and, optionally
       "command": "inflow-mcp",
       "env": {
         "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE",
-        "ANTHROPIC_API_KEY": "sk-ant-...   (optional — only for the in-app agent)"
+        "ANTHROPIC_API_KEY": "sk-ant-...   (optional — server-side Claude / in-app agent)",
+        "GEMINI_API_KEY": "AIza...         (optional — server-side Gemini)"
       }
     }
   }
@@ -81,19 +86,20 @@ If you skip the global install, use the file directly:
       "args": ["/absolute/path/to/inflow/mcp-companion/src/index.mjs"],
       "env": {
         "INFLOW_PAIRING_CODE": "PASTE-YOUR-CODE",
-        "ANTHROPIC_API_KEY": "sk-ant-...   (optional)"
+        "ANTHROPIC_API_KEY": "sk-ant-...   (optional)",
+        "GEMINI_API_KEY": "AIza...         (optional)"
       }
     }
   }
 }
 ```
 
-`ANTHROPIC_API_KEY` is only needed for inflow's in-app AI Chat agent; omit it for the Claude Desktop / tool-relay use. It stays in the companion's environment — never sent to the browser.
+`ANTHROPIC_API_KEY` and `GEMINI_API_KEY` are both optional — set either to run that provider server-side (Claude requires it on browser/CORS-blocked orgs); omit both to keep your keys in the app or for Claude Desktop / tool-relay use. Whatever you set stays in the companion's environment — never sent to the browser.
 
-**Run it standalone (in-app agent without Claude Desktop):** the companion binds its localhost socket whenever it runs, so you can start it directly and inflow's AI Chat agent will use it:
+**Run it standalone (in-app agent without Claude Desktop):** the companion binds its localhost socket whenever it runs, so you can start it directly and inflow's AI features will use it:
 
 ```bash
-INFLOW_PAIRING_CODE=PASTE-YOUR-CODE ANTHROPIC_API_KEY=sk-ant-... inflow-mcp
+INFLOW_PAIRING_CODE=PASTE-YOUR-CODE ANTHROPIC_API_KEY=sk-ant-... GEMINI_API_KEY=AIza... inflow-mcp
 # or, from a clone: … node mcp-companion/src/index.mjs
 ```
 

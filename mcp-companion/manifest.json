@@ -14,7 +14,8 @@
       "args": ["${__dirname}/src/index.mjs"],
       "env": {
         "INFLOW_PAIRING_CODE": "${user_config.pairing_code}",
-        "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}"
+        "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}",
+        "GEMINI_API_KEY": "${user_config.gemini_api_key}"
       }
     }
   },
@@ -29,7 +30,14 @@
     "anthropic_api_key": {
       "type": "string",
       "title": "Anthropic API key (optional)",
-      "description": "Only needed for inflow's in-app Claude agent. The key stays here in the companion and is never sent to the browser. Leave blank if you don't use the in-app agent.",
+      "description": "For inflow's in-app Claude agent. The key stays here in the companion and is never sent to the browser. Leave blank if you don't use Claude, or paste it directly in inflow instead.",
+      "required": false,
+      "sensitive": true
+    },
+    "gemini_api_key": {
+      "type": "string",
+      "title": "Gemini API key (optional)",
+      "description": "For running Gemini server-side so the key stays off the browser. The key stays here in the companion and is never sent to the browser. Leave blank if you don't use Gemini, or paste it directly in inflow instead.",
       "required": false,
       "sensitive": true
     }

@@ -9,6 +9,8 @@ function harness(callTool = vi.fn(async () => ({ ok: true }))) {
   const sent: any[] = [];
   const status: { s: string; e?: string }[] = [];
   const activity: string[] = [];
+  const keys: any[] = [];
+  const proxy: { kind: string; id: string; ok: boolean; data: any; error?: string }[] = [];
   const session = createBridgeSession({
     token: 'CODE-123',
     tools: [{ name: 'search_connections', description: 'd', inputSchema: { type: 'object' } }],
@@ -16,8 +18,11 @@ function harness(callTool = vi.fn(async () => ({ ok: true }))) {
     send: (m) => sent.push(m),
     onStatus: (s, e) => status.push({ s, e }),
     onActivity: (t) => activity.push(t),
+    onCompanionKeys: (k) => keys.push(k),
+    onAnthropicResult: (id, ok, data, error) => proxy.push({ kind: 'anthropic', id, ok, data, error }),
+    onGeminiResult: (id, ok, data, error) => proxy.push({ kind: 'gemini', id, ok, data, error }),
   });
-  return { session, sent, status, activity, callTool };
+  return { session, sent, status, activity, keys, proxy, callTool };
 }
 
 it('on open, authenticates and advertises tools', () => {
@@ -33,6 +38,29 @@ it('hello_ack marks connected', async () => {
   await h.session.handleMessage(JSON.stringify({ type: 'hello_ack' }));
   expect(h.status.map((x) => x.s)).toContain('connected');
   expect(h.activity).toContain('Connected to Claude');
+});
+
+it('hello_ack with keys reports which the companion holds', async () => {
+  const h = harness();
+  await h.session.handleMessage(JSON.stringify({ type: 'hello_ack', keys: { anthropic: true, gemini: false } }));
+  expect(h.keys.at(-1)).toEqual({ anthropic: true, gemini: false });
+});
+
+it('hello_ack without keys defaults to Anthropic-only (backward compatible)', async () => {
+  const h = harness();
+  await h.session.handleMessage(JSON.stringify({ type: 'hello_ack' }));
+  // Older companions omit `keys`: keep Anthropic-via-companion, no Gemini.
+  expect(h.keys.at(-1)).toEqual({ anthropic: true, gemini: false });
+});
+
+it('anthropic_result and gemini_result settle the matching proxy request', async () => {
+  const h = harness();
+  await h.session.handleMessage(JSON.stringify({ type: 'anthropic_result', id: 'an-1', ok: true, data: { a: 1 } }));
+  await h.session.handleMessage(JSON.stringify({ type: 'gemini_result', id: 'gm-1', ok: false, error: 'no key' }));
+  expect(h.proxy).toEqual([
+    { kind: 'anthropic', id: 'an-1', ok: true, data: { a: 1 }, error: undefined },
+    { kind: 'gemini', id: 'gm-1', ok: false, data: undefined, error: 'no key' },
+  ]);
 });
 
 it('error frame reports the reason', async () => {

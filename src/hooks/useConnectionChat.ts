@@ -9,7 +9,7 @@ import { useInsightChatStore } from '@/store/insight-chat-store';
 import { answerConnectionQuestion, CHAT_CONTEXT_LIMIT, DEFAULT_CHAT_INSTRUCTIONS, type ChatMessage } from '@/lib/connection-chat';
 import { smartRetrieve } from '@/lib/connection-retrieval';
 import { answerWithClaudeAgent } from '@/lib/agent/network-agent';
-import { isCompanionConnected } from '@/lib/mcp/bridge-client';
+import { isCompanionConnected, companionHasKey } from '@/lib/mcp/bridge-client';
 import { activityLabel } from '@/lib/mcp/bridge-protocol';
 import { getAIChatMaxWords, getAIChatInstructions, getAIChatAppendInstructions, getTierProvider, getAnthropicModel } from '@/lib/ai-settings';
 import type { InsightChat } from '@/types/insight-chat';
@@ -89,7 +89,9 @@ export function useConnectionChat(): ConnectionChatState {
     chrome?.storage?.local?.onChanged?.addListener?.(listener);
     return () => { cancelled = true; chrome?.storage?.local?.onChanged?.removeListener?.(listener); };
   }, []);
-  const available = aiAvailable || (isAnthropic && mcpConnected);
+  // mcpConnected (a store value) drives reactivity; companionHasKey confirms the
+  // companion actually holds the Anthropic key it would run the agent with.
+  const available = aiAvailable || (isAnthropic && mcpConnected && companionHasKey('anthropic'));
 
   const chats = useLiveQuery(async () => {
     if (!db) return [] as InsightChat[];
@@ -124,7 +126,7 @@ export function useConnectionChat(): ConnectionChatState {
         // no CORS, key stays out of the browser). Otherwise use the Phase 1
         // retrieval + single-call path (Gemini, or Claude without the companion).
         const provider = await getTierProvider('quality');
-        const useAgent = provider === 'anthropic' && isCompanionConnected();
+        const useAgent = provider === 'anthropic' && companionHasKey('anthropic');
 
         let finalText = '';
         if (useAgent) {

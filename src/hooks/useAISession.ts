@@ -11,7 +11,7 @@ import {
   type AIModelTier,
 } from '@/lib/ai-settings';
 import { predictAnthropic } from '@/lib/anthropic-client';
-import { requestAnthropicViaCompanion, isCompanionConnected } from '@/lib/mcp/bridge-client';
+import { requestAnthropicViaCompanion, requestGeminiViaCompanion, isCompanionConnected, companionHasKey } from '@/lib/mcp/bridge-client';
 
 const SYSTEM_PROMPT =
   'You are an autocomplete assistant. Given conversation history and a partial message, predict the next few words. Output ONLY the completion text. Keep it short (2-8 words). If unsure, output nothing.';
@@ -74,10 +74,13 @@ const config: AIConfig = {
 let initialized = false;
 const availabilitySubscribers = new Set<(available: boolean) => void>();
 
-/** A provider is usable if it can actually run: Gemini needs a browser key;
- * Claude needs either a browser key or the companion (which holds the key). */
+/** A provider is usable if it can actually run: either a browser key is set, or
+ * the companion is connected AND holds that provider's key (so it can run the
+ * request server-side). This is symmetric across Claude and Gemini. */
 function providerUsable(p: AIProvider): boolean {
-  return p === 'anthropic' ? !!config.anthropicKey || isCompanionConnected() : !!config.geminiKey;
+  return p === 'anthropic'
+    ? !!config.anthropicKey || companionHasKey('anthropic')
+    : !!config.geminiKey || companionHasKey('gemini');
 }
 
 /** True when at least one tier can run. */
@@ -176,8 +179,9 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
 
   if (provider === 'anthropic') {
     const model = tier === 'quality' ? config.qualityModel : config.fastModel;
-    // Prefer the companion (server-side — works on BAA/CORS orgs, key off-browser).
-    if (isCompanionConnected()) {
+    // Prefer the companion when it holds the key (server-side — works on
+    // BAA/CORS orgs, key off-browser).
+    if (companionHasKey('anthropic')) {
       return predictAnthropicViaCompanion(prompt, model, { maxTokens, systemPrompt, onToken });
     }
     // Fall back to a direct browser call (only works if the org allows CORS).
@@ -186,7 +190,46 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
   }
 
   const model = tier === 'quality' ? config.geminiQualityModel : config.geminiFastModel;
+  // Prefer the companion when it holds the Gemini key (key off-browser); else the
+  // direct browser call. Only one path streams (the browser); the companion
+  // returns the full answer once — see predictGeminiViaCompanion.
+  if (companionHasKey('gemini')) {
+    return predictGeminiViaCompanion(prompt, model, { maxTokens, systemPrompt, temperature, onToken });
+  }
   return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model, onToken });
+}
+
+/**
+ * Run one Gemini generateContent request through the companion (non-streaming; it
+ * returns the full response). Used when the Gemini key lives in the companion
+ * instead of the browser. Returns the text, or null on any failure.
+ */
+async function predictGeminiViaCompanion(
+  prompt: string,
+  model: string,
+  opts: { maxTokens: number; systemPrompt: string; temperature: number; onToken?: (chunk: string) => void },
+): Promise<string | null> {
+  try {
+    const body = {
+      system_instruction: { parts: [{ text: opts.systemPrompt }] },
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        ...(opts.maxTokens > 0 ? { maxOutputTokens: opts.maxTokens } : {}),
+        temperature: opts.temperature,
+      },
+    };
+    const data = await requestGeminiViaCompanion(model, body);
+    const parts = data?.candidates?.[0]?.content?.parts;
+    let text = '';
+    if (Array.isArray(parts)) {
+      for (const p of parts) if (typeof p?.text === 'string') text += p.text;
+    }
+    const out = text.trim() || null;
+    if (out && opts.onToken) opts.onToken(out); // non-streaming: deliver once
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /**

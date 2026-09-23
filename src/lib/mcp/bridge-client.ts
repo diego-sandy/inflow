@@ -7,7 +7,7 @@
  * and we retry with backoff. Closing the inflow tab drops the bridge — that's an
  * accepted trade for keeping everything local and keyless.
  */
-import { createBridgeSession, type BridgeStatus } from './bridge-protocol';
+import { createBridgeSession, type BridgeStatus, type CompanionKeys } from './bridge-protocol';
 import { toolDescriptors, callTool } from './tools';
 import { DEFAULT_MCP_URL } from './pairing';
 import { useUIStore } from '@/store/ui-store';
@@ -20,57 +20,87 @@ let activeToken = '';
 let activeUrl = DEFAULT_MCP_URL;
 let connected = false;
 
-// Pending Anthropic proxy requests (id → settlers), for the in-app Claude agent.
-const anthropicPending = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
-let anthropicSeq = 0;
-const ANTHROPIC_TIMEOUT_MS = 120_000;
+// Which provider keys the companion holds — learned from hello_ack. Until the
+// handshake completes (or after a drop) we assume none, so we never route a
+// provider through a companion that can't fulfil it.
+let companionKeys: CompanionKeys = { anthropic: false, gemini: false };
+
+// Pending proxy requests (id → settlers), shared by the Anthropic and Gemini
+// server-side paths. Both settle by id, so one map serves both providers.
+const proxyPending = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+let proxySeq = 0;
+const PROXY_TIMEOUT_MS = 120_000;
 
 /** True when the companion socket is open and paired. */
 export function isCompanionConnected(): boolean {
   return connected && !!ws && ws.readyState === WebSocket.OPEN;
 }
 
+/** Whether the connected companion holds a key for `provider`. */
+export function companionHasKey(provider: 'anthropic' | 'gemini'): boolean {
+  return isCompanionConnected() && companionKeys[provider];
+}
+
 /**
- * Ask the companion to run one Anthropic Messages API request (it adds the key
- * server-side). Resolves with the parsed response, or rejects on error/timeout.
+ * Ask the companion to run one request server-side (it adds the key), for the
+ * given provider. `type` is the wire verb ('anthropic' | 'gemini'); `msg` carries
+ * the provider-specific fields. Resolves with the parsed response, or rejects on
+ * error/timeout. The reply (`<type>_result`) settles by id via {@link settleProxy}.
  */
-export function requestAnthropicViaCompanion(payload: object): Promise<any> {
+function requestViaCompanion(type: 'anthropic' | 'gemini', prefix: string, msg: object): Promise<any> {
   return new Promise((resolve, reject) => {
     if (!isCompanionConnected()) {
       reject(new Error('The companion is not connected. Open the MCP connector and connect it.'));
       return;
     }
-    const id = `an-${Date.now()}-${anthropicSeq++}`;
+    const id = `${prefix}-${Date.now()}-${proxySeq++}`;
     const timer = setTimeout(() => {
-      anthropicPending.delete(id);
+      proxyPending.delete(id);
       reject(new Error('The companion did not respond in time.'));
-    }, ANTHROPIC_TIMEOUT_MS);
-    anthropicPending.set(id, { resolve, reject, timer });
+    }, PROXY_TIMEOUT_MS);
+    proxyPending.set(id, { resolve, reject, timer });
     try {
-      ws!.send(JSON.stringify({ type: 'anthropic', id, payload }));
+      ws!.send(JSON.stringify({ type, id, ...msg }));
     } catch (e: any) {
-      anthropicPending.delete(id);
+      proxyPending.delete(id);
       clearTimeout(timer);
       reject(new Error(e?.message || 'Could not reach the companion.'));
     }
   });
 }
 
-function settleAnthropic(id: string, ok: boolean, data: any, error?: string) {
-  const p = anthropicPending.get(id);
-  if (!p) return;
-  anthropicPending.delete(id);
-  clearTimeout(p.timer);
-  if (ok) p.resolve(data);
-  else p.reject(new Error(error || 'Anthropic request failed'));
+/**
+ * Run one Anthropic Messages API request through the companion (it adds the key
+ * server-side, so the browser's CORS restriction never applies).
+ */
+export function requestAnthropicViaCompanion(payload: object): Promise<any> {
+  return requestViaCompanion('anthropic', 'an', { payload });
 }
 
-function rejectAllAnthropic(reason: string) {
-  for (const [, p] of anthropicPending) {
+/**
+ * Run one Gemini generateContent request through the companion (key kept in the
+ * companion env, off the browser). `model` picks the endpoint; `body` is the
+ * request body.
+ */
+export function requestGeminiViaCompanion(model: string, body: object): Promise<any> {
+  return requestViaCompanion('gemini', 'gm', { model, body });
+}
+
+function settleProxy(id: string, ok: boolean, data: any, error?: string) {
+  const p = proxyPending.get(id);
+  if (!p) return;
+  proxyPending.delete(id);
+  clearTimeout(p.timer);
+  if (ok) p.resolve(data);
+  else p.reject(new Error(error || 'Companion request failed'));
+}
+
+function rejectAllProxy(reason: string) {
+  for (const [, p] of proxyPending) {
     clearTimeout(p.timer);
     p.reject(new Error(reason));
   }
-  anthropicPending.clear();
+  proxyPending.clear();
 }
 // Track transitions so the activity feed shows connection progress without
 // spamming a line on every backoff tick.
@@ -129,7 +159,9 @@ function open() {
       }
     },
     onActivity: (t) => pushActivity(t),
-    onAnthropicResult: (id, ok, data, error) => settleAnthropic(id, ok, data, error),
+    onCompanionKeys: (keys) => { companionKeys = keys; },
+    onAnthropicResult: (id, ok, data, error) => settleProxy(id, ok, data, error),
+    onGeminiResult: (id, ok, data, error) => settleProxy(id, ok, data, error),
   });
 
   setStatus('connecting');
@@ -148,7 +180,8 @@ function open() {
   ws.onclose = () => {
     ws = null;
     connected = false;
-    rejectAllAnthropic('The companion connection dropped.');
+    companionKeys = { anthropic: false, gemini: false };
+    rejectAllProxy('The companion connection dropped.');
     if (stopped) {
       setStatus('disconnected');
       return;
@@ -188,7 +221,8 @@ export function startMcpBridge(token: string, url: string = DEFAULT_MCP_URL) {
 export function stopMcpBridge() {
   stopped = true;
   connected = false;
-  rejectAllAnthropic('The companion was disconnected.');
+  companionKeys = { anthropic: false, gemini: false };
+  rejectAllProxy('The companion was disconnected.');
   clearTimeout(retryTimer);
   try {
     ws?.close();

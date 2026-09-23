@@ -41,6 +41,14 @@ const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY?.trim() || '';
 
+// --- Gemini proxy (optional) ----------------------------------------------
+// Same idea as the Anthropic proxy: run Gemini server-side so the key stays OUT
+// of the browser. Optional — set GEMINI_API_KEY to enable. The extension picks
+// the model per request; we build the endpoint from it.
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim() || '';
+const geminiUrl = (model) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
 /** All logging goes to stderr — stdout is reserved for the MCP protocol. */
 const log = (...a) => console.error('[inflow-mcp]', ...a);
 
@@ -76,7 +84,8 @@ function printSetup() {
   console.error('  inflow MCP companion');
   console.error('  ─────────────────────');
   console.error(`  Pairing code:  ${PAIRING_CODE}`);
-  console.error(`  Claude agent:  ${ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY set ✓' : 'no ANTHROPIC_API_KEY (in-app Claude agent disabled)'}`);
+  console.error(`  Claude (Anthropic):  ${ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY set ✓' : 'not set (Claude runs from the browser, if allowed)'}`);
+  console.error(`  Gemini (Google):     ${GEMINI_API_KEY ? 'GEMINI_API_KEY set ✓' : 'not set (Gemini runs from the browser)'}`);
   console.error('  Paste this code into inflow → Outbox → Connect Claude.');
   console.error('');
   console.error('  Add to Claude Desktop config (claude_desktop_config.json):');
@@ -142,7 +151,12 @@ function onConnection(socket) {
       authed = true;
       extension = socket;
       advertisedTools = Array.isArray(msg.tools) ? msg.tools : [];
-      socket.send(JSON.stringify({ type: 'hello_ack' }));
+      // Advertise which provider keys we hold so the extension only routes a
+      // provider through us when we can actually run it server-side.
+      socket.send(JSON.stringify({
+        type: 'hello_ack',
+        keys: { anthropic: !!ANTHROPIC_API_KEY, gemini: !!GEMINI_API_KEY },
+      }));
       log(`extension paired; ${advertisedTools.length} tools available`);
       notifyToolsChanged(); // Claude re-fetches tools/list now that they exist
       return;
@@ -161,6 +175,11 @@ function onConnection(socket) {
     // Extension → companion → Anthropic (the in-app Claude agent's transport).
     if (msg.type === 'anthropic') {
       void handleAnthropic(socket, msg);
+      return;
+    }
+    // Extension → companion → Gemini (server-side Gemini, key kept here).
+    if (msg.type === 'gemini') {
+      void handleGemini(socket, msg);
       return;
     }
     if (msg.type === 'pong') return;
@@ -210,6 +229,42 @@ async function handleAnthropic(socket, msg) {
     reply({ ok: true, data });
   } catch (e) {
     reply({ ok: false, error: e?.message || 'Anthropic request failed' });
+  }
+}
+
+/**
+ * Proxy one Gemini generateContent request for the extension. The key is added
+ * here (server-side); the extension sends the model + request body. Replies with
+ * `gemini_result` { id, ok, data|error } on the same socket.
+ */
+async function handleGemini(socket, msg) {
+  const id = msg.id;
+  const reply = (obj) => {
+    try { socket.send(JSON.stringify({ type: 'gemini_result', id, ...obj })); } catch {}
+  };
+  if (!GEMINI_API_KEY) {
+    reply({ ok: false, error: 'No Gemini key in the companion. Set GEMINI_API_KEY and restart it.' });
+    return;
+  }
+  const model = (msg.model || '').toString().trim();
+  if (!model) {
+    reply({ ok: false, error: 'No Gemini model specified.' });
+    return;
+  }
+  try {
+    const res = await fetch(geminiUrl(model), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+      body: JSON.stringify(msg.body || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      reply({ ok: false, error: data?.error?.message || `Gemini HTTP ${res.status}` });
+      return;
+    }
+    reply({ ok: true, data });
+  } catch (e) {
+    reply({ ok: false, error: e?.message || 'Gemini request failed' });
   }
 }
 

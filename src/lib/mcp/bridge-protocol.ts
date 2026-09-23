@@ -13,14 +13,24 @@ import type { McpToolDescriptor } from './tools';
 
 export type BridgeStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
 
+/** Which provider keys the companion holds (advertised in hello_ack). */
+export interface CompanionKeys {
+  anthropic: boolean;
+  gemini: boolean;
+}
+
 /** Messages the companion sends to the extension. */
 export type InboundMessage =
-  | { type: 'hello_ack' }
+  // `keys` tells the extension which provider keys the companion holds, so it can
+  // route a provider through the companion only when that key is actually set.
+  | { type: 'hello_ack'; keys?: Partial<CompanionKeys> }
   | { type: 'error'; message?: string }
   | { type: 'call'; id: string; name: string; args?: Record<string, any> }
   | { type: 'ping' }
   // Reply to an `anthropic` request the extension sent (the in-app Claude agent).
-  | { type: 'anthropic_result'; id: string; ok: boolean; data?: any; error?: string };
+  | { type: 'anthropic_result'; id: string; ok: boolean; data?: any; error?: string }
+  // Reply to a `gemini` request (server-side Gemini, key kept in the companion).
+  | { type: 'gemini_result'; id: string; ok: boolean; data?: any; error?: string };
 
 export interface BridgeHandlers {
   token: string;
@@ -29,8 +39,12 @@ export interface BridgeHandlers {
   send: (msg: object) => void;
   onStatus: (status: BridgeStatus, error?: string) => void;
   onActivity: (text: string) => void;
+  /** Learn which provider keys the companion holds (from hello_ack). */
+  onCompanionKeys?: (keys: CompanionKeys) => void;
   /** Resolve a pending Anthropic proxy request (bridge-client owns the map). */
   onAnthropicResult?: (id: string, ok: boolean, data: any, error?: string) => void;
+  /** Resolve a pending Gemini proxy request (bridge-client owns the map). */
+  onGeminiResult?: (id: string, ok: boolean, data: any, error?: string) => void;
 }
 
 /** Friendly one-line description of a tool call for the activity feed. */
@@ -73,6 +87,13 @@ export function createBridgeSession(h: BridgeHandlers) {
         case 'hello_ack':
           h.onStatus('connected');
           h.onActivity('Connected to Claude');
+          // Older companions omit `keys`. Preserve the prior behavior (Anthropic
+          // routed through the companion when connected) and require an explicit
+          // signal to route Gemini through it.
+          h.onCompanionKeys?.({
+            anthropic: msg.keys ? !!msg.keys.anthropic : true,
+            gemini: msg.keys ? !!msg.keys.gemini : false,
+          });
           return;
         case 'error':
           h.onStatus('error', msg.message || 'Connection rejected');
@@ -82,6 +103,9 @@ export function createBridgeSession(h: BridgeHandlers) {
           return;
         case 'anthropic_result':
           h.onAnthropicResult?.(msg.id, msg.ok, msg.data, msg.error);
+          return;
+        case 'gemini_result':
+          h.onGeminiResult?.(msg.id, msg.ok, msg.data, msg.error);
           return;
         case 'call': {
           h.onActivity(activityLabel(msg.name, msg.args));

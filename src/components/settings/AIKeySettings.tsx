@@ -326,7 +326,7 @@ export function AIKeySettings() {
       <div>
         <h3 className="text-sm font-semibold text-fg-strong">AI models</h3>
         <p className="mt-1 text-sm text-fg-secondary">
-          Pick which model powers each job. Mix providers freely, or use one for both. Gemini runs in the browser; Claude runs through the companion.
+          Pick which model powers each job. Mix providers freely, or use one for both. Each key can live in your browser, or in the MCP connector to stay off the browser (Claude needs the connector on orgs that block browser access).
         </p>
         <div className="mt-3 space-y-3">
           <div>
@@ -466,7 +466,7 @@ export function AIKeySettings() {
             </span>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">
-            Bring your own key&nbsp;&mdash; it&rsquo;s free and takes a minute.
+            Bring your own key&nbsp;&mdash; it&rsquo;s free and takes a minute. Paste it here for a direct browser call, or set it in the <span className="font-medium text-fg-strong">MCP connector</span> to keep it off the browser.
           </p>
 
           {geminiSaved ? (
@@ -504,11 +504,11 @@ export function AIKeySettings() {
                     terms if prompted).
                   </li>
                   <li>Copy the generated key.</li>
-                  <li>Paste it below and click Save.</li>
+                  <li>Paste it below and click Save, or set it in the MCP connector to keep it off the browser.</li>
                 </ol>
                 <p className="mt-2 text-[11px] text-fg-faint">
-                  Free tier: 500 requests/day. Your key is stored only on this device and sent
-                  directly to Google.
+                  Free tier: 500 requests/day. A key pasted here is stored unencrypted on this device
+                  and sent directly to Google — the connector path keeps it off the browser.
                 </p>
               </div>
 

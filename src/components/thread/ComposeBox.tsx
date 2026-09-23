@@ -8,6 +8,8 @@ import { EmojiAutocomplete } from './EmojiAutocomplete';
 import { EmojiPicker } from './EmojiPicker';
 import { useAutocomplete } from '@/hooks/useAutocomplete';
 import { useReplySuggestions } from '@/hooks/useReplySuggestions';
+import { SparkleIcon } from '@/components/common/SparkleIcon';
+import type { AiComposeApi } from '@/hooks/useAiCompose';
 import type { Message } from '@/types/message';
 
 const FILE_ICONS: Record<string, string> = {
@@ -62,10 +64,12 @@ interface ComposeBoxProps {
   conversationId: string;
   messages?: Message[];
   participantNames?: string[];
+  /** AI Compose API (toggle + instruction + generate), shared with the thread. */
+  ai?: AiComposeApi;
 }
 
 export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
-  ({ conversationId, messages = [], participantNames = [] }, ref) => {
+  ({ conversationId, messages = [], participantNames = [], ai }, ref) => {
     const [body, setBody] = useState('');
     const [attachments, setAttachments] = useState<File[]>([]);
     const { sendMessage, sendAndArchive, archiveConversation } = useOptimisticAction();
@@ -227,6 +231,24 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
       document.addEventListener('inflow:attach-files', onAttach);
       return () => document.removeEventListener('inflow:attach-files', onAttach);
     }, [conversationId]);
+
+    // AI Compose: when the user approves a generated draft, load it into the
+    // composer so they can edit and send it — it is never sent automatically.
+    useEffect(() => {
+      function onApprove(e: Event) {
+        const detail = (e as CustomEvent).detail as { conversationId?: string; text?: string } | undefined;
+        if (!detail || detail.conversationId !== conversationId || !detail.text) return;
+        setBody(detail.text);
+        saveDraft(conversationId, detail.text, attachmentsRef.current);
+        document.dispatchEvent(new CustomEvent('inflow:draft-change', { detail: conversationId }));
+        requestAnimationFrame(() => {
+          autoResize();
+          textareaRef.current?.focus();
+        });
+      }
+      document.addEventListener('inflow:ai-compose-approve', onApprove);
+      return () => document.removeEventListener('inflow:ai-compose-approve', onApprove);
+    }, [conversationId, autoResize]);
 
     // Periodically save draft to IndexedDB and notify ConversationRow
     useEffect(() => {
@@ -606,6 +628,43 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
           }}
         />
 
+        {/* AI compose: describe the message; the model drafts it as a pending
+            bubble above for approval. Only shown when the mode is toggled on. */}
+        {ai?.enabled && (
+          <div className="mb-2 rounded-xl border border-blue-500/40 bg-surface-input p-2">
+            <div className="flex items-center gap-2 px-0.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                <SparkleIcon className="h-3 w-3" /> AI compose
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[11px] text-fg-faint">Describe the message — the AI drafts it above for your approval.</span>
+            </div>
+            <div className="mt-1.5 flex items-end gap-2">
+              <input
+                value={ai.instruction}
+                onChange={(e) => ai.setInstruction(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (ai.instruction.trim() && ai.status !== 'generating') void ai.generate();
+                  }
+                }}
+                placeholder="e.g. Thank them, sound professional, and offer a few new times"
+                aria-label="Describe the message for the AI to write"
+                className="min-w-0 flex-1 rounded-lg bg-surface px-2.5 py-1.5 text-sm text-fg-strong ring-1 ring-inset ring-edge outline-none placeholder:text-fg-faint focus:ring-blue-500/40"
+              />
+              <button
+                type="button"
+                onClick={() => void ai.generate()}
+                disabled={!ai.instruction.trim() || ai.status === 'generating'}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40 dark:text-blue-300"
+              >
+                <SparkleIcon className="h-4 w-4" />
+                {ai.status === 'generating' ? 'Writing…' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Unified composer field: attachments, textarea, and a slim action row
             all share one rounded surface (iMessage / Slack style). */}
         <div className="rounded-2xl bg-surface-input px-2.5 pb-1.5 pt-2 ring-1 ring-inset ring-ring-muted transition-colors focus-within:ring-blue-500/50">
@@ -831,6 +890,25 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
                 </svg>
               </button>
             </div>
+
+            {/* AI compose toggle — flips the composer into "describe it" mode. */}
+            {ai?.available && (
+              <button
+                type="button"
+                onClick={() => ai.setEnabled(!ai.enabled)}
+                title={ai.enabled ? 'Turn off AI compose' : 'AI compose — describe a message and let AI draft it'}
+                aria-label="AI compose"
+                aria-pressed={ai.enabled}
+                className={`flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium transition-colors ${
+                  ai.enabled
+                    ? 'bg-blue-500/15 text-blue-700 ring-1 ring-inset ring-blue-500/30 dark:text-blue-300'
+                    : 'text-fg-muted hover:bg-surface-hover hover:text-fg-secondary'
+                }`}
+              >
+                <SparkleIcon className="h-[18px] w-[18px]" />
+                <span className="hidden sm:inline">AI</span>
+              </button>
+            )}
 
             <div className="flex-1" />
 

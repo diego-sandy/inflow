@@ -8,6 +8,8 @@ import { useDbGeneration } from '@/hooks/useDbGeneration';
 import { ThreadHeader } from './ThreadHeader';
 import { MessageBubble, TIME_GAP_MS, formatSeparatorTime } from './MessageBubble';
 import { ComposeBox } from './ComposeBox';
+import { AiDraftBubble } from './AiDraftBubble';
+import { useAiCompose } from '@/hooks/useAiCompose';
 import type { Conversation } from '@/types/conversation';
 
 interface ThreadViewProps {
@@ -18,6 +20,14 @@ interface ThreadViewProps {
 export function ThreadView({ conversation, composeRef }: ThreadViewProps) {
   const messages = useThread(conversation.id, conversation.mergedIds);
   const dbGen = useDbGeneration();
+  // AI Compose: shared between the composer (toggle + instruction) and the thread
+  // (the pending draft bubble the user approves or discards).
+  const ai = useAiCompose({
+    conversationId: conversation.id,
+    messages,
+    participantNames: conversation.participantNames,
+  });
+  const showAiBubble = ai.draft !== null || ai.status === 'generating' || ai.status === 'error';
   const scrollRef = useRef<HTMLDivElement>(null);
   const { sendMessage, markRead } = useOptimisticAction();
 
@@ -262,11 +272,16 @@ export function ThreadView({ conversation, composeRef }: ThreadViewProps) {
               ))}
             </div>
           )}
+          {showAiBubble && (
+            <div className="pt-2">
+              <AiDraftBubble ai={ai} />
+            </div>
+          )}
         </div>
       </div>
 
       <ComposeBox ref={composeRef} conversationId={conversation.id}
-                  messages={messages} participantNames={conversation.participantNames} />
+                  messages={messages} participantNames={conversation.participantNames} ai={ai} />
     </div>
   );
 }

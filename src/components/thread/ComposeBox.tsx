@@ -31,6 +31,10 @@ const SAVE_INTERVAL = 1000;
 /** LinkedIn rejects oversized message attachments; guard before we upload. */
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // 20 MB
 
+/** LinkedIn caps member-to-member messages around 8,000 characters. The counter
+ * turns amber past 90% and red past the limit (soft — we don't block the send). */
+const MESSAGE_CHAR_LIMIT = 8000;
+
 /** Save draft text and/or attachments to IndexedDB in a single row. */
 function saveDraft(conversationId: string, text: string, files: File[]) {
   if (!text && files.length === 0) {
@@ -927,6 +931,25 @@ export const ComposeBox = forwardRef<HTMLTextAreaElement, ComposeBoxProps>(
             ) : null)}
 
             <div className="flex-1" />
+
+            {/* Character counter — appears once you're typing a message (not an
+                AI instruction). Amber near LinkedIn's ~8,000 cap, red past it. */}
+            {!aiMode && body.length > 0 && (
+              <span
+                className={`self-center px-1.5 text-[11px] tabular-nums ${
+                  body.length > MESSAGE_CHAR_LIMIT
+                    ? 'text-red-500'
+                    : body.length > MESSAGE_CHAR_LIMIT * 0.9
+                      ? 'text-amber-500'
+                      : 'text-fg-faint'
+                }`}
+                title={`${body.length.toLocaleString()} of ${MESSAGE_CHAR_LIMIT.toLocaleString()} characters`}
+              >
+                {body.length > MESSAGE_CHAR_LIMIT * 0.9
+                  ? `${body.length.toLocaleString()} / ${MESSAGE_CHAR_LIMIT.toLocaleString()}`
+                  : body.length.toLocaleString()}
+              </span>
+            )}
 
             {/* Save-as-draft / schedule — hidden while instructing in AI mode */}
             {!aiMode && (

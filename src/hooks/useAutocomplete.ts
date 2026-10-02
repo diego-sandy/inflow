@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAISession } from './useAISession';
-import { buildAutocompletePrompt, MIN_BODY_LENGTH } from '@/lib/autocomplete-prompt';
+import {
+  buildAutocompletePrompt,
+  mergeSuggestion,
+  AUTOCOMPLETE_SYSTEM_PROMPT,
+  MIN_BODY_LENGTH,
+} from '@/lib/autocomplete-prompt';
 import { ENABLE_AI_AUTOCOMPLETE } from '@/lib/feature-flags';
 import type { Message } from '@/types/message';
 
@@ -87,14 +92,18 @@ export function useAutocomplete({
       abortRef.current = controller;
 
       setIsLoading(true);
-      const result = await aiSession.predict(prompt, controller.signal);
+      const result = await aiSession.predict(prompt, {
+        signal: controller.signal,
+        systemPrompt: AUTOCOMPLETE_SYSTEM_PROMPT,
+      });
       if (controller.signal.aborted) return;
 
       setIsLoading(false);
       if (result) {
-        // Ensure a space between the current text and the suggestion
-        const needsSpace = body.length > 0 && !body.endsWith(' ') && !result.startsWith(' ');
-        setSuggestion(needsSpace ? ' ' + result : result);
+        // Finishing the word in progress appends with no space; a new word gets
+        // one. mergeSuggestion decides from the model's word-repeat convention.
+        const merged = mergeSuggestion(body, result);
+        if (merged) setSuggestion(merged);
       }
     }, DEBOUNCE_MS);
 

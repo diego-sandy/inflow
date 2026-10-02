@@ -41,8 +41,9 @@ beforeEach(() => {
 
 it('aborts the in-flight prediction when the hook unmounts', async () => {
   let capturedSignal: AbortSignal | undefined;
-  predict.mockImplementation((_prompt: string, signal: AbortSignal) => {
-    capturedSignal = signal;
+  // The hook passes an options object ({ signal, systemPrompt }), not a bare signal.
+  predict.mockImplementation((_prompt: string, opts: { signal?: AbortSignal }) => {
+    capturedSignal = opts?.signal;
     return new Promise(() => {}); // never resolves — stays in flight
   });
 

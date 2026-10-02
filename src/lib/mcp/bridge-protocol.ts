@@ -60,6 +60,14 @@ export function activityLabel(name: string, args: Record<string, any> = {}): str
       return 'Claude reviewed your network stats';
     case 'get_conversation_summary':
       return 'Claude read a conversation summary';
+    case 'search_messages':
+      return `Claude searched your messages${args.query ? ` for “${args.query}”` : ''}`;
+    case 'list_conversations':
+      return `Claude reviewed your inbox${args.awaitingReply ? ' (awaiting your reply)' : ''}`;
+    case 'get_thread':
+      return 'Claude read a conversation';
+    case 'find_stale_connections':
+      return 'Claude looked for people to reconnect with';
     case 'create_draft':
       return 'Claude drafted a message → Outbox';
     default:

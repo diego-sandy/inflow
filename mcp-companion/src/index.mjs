@@ -20,7 +20,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -165,6 +165,27 @@ function saveCachedTools(tools) {
 const pending = new Map();
 
 let wss = null;
+/**
+ * Only one companion can own the localhost bridge the extension dials into, but
+ * every MCP client (Claude Desktop, Claude Code, …) starts its own companion.
+ * The one that wins the port is the OWNER and talks to the extension directly.
+ * Any other becomes a PEER: it connects to the owner over the same socket and
+ * asks it to run tool calls, so every client works instead of the losers being
+ * dead weight. Peers keep retrying the bind, so if the owner exits one of them
+ * takes over the bridge.
+ */
+/** Owner side: connected peer companions, for broadcasting catalog changes. */
+const peers = new Set();
+/** Peer side: our socket to the owner, and calls awaiting its reply. */
+let peerSocket = null;
+// Set once we are confirmed to be relaying, and cleared only after we announce
+// taking the bridge over. The socket itself is already gone by then (the owner
+// exiting is what frees the port), so it can't be used to detect a takeover.
+let wasRelaying = false;
+const peerPending = new Map();
+// Slightly longer than the owner's own timeout so a genuine extension timeout
+// surfaces as itself rather than as an opaque peer timeout.
+const PEER_CALL_TIMEOUT_MS = CALL_TIMEOUT_MS + 5_000;
 
 /**
  * Bind the localhost WebSocket server, retrying on EADDRINUSE instead of dying.
@@ -174,7 +195,17 @@ let wss = null;
  */
 function bindWs() {
   wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
-  wss.on('listening', () => log(`bridge port ${PORT} is FREE — listening on ws://127.0.0.1:${PORT}; inflow can pair with this companion`));
+  wss.on('listening', () => {
+    log(`bridge port ${PORT} is FREE — listening on ws://127.0.0.1:${PORT}; inflow can pair with this companion`);
+    // We just took the bridge (possibly from an owner that exited); stop
+    // relaying through anyone else.
+    if (peerSocket || wasRelaying) {
+      try { peerSocket?.close(); } catch {}
+      peerSocket = null;
+      wasRelaying = false;
+      log('took over the bridge — no longer relaying through another companion');
+    }
+  });
   wss.on('connection', onConnection);
   wss.on('error', (e) => {
     if (e?.code === 'EADDRINUSE') {
@@ -184,7 +215,8 @@ function bindWs() {
         `until the port frees up (quit the other Claude window, or let a stale process exit). Retrying in 2s…`
       );
       try { wss.close(); } catch {}
-      setTimeout(bindWs, 2000);
+      connectAsPeer(); // work through the owner instead of idling
+      setTimeout(bindWs, 2000); // and keep trying, in case the owner exits
     } else {
       log('WebSocket server error:', e?.message);
     }
@@ -193,6 +225,7 @@ function bindWs() {
 
 function onConnection(socket) {
   let authed = false;
+  let isPeer = false;
   socket.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
@@ -219,9 +252,34 @@ function onConnection(socket) {
       }));
       log(`extension paired; ${advertisedTools.length} tools available`);
       notifyToolsChanged(); // Claude re-fetches tools/list now that they exist
+      broadcastToolsToPeers(); // and so do any companions relaying through us
+      return;
+    }
+    // Another companion asking us (the bridge owner) to work on its behalf.
+    if (msg.type === 'peer_hello') {
+      if (msg.token !== PAIRING_CODE) {
+        socket.send(JSON.stringify({ type: 'error', message: 'Wrong pairing code' }));
+        socket.close();
+        return;
+      }
+      authed = true;
+      isPeer = true;
+      peers.add(socket);
+      socket.send(JSON.stringify({ type: 'peer_ack', tools: advertisedTools }));
+      log(`peer companion attached (${peers.size} now relaying through this one)`);
       return;
     }
     if (!authed) return;
+
+    // A peer's tool call. We run it against OUR extension and send the result
+    // back. Peers never forward to other peers, so this cannot loop.
+    if (msg.type === 'peer_call') {
+      callExtension(msg.name, msg.args).then(
+        (data) => { try { socket.send(JSON.stringify({ type: 'peer_result', id: msg.id, ok: true, data })); } catch {} },
+        (e) => { try { socket.send(JSON.stringify({ type: 'peer_result', id: msg.id, ok: false, error: e?.message || 'Tool failed' })); } catch {} },
+      );
+      return;
+    }
 
     if (msg.type === 'result') {
       const p = pending.get(msg.id);
@@ -246,6 +304,10 @@ function onConnection(socket) {
   });
 
   socket.on('close', () => {
+    if (isPeer) {
+      peers.delete(socket);
+      log(`peer companion detached (${peers.size} still relaying)`);
+    }
     if (extension === socket) {
       extension = null;
       // Keep advertising the catalog: the tools still exist, inflow just is not
@@ -328,14 +390,94 @@ async function handleGemini(socket, msg) {
   }
 }
 
-/** Relay a tool call to the paired extension and await its result. */
-function relayCall(name, args) {
+/** Tell every attached peer the catalog changed, so their clients refresh. */
+function broadcastToolsToPeers() {
+  for (const sock of peers) {
+    try { sock.send(JSON.stringify({ type: 'peer_tools', tools: advertisedTools })); } catch {}
+  }
+}
+
+/**
+ * Attach to the companion that owns the bridge, so our client's tool calls can
+ * be run through it. Idempotent: a live or pending socket short-circuits.
+ */
+function connectAsPeer() {
+  if (peerSocket && (peerSocket.readyState === WebSocket.OPEN || peerSocket.readyState === WebSocket.CONNECTING)) return;
+  let sock;
+  try {
+    sock = new WebSocket(`ws://127.0.0.1:${PORT}`);
+  } catch (e) {
+    log('could not reach the companion that owns the bridge:', e?.message);
+    return;
+  }
+  peerSocket = sock;
+
+  sock.on('open', () => sock.send(JSON.stringify({ type: 'peer_hello', token: PAIRING_CODE })));
+
+  sock.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
+
+    if (msg.type === 'peer_ack' || msg.type === 'peer_tools') {
+      if (Array.isArray(msg.tools) && msg.tools.length) {
+        advertisedTools = msg.tools;
+        notifyToolsChanged();
+      }
+      if (msg.type === 'peer_ack') {
+        wasRelaying = true;
+        log(`relaying through the companion that owns the bridge (${advertisedTools.length} tools)`);
+      }
+      return;
+    }
+    if (msg.type === 'peer_result') {
+      const pend = peerPending.get(msg.id);
+      if (!pend) return;
+      peerPending.delete(msg.id);
+      clearTimeout(pend.timer);
+      if (msg.ok) pend.resolve(msg.data);
+      else pend.reject(new Error(msg.error || 'Tool failed'));
+      return;
+    }
+    if (msg.type === 'error') log('bridge owner rejected us:', msg.message);
+  });
+
+  const drop = () => {
+    if (peerSocket === sock) peerSocket = null;
+    // Fail fast rather than leaving the client hanging until each timeout.
+    for (const [, pend] of peerPending) {
+      clearTimeout(pend.timer);
+      pend.reject(new Error('The companion that owns the inflow bridge went away.'));
+    }
+    peerPending.clear();
+  };
+  sock.on('close', drop);
+  sock.on('error', drop);
+}
+
+/** Ask the bridge owner to run a tool for us, and await its reply. */
+function callViaPeer(name, args) {
+  return new Promise((resolve, reject) => {
+    const id = randomUUID();
+    const timer = setTimeout(() => {
+      peerPending.delete(id);
+      reject(new Error('The companion that owns the inflow bridge did not respond in time.'));
+    }, PEER_CALL_TIMEOUT_MS);
+    peerPending.set(id, { resolve, reject, timer });
+    try {
+      peerSocket.send(JSON.stringify({ type: 'peer_call', id, name, args: args || {} }));
+    } catch (e) {
+      peerPending.delete(id);
+      clearTimeout(timer);
+      reject(new Error(e?.message || 'Could not reach the companion that owns the bridge.'));
+    }
+  });
+}
+
+/** Send a tool call straight to our own paired extension. */
+function callExtension(name, args) {
   return new Promise((resolve, reject) => {
     if (!extension || extension.readyState !== extension.OPEN) {
-      reject(new Error(
-        'inflow is not connected to this companion. Open the inflow tab (it pairs automatically). ' +
-        'If another Claude window is open, only one companion can own 127.0.0.1:8123 — quit the extra one.'
-      ));
+      reject(new Error('inflow is not connected. Open the inflow tab — it pairs automatically.'));
       return;
     }
     const id = randomUUID();
@@ -346,6 +488,19 @@ function relayCall(name, args) {
     pending.set(id, { resolve, reject, timer });
     extension.send(JSON.stringify({ type: 'call', id, name, args: args || {} }));
   });
+}
+
+/** Relay a tool call to the paired extension and await its result. */
+function relayCall(name, args) {
+  // We own the bridge: straight to the extension.
+  if (extension && extension.readyState === extension.OPEN) return callExtension(name, args);
+  // Another companion owns it: ask them to run it for us.
+  if (peerSocket && peerSocket.readyState === WebSocket.OPEN) return callViaPeer(name, args);
+  // Neither: the tab is closed (or we have not attached to the owner yet).
+  if (peerSocket && peerSocket.readyState === WebSocket.CONNECTING) {
+    return Promise.reject(new Error('Still attaching to the companion that owns the inflow bridge — try again in a moment.'));
+  }
+  return Promise.reject(new Error('inflow is not connected. Open the inflow tab — it pairs automatically.'));
 }
 
 // --- MCP server (stdio to Claude Desktop) ---------------------------------

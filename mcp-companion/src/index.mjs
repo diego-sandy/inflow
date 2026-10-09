@@ -23,13 +23,18 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { WebSocketServer } from 'ws';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
 
 const PORT = Number(process.env.INFLOW_MCP_PORT || 8123);
 const CONFIG_DIR = join(homedir(), '.inflow-mcp');
 const TOKEN_FILE = join(CONFIG_DIR, 'token');
 const TOOLS_FILE = join(CONFIG_DIR, 'tools.json');
+// Catalog shipped with the companion, generated from the extension's own
+// descriptors (npm run gen:mcp-tools). Lets a fresh install advertise tools on
+// its very first launch, before the inflow tab has ever paired.
+const DEFAULT_TOOLS_FILE = join(dirname(fileURLToPath(import.meta.url)), 'default-tools.json');
 const CALL_TIMEOUT_MS = 30_000;
 
 // --- Anthropic proxy (for the in-app Claude agent) ------------------------
@@ -87,7 +92,8 @@ function printSetup() {
   console.error(`  Pairing code:  ${PAIRING_CODE}`);
   console.error(`  Claude (Anthropic):  ${ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY set ✓' : 'not set (Claude runs from the browser, if allowed)'}`);
   console.error(`  Gemini (Google):     ${GEMINI_API_KEY ? 'GEMINI_API_KEY set ✓' : 'not set (Gemini runs from the browser)'}`);
-  console.error('  Tools:               ' + (advertisedTools.length ? advertisedTools.length + ' cached (refreshed when inflow pairs)' : 'none cached yet — open the inflow tab once'));
+  console.error('  Tools:               ' + (advertisedTools.length ? advertisedTools.length + ' available (refreshed when inflow pairs)' : 'none — open the inflow tab once'));
+  console.error('  Bridge port:         ' + PORT + ' (checking… see the log line below)');
   console.error('  Paste this code into inflow → Outbox → Connect Claude.');
   console.error('');
   console.error('  Add to Claude Desktop config (claude_desktop_config.json):');
@@ -124,15 +130,26 @@ let notifyToolsChanged = () => {};
  */
 let advertisedTools = loadCachedTools();
 
-/** Load the last catalog the extension advertised. Never throws. */
-function loadCachedTools() {
+/** Read a tool catalog from disk; null when absent, empty or unreadable. */
+function readToolsFile(file) {
   try {
-    if (!existsSync(TOOLS_FILE)) return [];
-    const parsed = JSON.parse(readFileSync(TOOLS_FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed.filter((t) => t && typeof t.name === 'string') : [];
+    if (!existsSync(file)) return null;
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    if (!Array.isArray(parsed)) return null;
+    const tools = parsed.filter((t) => t && typeof t.name === 'string');
+    return tools.length ? tools : null;
   } catch {
-    return [];
+    return null;
   }
+}
+
+/**
+ * The catalog to advertise before (or without) a live extension: the user's
+ * cache from their last pairing, else the catalog bundled with this companion.
+ * Never throws — a bad file just falls through to the next source.
+ */
+function loadCachedTools() {
+  return readToolsFile(TOOLS_FILE) ?? readToolsFile(DEFAULT_TOOLS_FILE) ?? [];
 }
 
 /** Persist the catalog so every future instance can advertise it immediately. */
@@ -157,11 +174,15 @@ let wss = null;
  */
 function bindWs() {
   wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
-  wss.on('listening', () => log(`listening on ws://127.0.0.1:${PORT}`));
+  wss.on('listening', () => log(`bridge port ${PORT} is FREE — listening on ws://127.0.0.1:${PORT}; inflow can pair with this companion`));
   wss.on('connection', onConnection);
   wss.on('error', (e) => {
     if (e?.code === 'EADDRINUSE') {
-      log(`port ${PORT} in use — another companion is still up; retrying in 2s`);
+      log(
+        `bridge port ${PORT} is BUSY — another inflow companion already owns the bridge. ` +
+        `This instance still advertises ${advertisedTools.length} tools, but tool calls will fail ` +
+        `until the port frees up (quit the other Claude window, or let a stale process exit). Retrying in 2s…`
+      );
       try { wss.close(); } catch {}
       setTimeout(bindWs, 2000);
     } else {

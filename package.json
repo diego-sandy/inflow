@@ -9,11 +9,12 @@
     "dev": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
-    "pack:companion": "cd mcp-companion && npm install && npm run pack && cp inflow.mcpb ../public/inflow.mcpb",
+    "pack:companion": "npm run gen:mcp-tools && cd mcp-companion && npm install && npm run pack && cp inflow.mcpb ../public/inflow.mcpb",
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "gen:mcp-tools": "vite-node --config vitest.config.ts scripts/gen-mcp-tools.ts"
   },
   "dependencies": {
     "@wxt-dev/module-react": "^1.2.2",

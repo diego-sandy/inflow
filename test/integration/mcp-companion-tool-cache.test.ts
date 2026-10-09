@@ -7,17 +7,18 @@
  * served regardless of whether the extension is currently connected.
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const COMPANION = join(process.cwd(), 'mcp-companion', 'src', 'index.mjs');
 
 /** Drive the companion over stdio MCP and return the tools/list result. */
-function startWithoutExtension(cachedTools: unknown[]): Promise<{ tools: string[]; instructions?: string }> {
+function startWithoutExtension(cachedTools: unknown[] | null): Promise<{ tools: string[]; instructions?: string }> {
   const home = mkdtempSync(join(tmpdir(), 'inflow-home-'));
   mkdirSync(join(home, '.inflow-mcp'), { recursive: true });
-  writeFileSync(join(home, '.inflow-mcp', 'tools.json'), JSON.stringify(cachedTools));
+  // null = a fresh install: no cache file at all, so the bundled catalog is used.
+  if (cachedTools) writeFileSync(join(home, '.inflow-mcp', 'tools.json'), JSON.stringify(cachedTools));
 
   return new Promise((resolve, reject) => {
     const proc = spawn('node', [COMPANION], {
@@ -65,9 +66,14 @@ it('serves the cached tool catalog when no extension is connected', async () => 
   expect(names).toEqual(['search_messages', 'create_draft']);
 }, 15_000);
 
-it('reports an empty list only when nothing has ever been cached', async () => {
-  const { tools } = await startWithoutExtension([]);
-  expect(tools).toEqual([]);
+it('falls back to the bundled catalog on a fresh install (never paired)', async () => {
+  const bundled = JSON.parse(
+    readFileSync(join(process.cwd(), 'mcp-companion', 'src', 'default-tools.json'), 'utf8'),
+  ).map((t: any) => t.name);
+  const { tools } = await startWithoutExtension(null);
+  // A brand-new user must still see the full toolbox on first launch.
+  expect(tools).toEqual(bundled);
+  expect(tools).toContain('create_draft');
 }, 15_000);
 
 it('briefs the model on what inflow is via the MCP initialize instructions', async () => {

@@ -31,8 +31,14 @@ function startWithoutExtension(cachedTools: unknown[] | null): Promise<{ tools: 
     let out = '';
     proc.stdout.on('data', (d) => (out += String(d)));
     proc.on('error', reject);
+    // See the relay test: an async EPIPE on stdin after teardown would
+    // otherwise be unhandled and fail the run with no failing test.
+    proc.stdin.on('error', () => {});
 
-    const send = (o: object) => proc.stdin.write(JSON.stringify(o) + '\n');
+    const send = (o: object) => {
+      if (proc.killed || !proc.stdin.writable) return;
+      proc.stdin.write(JSON.stringify(o) + '\n');
+    };
     send({
       jsonrpc: '2.0', id: 0, method: 'initialize',
       params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } },

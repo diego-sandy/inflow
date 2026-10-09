@@ -28,13 +28,22 @@ function startCompanion(home: string, relayOnly = false) {
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+  // Killing these processes mid-flight makes Node emit async errors on the
+  // child and its stdin (EPIPE on a write that races teardown). With no
+  // listener those surface as unhandled and fail the whole run at random,
+  // without any test reporting a failure.
+  proc.on('error', () => {});
+  proc.stdin.on('error', () => {});
   let out = '';
   let err = '';
   proc.stdout.on('data', (d) => (out += String(d)));
   proc.stderr.on('data', (d) => (err += String(d)));
   return {
     proc,
-    send: (o: object) => proc.stdin.write(JSON.stringify(o) + '\n'),
+    send: (o: object) => {
+      if (proc.killed || !proc.stdin.writable) return;
+      proc.stdin.write(JSON.stringify(o) + '\n');
+    },
     messages: () =>
       out.split('\n').filter(Boolean)
         .map((l) => { try { return JSON.parse(l); } catch { return null; } })

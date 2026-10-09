@@ -57,6 +57,8 @@ export interface BridgeHandlers {
   send: (msg: object) => void;
   onStatus: (status: BridgeStatus, error?: string) => void;
   onActivity: (text: string) => void;
+  /** Commit sha of this extension build, for the companion build comparison. */
+  appCommit?: string;
   /** Learn which provider keys the companion holds (from hello_ack). */
   onCompanionKeys?: (keys: CompanionKeys) => void;
   /** Resolve a pending Anthropic proxy request (bridge-client owns the map). */
@@ -112,6 +114,25 @@ export function describeCompanion(status?: CompanionStatus): string {
   return `Companion${version}${commit} ready — ${parts.join(' · ')}`;
 }
 
+/**
+ * Whether the companion came from the same commit as this extension — the
+ * question you actually want answered after rebuilding one half.
+ *
+ * Compares commit shas, NOT build numbers: CI stamps the extension with its run
+ * number while the companion always uses the git commit count, so identical
+ * code can carry different numbers. Returns null when either side can't say,
+ * rather than guessing a match or crying wolf.
+ */
+export function describeBuildMatch(status?: CompanionStatus, appCommit?: string): string | null {
+  const theirs = status?.commit;
+  if (!theirs || !appCommit || theirs === 'unknown' || appCommit === 'nogit') return null;
+  if (theirs === appCommit) return 'Same build as this inflow session ✓';
+  return (
+    `Different build from this inflow session — companion ${theirs}, inflow ${appCommit}. ` +
+    'Reinstall the companion from the MCP connector to match.'
+  );
+}
+
 export function createBridgeSession(h: BridgeHandlers) {
   return {
     /** Call once the socket opens: authenticate and advertise the toolbox. */
@@ -133,6 +154,10 @@ export function createBridgeSession(h: BridgeHandlers) {
           h.onStatus('connected');
           h.onActivity('Connected to Claude');
           h.onActivity(describeCompanion(msg.status));
+          {
+            const match = describeBuildMatch(msg.status, h.appCommit);
+            if (match) h.onActivity(match);
+          }
           // Older companions omit `keys`. Preserve the prior behavior (Anthropic
           // routed through the companion when connected) and require an explicit
           // signal to route Gemini through it.

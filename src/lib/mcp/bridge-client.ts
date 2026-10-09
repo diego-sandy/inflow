@@ -110,6 +110,14 @@ let loggedWaiting = false;
 function setStatus(status: BridgeStatus, error?: string) {
   useUIStore.getState().setMcpStatus(status, error ?? null);
 }
+/**
+ * Commit of this extension build, injected by the bundler. Absent under test
+ * (and in any build without the define), so callers must treat it as optional.
+ */
+function appCommit(): string | undefined {
+  return typeof __COMMIT_SHA__ === 'string' ? __COMMIT_SHA__ : undefined;
+}
+
 function pushActivity(text: string) {
   useUIStore.getState().pushMcpActivity(text);
 }
@@ -158,6 +166,7 @@ function open() {
         loggedWaiting = false;
       }
     },
+    appCommit: appCommit(),
     onActivity: (t) => pushActivity(t),
     onCompanionKeys: (keys) => {
       companionKeys = keys;

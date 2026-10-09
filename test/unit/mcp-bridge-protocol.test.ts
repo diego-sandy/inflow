@@ -3,7 +3,7 @@
  * Pure logic: no real WebSocket, we drive it with fake inbound frames and assert
  * what it sends and how it reports status/activity.
  */
-import { createBridgeSession, activityLabel, describeCompanion } from '@/lib/mcp/bridge-protocol';
+import { createBridgeSession, activityLabel, describeCompanion, describeBuildMatch } from '@/lib/mcp/bridge-protocol';
 
 function harness(callTool = vi.fn(async () => ({ ok: true }))) {
   const sent: any[] = [];
@@ -153,4 +153,38 @@ it('omits the commit when the build was never stamped', () => {
   expect(describeCompanion({ version: 'dev', ownsBridge: true, port: 8123 })).toBe(
     'Companion vdev ready — bridge on 127.0.0.1:8123',
   );
+});
+
+// --- does the companion match this inflow build? ---------------------------
+
+it('says plainly when the companion is the same build as this session', () => {
+  expect(describeBuildMatch({ commit: 'abc1234' }, 'abc1234')).toBe('Same build as this inflow session ✓');
+});
+
+it('names both sides when they differ, and how to fix it', () => {
+  const line = describeBuildMatch({ commit: 'abc1234' }, 'def5678')!;
+  expect(line).toContain('companion abc1234');
+  expect(line).toContain('inflow def5678');
+  expect(line).toMatch(/Reinstall the companion/i);
+});
+
+it('stays silent when either side cannot say, instead of guessing', () => {
+  // Build numbers are NOT comparable (CI run number vs commit count), so the
+  // absence of a sha must mean "no claim", not a false mismatch.
+  expect(describeBuildMatch({ version: '0.1.0.214' }, 'abc1234')).toBeNull();
+  expect(describeBuildMatch({ commit: 'abc1234' }, undefined)).toBeNull();
+  expect(describeBuildMatch({ commit: 'unknown' }, 'abc1234')).toBeNull();
+  expect(describeBuildMatch({ commit: 'abc1234' }, 'nogit')).toBeNull();
+  expect(describeBuildMatch(undefined, 'abc1234')).toBeNull();
+});
+
+it('adds the match line to the feed on connect', async () => {
+  const sent: any[] = [];
+  const activity: string[] = [];
+  const session = createBridgeSession({
+    token: 'T', tools: [], callTool: vi.fn(), send: (m) => sent.push(m),
+    onStatus: () => {}, onActivity: (t) => activity.push(t), appCommit: 'abc1234',
+  });
+  await session.handleMessage(JSON.stringify({ type: 'hello_ack', status: { commit: 'abc1234', port: 8123, ownsBridge: true } }));
+  expect(activity).toContain('Same build as this inflow session ✓');
 });

@@ -95,6 +95,14 @@ export default defineConfig({
     },
   },
   vite: () => ({
+    // Expose the commit to app code in EVERY build (not just dev, where it also
+    // rides along in version_name). The MCP connector compares this against the
+    // companion's own commit to tell the user whether the two halves match —
+    // build numbers can't be compared, since CI stamps the extension with a run
+    // number while the companion always uses the commit count.
+    define: {
+      __COMMIT_SHA__: JSON.stringify(shortSha()),
+    },
     plugins: [tailwindcss()],
     resolve: {
       alias: {

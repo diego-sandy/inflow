@@ -4,14 +4,18 @@
   "display_name": "inflow",
   "version": "0.1.0",
   "description": "Let Claude work with your inflow LinkedIn network — search connections, read network stats, and draft messages into your Outbox. Claude reads and drafts only; it never sends.",
-  "author": { "name": "inflow" },
+  "author": {
+    "name": "inflow"
+  },
   "license": "MIT",
   "server": {
     "type": "node",
     "entry_point": "src/index.mjs",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/src/index.mjs"],
+      "args": [
+        "${__dirname}/src/index.mjs"
+      ],
       "env": {
         "INFLOW_PAIRING_CODE": "${user_config.pairing_code}",
         "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}",
@@ -23,21 +27,21 @@
     "pairing_code": {
       "type": "string",
       "title": "inflow pairing code",
-      "description": "Copy it from inflow → MCP connector → Connect Claude.",
+      "description": "Copy it from inflow → MCP connector.",
       "required": true,
       "sensitive": true
     },
     "anthropic_api_key": {
       "type": "string",
-      "title": "Anthropic API key (optional)",
-      "description": "For inflow's in-app Claude agent. The key stays here in the companion and is never sent to the browser. Leave blank if you don't use Claude, or paste it directly in inflow instead.",
+      "title": "Anthropic API key (optional) — for inflow's in-app Claude",
+      "description": "sk-ant-… Kept here, never sent to the browser.",
       "required": false,
       "sensitive": true
     },
     "gemini_api_key": {
       "type": "string",
-      "title": "Gemini API key (optional)",
-      "description": "For running Gemini server-side so the key stays off the browser. The key stays here in the companion and is never sent to the browser. Leave blank if you don't use Gemini, or paste it directly in inflow instead.",
+      "title": "Gemini API key (optional) — runs Gemini server-side",
+      "description": "AIza… Kept here, never sent to the browser.",
       "required": false,
       "sensitive": true
     }

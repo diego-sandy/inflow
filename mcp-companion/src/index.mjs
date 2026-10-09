@@ -29,6 +29,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 const PORT = Number(process.env.INFLOW_MCP_PORT || 8123);
 const CONFIG_DIR = join(homedir(), '.inflow-mcp');
 const TOKEN_FILE = join(CONFIG_DIR, 'token');
+const TOOLS_FILE = join(CONFIG_DIR, 'tools.json');
 const CALL_TIMEOUT_MS = 30_000;
 
 // --- Anthropic proxy (for the in-app Claude agent) ------------------------
@@ -86,6 +87,7 @@ function printSetup() {
   console.error(`  Pairing code:  ${PAIRING_CODE}`);
   console.error(`  Claude (Anthropic):  ${ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY set ✓' : 'not set (Claude runs from the browser, if allowed)'}`);
   console.error(`  Gemini (Google):     ${GEMINI_API_KEY ? 'GEMINI_API_KEY set ✓' : 'not set (Gemini runs from the browser)'}`);
+  console.error('  Tools:               ' + (advertisedTools.length ? advertisedTools.length + ' cached (refreshed when inflow pairs)' : 'none cached yet — open the inflow tab once'));
   console.error('  Paste this code into inflow → Outbox → Connect Claude.');
   console.error('');
   console.error('  Add to Claude Desktop config (claude_desktop_config.json):');
@@ -108,8 +110,40 @@ let extension = null;
  * it caches an empty toolset and reports "no inflow connector".
  */
 let notifyToolsChanged = () => {};
-/** Tools advertised by the extension (MCP tool descriptors). */
-let advertisedTools = [];
+/**
+ * Tools advertised to the MCP client (descriptors authored by the extension).
+ *
+ * Deliberately decoupled from the live extension connection: the catalog is
+ * cached to disk when the extension pairs and reloaded at startup, so
+ * tools/list is populated before the inflow tab is ever opened, while it is
+ * closed, and in a second companion instance that lost the WebSocket port.
+ * Previously it was emptied whenever the extension was not paired at that exact
+ * moment, so any client that asked during that window saw a tool-less server
+ * and cached that snapshot. Calls still fail fast, with a clear message, when
+ * the tab is not actually connected.
+ */
+let advertisedTools = loadCachedTools();
+
+/** Load the last catalog the extension advertised. Never throws. */
+function loadCachedTools() {
+  try {
+    if (!existsSync(TOOLS_FILE)) return [];
+    const parsed = JSON.parse(readFileSync(TOOLS_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed.filter((t) => t && typeof t.name === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist the catalog so every future instance can advertise it immediately. */
+function saveCachedTools(tools) {
+  try {
+    mkdirSync(CONFIG_DIR, { recursive: true });
+    writeFileSync(TOOLS_FILE, JSON.stringify(tools, null, 2));
+  } catch (e) {
+    log('Could not cache the tool list:', e?.message);
+  }
+}
 /** Pending relayed calls, id → { resolve, reject, timer }. */
 const pending = new Map();
 
@@ -150,7 +184,12 @@ function onConnection(socket) {
       }
       authed = true;
       extension = socket;
-      advertisedTools = Array.isArray(msg.tools) ? msg.tools : [];
+      // Only replace the catalog with a non-empty one, so a malformed hello can
+      // never wipe a good cache out from under other clients.
+      if (Array.isArray(msg.tools) && msg.tools.length) {
+        advertisedTools = msg.tools;
+        saveCachedTools(msg.tools);
+      }
       // Advertise which provider keys we hold so the extension only routes a
       // provider through us when we can actually run it server-side.
       socket.send(JSON.stringify({
@@ -188,9 +227,9 @@ function onConnection(socket) {
   socket.on('close', () => {
     if (extension === socket) {
       extension = null;
-      advertisedTools = [];
-      log('extension disconnected');
-      notifyToolsChanged();
+      // Keep advertising the catalog: the tools still exist, inflow just is not
+      // open. Clearing it here is what made Claude see a tool-less server.
+      log('extension disconnected (still advertising ' + advertisedTools.length + ' tools)');
     }
   });
 }
@@ -272,7 +311,10 @@ async function handleGemini(socket, msg) {
 function relayCall(name, args) {
   return new Promise((resolve, reject) => {
     if (!extension || extension.readyState !== extension.OPEN) {
-      reject(new Error('inflow is not connected. Open the inflow tab and pair the companion (Outbox → Connect Claude).'));
+      reject(new Error(
+        'inflow is not connected to this companion. Open the inflow tab (it pairs automatically). ' +
+        'If another Claude window is open, only one companion can own 127.0.0.1:8123 — quit the extra one.'
+      ));
       return;
     }
     const id = randomUUID();

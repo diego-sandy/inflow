@@ -7,7 +7,7 @@
  * Keep descriptions placeholder-length and let `title` carry what the field is
  * for. These bounds are the point of the test, not incidental.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const manifest = JSON.parse(
@@ -45,4 +45,13 @@ it('wires every configured field through to the server environment', () => {
       `${name} is collected from the user but never passed to the server`,
     ).toBe(true);
   }
+});
+
+it('ships an icon that actually exists in the bundle', () => {
+  // The install dialog falls back to a generic placeholder when `icon` is
+  // missing or points at a file that was never packed — and nothing errors,
+  // so the only symptom is a blank-looking extension.
+  expect(manifest.icon, 'manifest should declare an icon').toBeTruthy();
+  const iconPath = resolve(process.cwd(), 'mcp-companion', manifest.icon);
+  expect(existsSync(iconPath), `icon ${manifest.icon} is declared but not present`).toBe(true);
 });

@@ -15,7 +15,10 @@ export type BridgeStatus = 'connecting' | 'connected' | 'error' | 'disconnected'
 
 /** Companion-side facts reported on connect, for the in-app activity feed. */
 export interface CompanionStatus {
+  /** Full build identity, e.g. "0.1.0.214" ("dev" when never stamped). */
   version?: string;
+  /** Short git sha of the build, when known. */
+  commit?: string;
   /** Localhost port the bridge is on. */
   port?: number;
   /** False when this companion relays through another that owns the bridge. */
@@ -105,7 +108,8 @@ export function describeCompanion(status?: CompanionStatus): string {
   if (typeof status.tools === 'number') parts.push(`${status.tools} tools`);
   if (status.peers) parts.push(`${status.peers} other Claude client${status.peers === 1 ? '' : 's'}`);
   const version = status.version ? ` v${status.version}` : '';
-  return `Companion${version} ready — ${parts.join(' · ')}`;
+  const commit = status.commit ? ` (${status.commit})` : '';
+  return `Companion${version}${commit} ready — ${parts.join(' · ')}`;
 }
 
 export function createBridgeSession(h: BridgeHandlers) {

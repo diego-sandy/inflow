@@ -34,7 +34,8 @@ const TOOLS_FILE = join(CONFIG_DIR, 'tools.json');
 // Catalog shipped with the companion, generated from the extension's own
 // descriptors (npm run gen:mcp-tools). Lets a fresh install advertise tools on
 // its very first launch, before the inflow tab has ever paired.
-const DEFAULT_TOOLS_FILE = join(dirname(fileURLToPath(import.meta.url)), 'default-tools.json');
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_TOOLS_FILE = join(MODULE_DIR, 'default-tools.json');
 const CALL_TIMEOUT_MS = 30_000;
 /**
  * Relay-only: never bind the bridge, always work through the companion that
@@ -44,7 +45,21 @@ const CALL_TIMEOUT_MS = 30_000;
  * in-app AI. They still get the full toolbox, via the owner.
  */
 const RELAY_ONLY = process.env.INFLOW_RELAY_ONLY === '1';
-const COMPANION_VERSION = '0.1.0';
+/**
+ * Build identity, stamped by scripts/gen-companion-build.mjs at pack time.
+ * Reported to inflow so the activity feed can say exactly which build is live.
+ * Absent when running from a checkout that was never stamped — say "dev" rather
+ * than claiming a version we can't substantiate.
+ */
+const BUILD_INFO = (() => {
+  try {
+    return JSON.parse(readFileSync(join(MODULE_DIR, 'build-info.json'), 'utf8'));
+  } catch {
+    return {};
+  }
+})();
+const COMPANION_VERSION = BUILD_INFO.version || 'dev';
+const COMPANION_COMMIT = BUILD_INFO.commit || undefined;
 /** True once we own the bridge (the WS server is listening). */
 let ownsBridge = false;
 
@@ -100,6 +115,7 @@ function printSetup() {
   console.error('');
   console.error('  inflow MCP companion');
   console.error('  ─────────────────────');
+  console.error(`  Build:         v${COMPANION_VERSION}${COMPANION_COMMIT ? ` (${COMPANION_COMMIT})` : ''}`);
   console.error(`  Pairing code:  ${PAIRING_CODE}`);
   console.error(`  Claude (Anthropic):  ${ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY set ✓' : 'not set (Claude runs from the browser, if allowed)'}`);
   console.error(`  Gemini (Google):     ${GEMINI_API_KEY ? 'GEMINI_API_KEY set ✓' : 'not set (Gemini runs from the browser)'}`);
@@ -273,6 +289,7 @@ function onConnection(socket) {
         // Companion-side facts the browser otherwise has no way to know.
         status: {
           version: COMPANION_VERSION,
+          commit: COMPANION_COMMIT,
           port: PORT,
           ownsBridge,
           tools: advertisedTools.length,

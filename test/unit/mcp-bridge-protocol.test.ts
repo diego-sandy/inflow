@@ -142,3 +142,15 @@ it('pushes companion-sent activity lines into the feed', async () => {
   await h.session.handleMessage(JSON.stringify({ type: 'activity' }));
   expect(h.activity.filter(Boolean).length).toBe(h.activity.length);
 });
+
+it('reports the companion build and commit so you can tell which is live', () => {
+  const line = describeCompanion({ version: '0.1.0.214', commit: '14b533a', ownsBridge: true, port: 8123, tools: 10 });
+  expect(line).toContain('v0.1.0.214');
+  expect(line).toContain('(14b533a)');
+});
+
+it('omits the commit when the build was never stamped', () => {
+  expect(describeCompanion({ version: 'dev', ownsBridge: true, port: 8123 })).toBe(
+    'Companion vdev ready — bridge on 127.0.0.1:8123',
+  );
+});

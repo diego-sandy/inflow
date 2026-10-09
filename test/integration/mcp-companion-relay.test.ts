@@ -88,6 +88,9 @@ it('relays a peer companion\'s tool call through the bridge owner', async () => 
     // than that detail only ever reaching the MCP client's log file.
     expect(ack?.status).toMatchObject({ port: Number(PORT), ownsBridge: true });
     expect(ack.status.tools).toBeGreaterThan(0);
+    // Build identity, so the feed can say which build is actually live.
+    expect(typeof ack.status.version).toBe('string');
+    expect(ack.status.version.length).toBeGreaterThan(0);
 
     // Second companion on the same port — it must become a peer, not a dud.
     peer = startCompanion(home);

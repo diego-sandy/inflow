@@ -20,9 +20,12 @@ const CODE = 'TEST-RELAY';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function startCompanion(home: string) {
+function startCompanion(home: string, relayOnly = false) {
   const proc = spawn('node', [COMPANION], {
-    env: { ...process.env, HOME: home, INFLOW_MCP_PORT: PORT, INFLOW_PAIRING_CODE: CODE },
+    env: {
+      ...process.env, HOME: home, INFLOW_MCP_PORT: PORT, INFLOW_PAIRING_CODE: CODE,
+      ...(relayOnly ? { INFLOW_RELAY_ONLY: '1' } : {}),
+    },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   let out = '';
@@ -43,6 +46,9 @@ function startCompanion(home: string) {
 /** Stand-in for the browser extension: pairs, then answers tool calls. */
 function fakeExtension(onCall: (name: string) => void) {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
+  // Killing the owner in a test's finally block resets this socket; without a
+  // listener that surfaces as an unhandled error and fails the run at random.
+  ws.addEventListener('error', () => {});
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({
       type: 'hello',
@@ -136,6 +142,50 @@ it('a peer takes over the bridge when the owner exits', async () => {
   } finally {
     owner?.proc.kill('SIGINT');
     peer?.proc.kill('SIGINT');
+    rmSync(home, { recursive: true, force: true });
+  }
+}, 30_000);
+
+it('a relay-only instance never owns the bridge, even when the port is free', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'inflow-relayonly-'));
+  const calls: string[] = [];
+  let relay: ReturnType<typeof startCompanion> | undefined;
+  let owner: ReturnType<typeof startCompanion> | undefined;
+  let ext: WebSocket | undefined;
+  try {
+    // Start it FIRST, with nothing holding the port — it must still refuse to bind.
+    relay = startCompanion(home, true);
+    await wait(1200);
+    expect(relay.stderr()).toMatch(/relay-only/);
+    expect(relay.stderr()).not.toMatch(/is FREE/);
+
+    // The real owner (the one with the provider keys) comes up and takes it.
+    owner = startCompanion(home);
+    await wait(900);
+    expect(owner.stderr()).toMatch(/is FREE/);
+    ext = fakeExtension((n) => calls.push(n));
+    await wait(1600); // relay reattaches on its 2s loop
+
+    relay.send({
+      jsonrpc: '2.0', id: 0, method: 'initialize',
+      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+    });
+    await wait(300);
+    relay.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    relay.send({
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name: 'create_draft', arguments: {} },
+    });
+    await wait(1800);
+
+    // Routed through the owner to the extension, and answered.
+    expect(calls).toEqual(['create_draft']);
+    const call = relay.messages().find((m) => m.id === 2);
+    expect(JSON.stringify(call?.result?.content)).toContain('ranOnExtension');
+  } finally {
+    try { ext?.close(); } catch {}
+    relay?.proc.kill('SIGINT');
+    owner?.proc.kill('SIGINT');
     rmSync(home, { recursive: true, force: true });
   }
 }, 30_000);

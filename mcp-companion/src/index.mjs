@@ -36,6 +36,14 @@ const TOOLS_FILE = join(CONFIG_DIR, 'tools.json');
 // its very first launch, before the inflow tab has ever paired.
 const DEFAULT_TOOLS_FILE = join(dirname(fileURLToPath(import.meta.url)), 'default-tools.json');
 const CALL_TIMEOUT_MS = 30_000;
+/**
+ * Relay-only: never bind the bridge, always work through the companion that
+ * does. For instances started by a client that has no provider keys (e.g. a
+ * second MCP client), so they can't win the port and end up serving the
+ * extension without an ANTHROPIC_API_KEY — which would silently break inflow's
+ * in-app AI. They still get the full toolbox, via the owner.
+ */
+const RELAY_ONLY = process.env.INFLOW_RELAY_ONLY === '1';
 
 // --- Anthropic proxy (for the in-app Claude agent) ------------------------
 // The companion calls Anthropic server-side, so the browser's CORS restriction
@@ -93,7 +101,9 @@ function printSetup() {
   console.error(`  Claude (Anthropic):  ${ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY set ✓' : 'not set (Claude runs from the browser, if allowed)'}`);
   console.error(`  Gemini (Google):     ${GEMINI_API_KEY ? 'GEMINI_API_KEY set ✓' : 'not set (Gemini runs from the browser)'}`);
   console.error('  Tools:               ' + (advertisedTools.length ? advertisedTools.length + ' available (refreshed when inflow pairs)' : 'none — open the inflow tab once'));
-  console.error('  Bridge port:         ' + PORT + ' (checking… see the log line below)');
+  console.error('  Bridge port:         ' + PORT + (RELAY_ONLY
+    ? ' (relay-only: this instance works through the companion that owns the bridge)'
+    : ' (checking… see the log line below)'));
   console.error('  Paste this code into inflow → Outbox → Connect Claude.');
   console.error('');
   console.error('  Add to Claude Desktop config (claude_desktop_config.json):');
@@ -194,6 +204,13 @@ const PEER_CALL_TIMEOUT_MS = CALL_TIMEOUT_MS + 5_000;
  * trying until the port frees up, then grabs it and pairs.
  */
 function bindWs() {
+  if (RELAY_ONLY) {
+    // connectAsPeer is a no-op while a socket is open or connecting, so this
+    // doubles as the reattach loop if the owner restarts.
+    connectAsPeer();
+    setTimeout(bindWs, 2000);
+    return;
+  }
   wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
   wss.on('listening', () => {
     log(`bridge port ${PORT} is FREE — listening on ws://127.0.0.1:${PORT}; inflow can pair with this companion`);

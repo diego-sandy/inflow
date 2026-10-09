@@ -44,6 +44,9 @@ const CALL_TIMEOUT_MS = 30_000;
  * in-app AI. They still get the full toolbox, via the owner.
  */
 const RELAY_ONLY = process.env.INFLOW_RELAY_ONLY === '1';
+const COMPANION_VERSION = '0.1.0';
+/** True once we own the bridge (the WS server is listening). */
+let ownsBridge = false;
 
 // --- Anthropic proxy (for the in-app Claude agent) ------------------------
 // The companion calls Anthropic server-side, so the browser's CORS restriction
@@ -213,6 +216,7 @@ function bindWs() {
   }
   wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
   wss.on('listening', () => {
+    ownsBridge = true;
     log(`bridge port ${PORT} is FREE — listening on ws://127.0.0.1:${PORT}; inflow can pair with this companion`);
     // We just took the bridge (possibly from an owner that exited); stop
     // relaying through anyone else.
@@ -266,6 +270,14 @@ function onConnection(socket) {
       socket.send(JSON.stringify({
         type: 'hello_ack',
         keys: { anthropic: !!ANTHROPIC_API_KEY, gemini: !!GEMINI_API_KEY },
+        // Companion-side facts the browser otherwise has no way to know.
+        status: {
+          version: COMPANION_VERSION,
+          port: PORT,
+          ownsBridge,
+          tools: advertisedTools.length,
+          peers: peers.size,
+        },
       }));
       log(`extension paired; ${advertisedTools.length} tools available`);
       notifyToolsChanged(); // Claude re-fetches tools/list now that they exist
@@ -284,6 +296,7 @@ function onConnection(socket) {
       peers.add(socket);
       socket.send(JSON.stringify({ type: 'peer_ack', tools: advertisedTools }));
       log(`peer companion attached (${peers.size} now relaying through this one)`);
+      sendActivity(`Another Claude client attached — ${peers.size} relaying through this companion`);
       return;
     }
     if (!authed) return;
@@ -324,6 +337,7 @@ function onConnection(socket) {
     if (isPeer) {
       peers.delete(socket);
       log(`peer companion detached (${peers.size} still relaying)`);
+      sendActivity(`A Claude client detached — ${peers.size} still relaying`);
     }
     if (extension === socket) {
       extension = null;
@@ -405,6 +419,17 @@ async function handleGemini(socket, msg) {
   } catch (e) {
     reply({ ok: false, error: e?.message || 'Gemini request failed' });
   }
+}
+
+/**
+ * Send a line to inflow's in-app activity feed. Only the bridge owner can: the
+ * extension is connected to us, not to peers. Without this the companion's side
+ * of the story (which port, owner vs relay, how many clients) only ever reached
+ * the MCP client's log file, never the user.
+ */
+function sendActivity(text) {
+  if (!extension || extension.readyState !== extension.OPEN) return;
+  try { extension.send(JSON.stringify({ type: 'activity', text })); } catch {}
 }
 
 /** Tell every attached peer the catalog changed, so their clients refresh. */

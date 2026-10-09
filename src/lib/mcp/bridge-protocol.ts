@@ -13,6 +13,19 @@ import type { McpToolDescriptor } from './tools';
 
 export type BridgeStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
 
+/** Companion-side facts reported on connect, for the in-app activity feed. */
+export interface CompanionStatus {
+  version?: string;
+  /** Localhost port the bridge is on. */
+  port?: number;
+  /** False when this companion relays through another that owns the bridge. */
+  ownsBridge?: boolean;
+  /** How many tools it is advertising to its MCP client. */
+  tools?: number;
+  /** Other Claude clients relaying through it. */
+  peers?: number;
+}
+
 /** Which provider keys the companion holds (advertised in hello_ack). */
 export interface CompanionKeys {
   anthropic: boolean;
@@ -23,10 +36,12 @@ export interface CompanionKeys {
 export type InboundMessage =
   // `keys` tells the extension which provider keys the companion holds, so it can
   // route a provider through the companion only when that key is actually set.
-  | { type: 'hello_ack'; keys?: Partial<CompanionKeys> }
+  | { type: 'hello_ack'; keys?: Partial<CompanionKeys>; status?: CompanionStatus }
   | { type: 'error'; message?: string }
   | { type: 'call'; id: string; name: string; args?: Record<string, any> }
   | { type: 'ping' }
+  // A line for the in-app activity feed, pushed by the companion.
+  | { type: 'activity'; text?: string }
   // Reply to an `anthropic` request the extension sent (the in-app Claude agent).
   | { type: 'anthropic_result'; id: string; ok: boolean; data?: any; error?: string }
   // Reply to a `gemini` request (server-side Gemini, key kept in the companion).
@@ -75,6 +90,24 @@ export function activityLabel(name: string, args: Record<string, any> = {}): str
   }
 }
 
+/**
+ * One readable line about the companion we just paired with. Older companions
+ * send no status, so say only what we actually know rather than inventing it.
+ */
+export function describeCompanion(status?: CompanionStatus): string {
+  if (!status) return 'Companion ready (older build — no details reported)';
+  const parts: string[] = [];
+  parts.push(
+    status.ownsBridge === false
+      ? 'relaying through another companion'
+      : `bridge on 127.0.0.1:${status.port ?? '?'}`,
+  );
+  if (typeof status.tools === 'number') parts.push(`${status.tools} tools`);
+  if (status.peers) parts.push(`${status.peers} other Claude client${status.peers === 1 ? '' : 's'}`);
+  const version = status.version ? ` v${status.version}` : '';
+  return `Companion${version} ready — ${parts.join(' · ')}`;
+}
+
 export function createBridgeSession(h: BridgeHandlers) {
   return {
     /** Call once the socket opens: authenticate and advertise the toolbox. */
@@ -95,6 +128,7 @@ export function createBridgeSession(h: BridgeHandlers) {
         case 'hello_ack':
           h.onStatus('connected');
           h.onActivity('Connected to Claude');
+          h.onActivity(describeCompanion(msg.status));
           // Older companions omit `keys`. Preserve the prior behavior (Anthropic
           // routed through the companion when connected) and require an explicit
           // signal to route Gemini through it.
@@ -108,6 +142,9 @@ export function createBridgeSession(h: BridgeHandlers) {
           return;
         case 'ping':
           h.send({ type: 'pong' });
+          return;
+        case 'activity':
+          if (msg.text) h.onActivity(msg.text);
           return;
         case 'anthropic_result':
           h.onAnthropicResult?.(msg.id, msg.ok, msg.data, msg.error);

@@ -195,7 +195,7 @@ function open() {
       pushActivity('Connection to the companion lost — reconnecting…');
       wasConnected = false;
     } else if (!loggedWaiting) {
-      pushActivity('Waiting for the companion — run npx inflow-mcp, then keep this tab open.');
+      pushActivity(`Waiting for the companion on ${activeUrl} — install it from the MCP connector, then keep this tab open.`);
       loggedWaiting = true;
     }
     scheduleReconnect();
@@ -210,7 +210,7 @@ export function startMcpBridge(token: string, url: string = DEFAULT_MCP_URL) {
   retry = 0;
   wasConnected = false;
   loggedWaiting = false;
-  pushActivity('Connecting to the companion…');
+  pushActivity(`Connecting to the companion on ${activeUrl}…`);
   clearTimeout(retryTimer);
   try {
     ws?.close();

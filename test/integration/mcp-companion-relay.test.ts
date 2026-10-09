@@ -44,7 +44,7 @@ function startCompanion(home: string, relayOnly = false) {
 }
 
 /** Stand-in for the browser extension: pairs, then answers tool calls. */
-function fakeExtension(onCall: (name: string) => void) {
+function fakeExtension(onCall: (name: string) => void, onAck?: (ack: any) => void) {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   // Killing the owner in a test's finally block resets this socket; without a
   // listener that surfaces as an unhandled error and fails the run at random.
@@ -61,6 +61,7 @@ function fakeExtension(onCall: (name: string) => void) {
   });
   ws.addEventListener('message', (ev: any) => {
     const msg = JSON.parse(String(ev.data));
+    if (msg.type === 'hello_ack') { onAck?.(msg); return; }
     if (msg.type === 'call') {
       onCall(msg.name);
       ws.send(JSON.stringify({ type: 'result', id: msg.id, ok: true, data: { ranOnExtension: msg.name } }));
@@ -79,8 +80,14 @@ it('relays a peer companion\'s tool call through the bridge owner', async () => 
   try {
     owner = startCompanion(home);
     await wait(900);
-    ext = fakeExtension((n) => calls.push(n));
+    let ack: any;
+    ext = fakeExtension((n) => calls.push(n), (a) => (ack = a));
     await wait(700);
+
+    // The companion reports its own state so inflow can show it in-app, rather
+    // than that detail only ever reaching the MCP client's log file.
+    expect(ack?.status).toMatchObject({ port: Number(PORT), ownsBridge: true });
+    expect(ack.status.tools).toBeGreaterThan(0);
 
     // Second companion on the same port — it must become a peer, not a dud.
     peer = startCompanion(home);

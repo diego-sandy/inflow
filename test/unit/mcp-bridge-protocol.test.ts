@@ -3,7 +3,7 @@
  * Pure logic: no real WebSocket, we drive it with fake inbound frames and assert
  * what it sends and how it reports status/activity.
  */
-import { createBridgeSession, activityLabel } from '@/lib/mcp/bridge-protocol';
+import { createBridgeSession, activityLabel, describeCompanion } from '@/lib/mcp/bridge-protocol';
 
 function harness(callTool = vi.fn(async () => ({ ok: true }))) {
   const sent: any[] = [];
@@ -103,4 +103,42 @@ it('activityLabel describes known tools', () => {
   expect(activityLabel('get_network_stats')).toMatch(/network stats/i);
   expect(activityLabel('create_draft')).toMatch(/drafted a message/i);
   expect(activityLabel('mystery')).toMatch(/mystery/);
+});
+
+// --- companion status in the activity feed ---------------------------------
+
+it('describes the companion it paired with, including the bridge port', async () => {
+  const h = harness();
+  await h.session.handleMessage(JSON.stringify({
+    type: 'hello_ack',
+    status: { version: '0.1.0', port: 8123, ownsBridge: true, tools: 10 },
+  }));
+  const line = h.activity.find((t) => /Companion/.test(t))!;
+  expect(line).toContain('127.0.0.1:8123');
+  expect(line).toContain('10 tools');
+  expect(line).toContain('v0.1.0');
+});
+
+it('says when the companion is relaying rather than owning the bridge', () => {
+  expect(describeCompanion({ ownsBridge: false, tools: 10 })).toMatch(/relaying through another companion/i);
+});
+
+it('mentions other attached Claude clients, pluralised', () => {
+  expect(describeCompanion({ ownsBridge: true, port: 8123, peers: 1 })).toMatch(/1 other Claude client\b/);
+  expect(describeCompanion({ ownsBridge: true, port: 8123, peers: 2 })).toMatch(/2 other Claude clients/);
+});
+
+it('does not invent details when an older companion reports no status', async () => {
+  const h = harness();
+  await h.session.handleMessage(JSON.stringify({ type: 'hello_ack' }));
+  expect(h.activity.some((t) => /older build/.test(t))).toBe(true);
+});
+
+it('pushes companion-sent activity lines into the feed', async () => {
+  const h = harness();
+  await h.session.handleMessage(JSON.stringify({ type: 'activity', text: 'Another Claude client attached' }));
+  expect(h.activity).toContain('Another Claude client attached');
+  // An empty line is ignored rather than cluttering the feed.
+  await h.session.handleMessage(JSON.stringify({ type: 'activity' }));
+  expect(h.activity.filter(Boolean).length).toBe(h.activity.length);
 });

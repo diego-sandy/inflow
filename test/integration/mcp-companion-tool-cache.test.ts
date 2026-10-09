@@ -14,7 +14,7 @@ import { join } from 'node:path';
 const COMPANION = join(process.cwd(), 'mcp-companion', 'src', 'index.mjs');
 
 /** Drive the companion over stdio MCP and return the tools/list result. */
-function listToolsWithoutExtension(cachedTools: unknown[]): Promise<string[]> {
+function startWithoutExtension(cachedTools: unknown[]): Promise<{ tools: string[]; instructions?: string }> {
   const home = mkdtempSync(join(tmpdir(), 'inflow-home-'));
   mkdirSync(join(home, '.inflow-mcp'), { recursive: true });
   writeFileSync(join(home, '.inflow-mcp', 'tools.json'), JSON.stringify(cachedTools));
@@ -47,14 +47,18 @@ function listToolsWithoutExtension(cachedTools: unknown[]): Promise<string[]> {
       const msgs = out.split('\n').filter(Boolean)
         .map((l) => { try { return JSON.parse(l); } catch { return null; } })
         .filter(Boolean) as any[];
+      const init = msgs.find((m) => m.id === 0);
       const res = msgs.find((m) => m.id === 1);
-      resolve((res?.result?.tools ?? []).map((t: any) => t.name));
+      resolve({
+        tools: (res?.result?.tools ?? []).map((t: any) => t.name),
+        instructions: init?.result?.instructions,
+      });
     }, 1800);
   });
 }
 
 it('serves the cached tool catalog when no extension is connected', async () => {
-  const names = await listToolsWithoutExtension([
+  const { tools: names } = await startWithoutExtension([
     { name: 'search_messages', description: 'd', inputSchema: { type: 'object' } },
     { name: 'create_draft', description: 'd', inputSchema: { type: 'object' } },
   ]);
@@ -62,6 +66,12 @@ it('serves the cached tool catalog when no extension is connected', async () => 
 }, 15_000);
 
 it('reports an empty list only when nothing has ever been cached', async () => {
-  const names = await listToolsWithoutExtension([]);
-  expect(names).toEqual([]);
+  const { tools } = await startWithoutExtension([]);
+  expect(tools).toEqual([]);
+}, 15_000);
+
+it('briefs the model on what inflow is via the MCP initialize instructions', async () => {
+  const { instructions } = await startWithoutExtension([]);
+  expect(instructions).toMatch(/LinkedIn messaging client and network CRM/i);
+  expect(instructions).toMatch(/locally in their browser/i);
 }, 15_000);

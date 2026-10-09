@@ -330,7 +330,18 @@ function relayCall(name, args) {
 // --- MCP server (stdio to Claude Desktop) ---------------------------------
 const server = new Server(
   { name: 'inflow', version: '0.1.0' },
-  { capabilities: { tools: { listChanged: true } } },
+  {
+    capabilities: { tools: { listChanged: true } },
+    // Surfaced to the model by MCP clients as a briefing on what this server is.
+    // Deliberately only the durable description — operational specifics (what
+    // never sends, what needs the tab open, which tools combine) live in the
+    // tool descriptions, so they travel with the tools instead of going stale
+    // in a string the companion has to be rebuilt to change.
+    instructions:
+      'inflow is the user\u2019s LinkedIn messaging client and network CRM, running locally in ' +
+      'their browser. Use these tools to read their connections, search message history, ' +
+      'triage the inbox, and draft messages.',
+  },
 );
 
 // Now that the server exists, wire the "tools changed" nudge. Prefer the SDK

@@ -364,10 +364,27 @@ export async function recallMessage(
   debugLog('info', 'recallMessage: success');
 }
 
+/**
+ * Opens a new conversation, optionally as a Premium InMail.
+ *
+ * InMail reaches someone you are NOT connected to, costs one of the account's
+ * InMail credits, and carries a subject line. It is the same endpoint as an
+ * ordinary new conversation; the payload differs in three ways, captured from
+ * LinkedIn's own web client:
+ *   - message.subject is set
+ *   - hostMessageCreateContent marks it premiumInMail
+ *   - the plain `recipients` field is omitted (only hostRecipientUrns is sent)
+ * We mirror that exactly rather than sending a superset, since this spends a
+ * real credit and a rejected payload is wasted outreach.
+ *
+ * If a conversation with the recipient already exists we send into it as a
+ * normal message, which is both what LinkedIn's UI does and one credit saved.
+ */
 export async function createConversation(
   recipientUrns: string[],
   body: string,
-  attachments?: BridgeAttachment[]
+  attachments?: BridgeAttachment[],
+  inMail?: { subject: string }
 ): Promise<{ conversationId: string }> {
   // LinkedIn's UI always checks for an existing conversation first.
   // If one exists, send to it instead of trying to create (which may 400).
@@ -401,7 +418,7 @@ export async function createConversation(
     }
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     message: {
       body: {
         attributes: [],
@@ -409,15 +426,24 @@ export async function createConversation(
       },
       renderContentUnions,
       originToken,
+      ...(inMail ? { subject: inMail.subject } : {}),
     },
     mailboxUrn: memberUrn,
-    recipients: recipientUrns,
     hostRecipientUrns: recipientUrns,
     trackingId,
     dedupeByClientGeneratedToken: false,
+    ...(inMail
+      ? {
+          hostMessageCreateContent: {
+            'com.linkedin.voyager.dash.messaging.MessageCreateContent': {
+              messageCreateContentUnion: { premiumInMail: {} },
+            },
+          },
+        }
+      : { recipients: recipientUrns }),
   };
 
-  debugLog('info', `createConversation: to=${recipientUrns.length} recipient(s), urns=${recipientUrns.join(',')}`);
+  debugLog('info', `createConversation: to=${recipientUrns.length} recipient(s)${inMail ? ' via InMail (spends a credit)' : ''}, urns=${recipientUrns.join(',')}`);
 
   const res = await voyagerFetch(
     `/voyagerMessagingDashMessengerMessages?action=createMessage`,

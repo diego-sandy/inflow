@@ -86,3 +86,31 @@ it('opens a context menu on right-click', () => {
   expect(screen.getByRole('menu')).toBeInTheDocument();
   expect(screen.getByText('Set role')).toBeInTheDocument();
 });
+
+it('says so when the list is still loading a little at a time', async () => {
+  sendBridgeMessage.mockResolvedValue({ success: true, data: { requests: 31, stored: 1240, loadingMore: true } });
+  mockConnections = [makeConn()];
+  render(<ConnectionsList />);
+  await screen.findByText(/Still loading your connections, a little at a time/);
+  // A notice, not an error: the stored list stays on screen.
+  expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+});
+
+it('says so when LinkedIn asked inflow to slow down', async () => {
+  sendBridgeMessage.mockResolvedValue({
+    success: true,
+    data: { requests: 0, stored: 0, loadingMore: false, cooldownUntil: Date.now() + 3600_000, skipped: 'cooldown' },
+  });
+  mockConnections = [makeConn()];
+  render(<ConnectionsList />);
+  await screen.findByText(/LinkedIn asked inflow to slow down/);
+  expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+});
+
+it('shows no notice when the list is simply up to date', async () => {
+  sendBridgeMessage.mockResolvedValue({ success: true, data: { requests: 1, stored: 40, loadingMore: false } });
+  mockConnections = [makeConn()];
+  render(<ConnectionsList />);
+  await vi.waitFor(() => expect(sendBridgeMessage).toHaveBeenCalled());
+  expect(screen.queryByText(/Still loading|slow down/)).not.toBeInTheDocument();
+});

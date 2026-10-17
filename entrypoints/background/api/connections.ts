@@ -10,10 +10,29 @@ const DECORATION =
 // LinkedIn caps this endpoint's page size; 40 is the largest it reliably honors.
 export const CONNECTIONS_PAGE_SIZE = 40;
 
-// Safety ceiling so a viewer with thousands of connections can't spin the
-// pager indefinitely. Covers the vast majority of accounts; the loop also
-// stops early on the first short page.
-export const MAX_CONNECTIONS = 2000;
+// LinkedIn's own limit on first-degree connections. The pager stops on a short
+// page long before this; it is only a backstop against a response that keeps
+// returning full pages forever.
+export const MAX_CONNECTIONS = 30_000;
+
+/**
+ * A connections page LinkedIn refused. Carries the status so the caller can
+ * tell being throttled, which calls for backing off, from any other failure.
+ */
+export class ConnectionsFetchError extends Error {
+  constructor(public readonly status: number) {
+    super(`Fetch connections failed: ${status}`);
+    this.name = 'ConnectionsFetchError';
+  }
+}
+
+/**
+ * LinkedIn saying "slow down": 429 is the standard rate limit, and 999 is what
+ * LinkedIn returns once it has decided the traffic looks automated.
+ */
+export function isThrottleStatus(status: number): boolean {
+  return status === 429 || status === 999;
+}
 
 /**
  * Fetch one page of the viewer's connections, most-recently-added first.
@@ -31,41 +50,7 @@ export async function fetchConnectionsPage(
   const res = await voyagerFetch(path, { skipJitter: start === 0 });
   if (!res.ok) {
     debugLog('error', `fetchConnectionsPage failed: ${res.status}`);
-    throw new Error(`Fetch connections failed: ${res.status}`);
+    throw new ConnectionsFetchError(res.status);
   }
   return res.json();
-}
-
-/**
- * Page through the viewer's entire connection list (RECENTLY_ADDED first),
- * invoking `onPage` with each raw response as it arrives so the caller can
- * normalize + persist incrementally (the UI fills in progressively).
- *
- * Stops when a page returns fewer than a full page of elements (the last page)
- * or when `maxConnections` is reached. Returns the number of elements seen.
- */
-export async function fetchAllConnections(
-  onPage: (raw: any, pageIndex: number) => Promise<void> | void,
-  maxConnections: number = MAX_CONNECTIONS,
-): Promise<number> {
-  let start = 0;
-  let pageIndex = 0;
-  let total = 0;
-
-  while (start < maxConnections) {
-    // Don't overshoot the cap on the final page.
-    const count = Math.min(CONNECTIONS_PAGE_SIZE, maxConnections - start);
-    const raw = await fetchConnectionsPage(count, start);
-    const elements: any[] = raw?.data?.['*elements'] || [];
-
-    await onPage(raw, pageIndex);
-    total += elements.length;
-
-    // A short page means we've reached the end of the list.
-    if (elements.length < count) break;
-    start += CONNECTIONS_PAGE_SIZE;
-    pageIndex++;
-  }
-
-  return total;
 }

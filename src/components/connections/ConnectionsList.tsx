@@ -7,6 +7,7 @@ import { useCategorizeMode } from '@/hooks/useCategorizeMode';
 import { useUIStore, EMPTY_CONNECTION_FILTER, type ConnectionFilter } from '@/store/ui-store';
 import { sendBridgeMessage } from '@/lib/bridge';
 import { maybeAutoBackup } from '@/lib/backup-service';
+import { connectionsSyncNotice } from '@/lib/connections-settings';
 import { db } from '@/db/database';
 import { connectionProfileUrl, roleBadgeClass, interestTagClass } from './connection-format';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
@@ -197,6 +198,9 @@ export function ConnectionsList() {
   const showToast = useUIStore((s) => s.showToast);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Why the list may be incomplete or not refreshing. Not an error: the stored
+  // list still renders underneath it.
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
   // Filter + search live in the store so Insights can drill in with them set.
   const filter = useUIStore((s) => s.connectionsFilter);
   const setFilter = useUIStore((s) => s.setConnectionsFilter);
@@ -248,14 +252,17 @@ export function ConnectionsList() {
   }, [categorizing, done, showToast]);
 
   // Refresh from LinkedIn when the section mounts. The list still renders
-  // immediately from IndexedDB while the fetch is in flight.
+  // immediately from IndexedDB while the fetch is in flight. The background
+  // decides how much to ask LinkedIn for: usually one page, often nothing.
   useEffect(() => {
     let cancelled = false;
     setError(null);
     setSyncing(true);
     sendBridgeMessage({ type: 'FETCH_CONNECTIONS' })
       .then((res) => {
-        if (!cancelled && !res.success) setError(res.error || 'Failed to load connections');
+        if (cancelled) return;
+        if (!res.success) setError(res.error || 'Failed to load connections');
+        else setSyncNotice(connectionsSyncNotice(res.data));
       })
       .catch((e) => {
         if (!cancelled) setError(String(e?.message || e));
@@ -615,6 +622,10 @@ export function ConnectionsList() {
             Clear all
           </button>
         </div>
+      )}
+
+      {syncNotice && (
+        <div className="border-b border-edge px-4 py-1.5 text-[11px] text-fg-muted">{syncNotice}</div>
       )}
 
       {/* List */}

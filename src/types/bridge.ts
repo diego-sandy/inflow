@@ -41,7 +41,7 @@ export type BridgeMessage =
   | { type: 'PREFETCH_MESSAGES'; conversationIds: string[] }
   | { type: 'REACT_EMOJI'; conversationId: string; messageId: string; emoji: string }
   | { type: 'RECALL_MESSAGE'; conversationId: string; messageId: string }
-  | { type: 'FETCH_CONNECTIONS'; count?: number }
+  | { type: 'FETCH_CONNECTIONS'; force?: boolean }
   | { type: 'FETCH_INVITATIONS' }
   | { type: 'RESPOND_INVITATION'; invitationId: string; sharedSecret: string; action: 'accept' | 'ignore' }
   | { type: 'CHECK_FOR_UPDATE' };

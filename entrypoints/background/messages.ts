@@ -15,8 +15,7 @@ import {
 import { fetchMessages, fetchAllMessages, sendMessage, editMessage, createConversation, reactWithEmoji, recallMessage } from './api/messages';
 import { enqueueSend } from './send-queue';
 import { searchTypeahead } from './api/typeahead';
-import { fetchAllConnections, MAX_CONNECTIONS } from './api/connections';
-import { normalizeConnections } from '@/lib/connections-normalizer';
+import { syncConnections } from './sync/connections-sync';
 import { fetchInvitationsRaw, respondToInvitation } from './api/relationships';
 import { normalizeInvitations, invitationPaging } from '@/lib/invitation-normalizer';
 import type { Invitation } from '@/types/network';
@@ -34,7 +33,7 @@ import { repairConversationParticipants } from './sync/repair-participants';
 import { reconcileRecalledMessages } from './sync/reconcile-messages';
 import { debugLog, getDebugLogs, clearDebugLogs } from '@/lib/debug-log';
 import { getBackfillCutoff } from '@/lib/sync-settings';
-import { db, mergeProfiles, mergeConnections } from '@/db/database';
+import { db, mergeProfiles } from '@/db/database';
 import { mergeConversation } from './sync/merge-conversation';
 import { dbReady } from './db-ready';
 import { runDiagnosticSync } from './diagnostic';
@@ -316,22 +315,10 @@ export async function handleMessage(msg: BridgeMessage): Promise<BridgeResponse>
       return { success: true, data: result };
     }
     case 'FETCH_CONNECTIONS': {
-      // Page through the whole list (LinkedIn caps each page at 40), persisting
-      // each page as it arrives. `count`, when given, caps the total pulled.
-      const cap = msg.count ?? MAX_CONNECTIONS;
-      let stored = 0;
-      await fetchAllConnections(async (raw) => {
-        const { connections, profiles } = normalizeConnections(raw);
-        if (connections.length === 0) return;
-        await db.transaction('rw', [db.connections, db.profiles], async () => {
-          // mergeConnections preserves AI categorization across re-syncs.
-          await mergeConnections(connections);
-          await mergeProfiles(profiles);
-        });
-        stored += connections.length;
-      }, cap);
-      debugLog('info', `[CONNECTIONS] Synced ${stored} connection(s)`);
-      return { success: true, data: { count: stored } };
+      // Incremental: usually one request, nothing at all if checked recently,
+      // with a paced, budgeted full pass now and then (see connections-sync).
+      const result = await syncConnections({ force: msg.force });
+      return { success: true, data: result };
     }
     case 'FETCH_INVITATIONS': {
       // Page through received invitations (LinkedIn caps each page at 40), then

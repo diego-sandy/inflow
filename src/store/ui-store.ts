@@ -17,7 +17,7 @@ import {
   setConfirmDelete as persistConfirmDelete,
 } from '@/lib/send-settings';
 
-export type SettingsSection = 'ai' | 'chat' | 'sending' | 'appearance' | 'backup' | 'advanced' | 'about';
+export type SettingsSection = 'ai' | 'chat' | 'sending' | 'connections' | 'appearance' | 'backup' | 'advanced' | 'about';
 
 /**
  * Active filter over the connections list (shared so Insights can drive it).

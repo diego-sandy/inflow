@@ -29,6 +29,7 @@ import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { checkForUpdateAndToast } from '@/lib/check-update';
 import { AIKeySettings } from './AIKeySettings';
 import { BackupSettings } from './BackupSettings';
+import { ConnectionsSettings } from './ConnectionsSettings';
 import { Toggle } from '@/components/common/Toggle';
 import { Logo } from '@/components/common/Wordmark';
 
@@ -115,6 +116,7 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   { id: 'ai', label: 'AI', children: [{ id: 'chat', label: 'Chat' }, { id: 'sending', label: 'Drafts' }] },
+  { id: 'connections', label: 'Connections' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'backup', label: 'Backup' },
   { id: 'advanced', label: 'Demo mode' },
@@ -624,6 +626,7 @@ export function SettingsModal() {
             {section === 'ai' && <AIKeySettings />}
             {section === 'chat' && <ChatSettings />}
             {section === 'sending' && <SendingSettings />}
+            {section === 'connections' && <ConnectionsSettings />}
             {section === 'appearance' && <AppearanceSettings />}
             {section === 'backup' && <BackupSettings />}
             {section === 'advanced' && <AdvancedSettings />}

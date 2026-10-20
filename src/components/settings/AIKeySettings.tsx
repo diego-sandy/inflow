@@ -105,6 +105,143 @@ function UseCompanionLink({ onBack }: { onBack: () => void }) {
   );
 }
 
+function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-500 underline hover:text-blue-400">
+      {children}
+    </a>
+  );
+}
+
+/**
+ * A key saved in the browser: a hint of it, where it lives, and how to change it.
+ *
+ * Deliberately no full reveal. Anyone at this machine can read the key out of
+ * extension storage anyway, so hiding it protects nothing against them; what a
+ * reveal adds is one click between the key and a screen share or screenshot.
+ * The hint answers the real question, "which key is this?", and the note says
+ * where the full key actually lives.
+ *
+ * Replace keeps the current key working until the new one has been verified
+ * and saved. Removing first would switch AI off in between, and a typo in the
+ * new key would leave it off.
+ */
+function SavedKey({
+  provider,
+  masked,
+  onRemove,
+  fullKeyNote,
+  value,
+  onChange,
+  onSave,
+  saving,
+  error,
+  placeholder,
+}: {
+  provider: string;
+  masked: string;
+  onRemove: () => void;
+  fullKeyNote: React.ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => Promise<boolean>;
+  saving: boolean;
+  error: string | null;
+  placeholder: string;
+}) {
+  const [replacing, setReplacing] = useState(false);
+  const [show, setShow] = useState(false);
+
+  const close = () => {
+    setReplacing(false);
+    setShow(false);
+  };
+  const cancel = () => {
+    close();
+    onChange('');
+  };
+  // Closes only on a verified save; a failed one stays open with its error.
+  const save = async () => {
+    if (await onSave()) close();
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-2">
+        <span
+          aria-label={`Saved ${provider} key`}
+          className="rounded-md bg-surface px-3 py-1.5 font-mono text-sm text-fg-secondary ring-1 ring-ring"
+        >
+          {masked}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
+          <StatusLight tone="green" />
+          Active · in this browser
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          {!replacing && (
+            <button
+              onClick={() => setReplacing(true)}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
+            >
+              Replace
+            </button>
+          )}
+          <button
+            onClick={onRemove}
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-fg-faint">{fullKeyNote}</p>
+
+      {replacing && (
+        <div className="mt-3">
+          <div className="relative">
+            <input
+              autoFocus
+              type={show ? 'text' : 'password'}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && value.trim()) void save();
+              }}
+              placeholder={placeholder}
+              className="w-full rounded-md bg-surface px-3 py-2 pr-16 text-sm text-fg placeholder-fg-faint ring-1 ring-ring focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              onClick={() => setShow((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:text-fg-secondary"
+            >
+              {show ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+          <p className="mt-2 text-[11px] text-fg-faint">The current key keeps working until the new one is verified.</p>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              onClick={cancel}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void save()}
+              disabled={!value.trim() || saving}
+              className="rounded-md btn-primary px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40"
+            >
+              {saving ? 'Verifying…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Custom dropdown to pick a provider+model together, grouped, with logos + tags. */
 function ProviderModelSelect({
   tier,
@@ -264,9 +401,11 @@ export function AIKeySettings() {
   };
 
   // --- Gemini save / remove ------------------------------------------------
-  const saveGemini = async () => {
+  // Resolves true once the key is verified and saved, so a caller can react to
+  // success itself rather than infer it from state.
+  const saveGemini = async (): Promise<boolean> => {
     const key = geminiInput.trim();
-    if (!key) return;
+    if (!key) return false;
     setGeminiStatus('testing');
     setGeminiError('');
     try {
@@ -292,9 +431,11 @@ export function AIKeySettings() {
       setGeminiInput('');
       setGeminiStatus('idle');
       showToast({ message: 'Gemini API key saved' });
+      return true;
     } catch (e: any) {
       setGeminiStatus('error');
       setGeminiError(e?.message || 'Connection failed');
+      return false;
     }
   };
 
@@ -308,9 +449,9 @@ export function AIKeySettings() {
   };
 
   // --- Anthropic save / remove ---------------------------------------------
-  const saveAnthropic = async () => {
+  const saveAnthropic = async (): Promise<boolean> => {
     const key = anthInput.trim();
-    if (!key) return;
+    if (!key) return false;
     setAnthStatus('testing');
     setAnthError('');
     try {
@@ -343,9 +484,11 @@ export function AIKeySettings() {
       setAnthInput('');
       setAnthStatus('idle');
       showToast({ message: 'Claude API key saved' });
+      return true;
     } catch (e: any) {
       setAnthStatus('error');
       setAnthError(e?.message || 'Connection failed');
+      return false;
     }
   };
 
@@ -443,18 +586,28 @@ export function AIKeySettings() {
             </p>
             {anthCompanion && <UseCompanionLink onBack={() => setAnthUseBrowser(false)} />}
             {anthSaved ? (
-              <div className="mt-3 flex items-center gap-2">
-                <span className="rounded-md bg-surface px-3 py-1.5 font-mono text-sm text-fg-secondary ring-1 ring-ring">
-                  {mask(anthSaved)}
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary"><StatusLight tone="green" />Active · in this browser</span>
-                <button
-                  onClick={removeAnthropic}
-                  className="ml-auto rounded-md px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                >
-                  Remove
-                </button>
-              </div>
+              <SavedKey
+                provider="Claude"
+                masked={mask(anthSaved)}
+                onRemove={removeAnthropic}
+                fullKeyNote={
+                  <>
+                    The full key was only shown once, when it was created in{' '}
+                    <ExternalLink href="https://console.anthropic.com/settings/keys">the Anthropic Console</ExternalLink>.
+                    Lost it? Create a new one there and use Replace.
+                  </>
+                }
+                value={anthInput}
+                onChange={(v) => {
+                  setAnthInput(v);
+                  setAnthStatus('idle');
+                  setAnthError('');
+                }}
+                onSave={saveAnthropic}
+                saving={anthStatus === 'testing'}
+                error={anthStatus === 'error' ? anthError || 'Test failed' : null}
+                placeholder="Paste your new Claude API key (sk-ant-…)"
+              />
             ) : (
               <div className="mt-3">
                 <div className="rounded-lg bg-surface p-3 ring-1 ring-ring">
@@ -567,18 +720,27 @@ export function AIKeySettings() {
           {geminiCompanion && <UseCompanionLink onBack={() => setGeminiUseBrowser(false)} />}
 
           {geminiSaved ? (
-            <div className="mt-3 flex items-center gap-2">
-              <span className="rounded-md bg-surface px-3 py-1.5 font-mono text-sm text-fg-secondary ring-1 ring-ring">
-                {mask(geminiSaved)}
-              </span>
-              <span className="text-xs text-green-500">Active</span>
-              <button
-                onClick={removeGemini}
-                className="ml-auto rounded-md px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-              >
-                Remove
-              </button>
-            </div>
+            <SavedKey
+              provider="Gemini"
+              masked={mask(geminiSaved)}
+              onRemove={removeGemini}
+              fullKeyNote={
+                <>
+                  Need the full key? Copy it from{' '}
+                  <ExternalLink href="https://aistudio.google.com/apikey">Google AI Studio</ExternalLink>.
+                </>
+              }
+              value={geminiInput}
+              onChange={(v) => {
+                setGeminiInput(v);
+                setGeminiStatus('idle');
+                setGeminiError('');
+              }}
+              onSave={saveGemini}
+              saving={geminiStatus === 'testing'}
+              error={geminiStatus === 'error' ? geminiError || 'Test failed' : null}
+              placeholder="Paste your new Gemini API key"
+            />
           ) : (
             <div className="mt-3">
               <div className="rounded-lg bg-surface p-3 ring-1 ring-ring">

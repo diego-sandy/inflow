@@ -3,7 +3,7 @@
 // lives, points to where the full key can be found, and can be replaced in
 // place: the old key keeps working until the new one verifies.
 import '../dom-setup';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { mockFetch } from '../mocks/fetch';
 import { AIKeySettings } from '@/components/settings/AIKeySettings';
 import { getGeminiApiKey } from '@/lib/ai-settings';
@@ -101,4 +101,52 @@ it('closes the replace box even when the new key is the same one', async () => {
   await waitFor(() =>
     expect(screen.queryByPlaceholderText('Paste your new Gemini API key')).not.toBeInTheDocument(),
   );
+});
+
+describe('Remove', () => {
+  it('asks first, and Cancel keeps the key', async () => {
+    await renderSaved();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    const ask = screen.getByRole('alertdialog', { name: 'Remove the Gemini key?' });
+    expect(ask).toHaveTextContent('AI features stop until you add one.');
+    // Focus starts on Cancel, so a stray Enter cannot remove the key.
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(await getGeminiApiKey()).toBe(OLD);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(await getGeminiApiKey()).toBe(OLD);
+    expect(screen.getByLabelText('Saved Gemini key')).toBeInTheDocument();
+  });
+
+  it('removes the key once confirmed', async () => {
+    await renderSaved();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    await waitFor(() => expect(screen.queryByLabelText('Saved Gemini key')).not.toBeInTheDocument());
+    expect(await getGeminiApiKey()).toBeNull();
+  });
+
+  it('warns that a Claude key cannot be copied again', async () => {
+    await chrome.storage.local.set({ anthropicApiKey: 'sk-ant-api03-abcdefgh-wxyz', aiFastProvider: 'anthropic' });
+    render(<AIKeySettings />);
+    await screen.findByLabelText('Saved Claude key');
+    // Gemini's row is on screen too (the quality tier still uses it); take Claude's.
+    const claudeRow = screen.getByLabelText('Saved Claude key').closest('div.mt-3') as HTMLElement;
+    fireEvent.click(within(claudeRow).getByRole('button', { name: 'Remove' }));
+
+    expect(screen.getByRole('alertdialog', { name: 'Remove the Claude key?' })).toHaveTextContent(
+      "You can't copy this key from the Anthropic Console again.",
+    );
+  });
+
+  it('closes an open Replace box rather than leaving both up', async () => {
+    await renderSaved();
+    fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(screen.queryByPlaceholderText('Paste your new Gemini API key')).not.toBeInTheDocument();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  });
 });

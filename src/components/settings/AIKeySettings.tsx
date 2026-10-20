@@ -130,6 +130,7 @@ function SavedKey({
   provider,
   masked,
   onRemove,
+  removeWarning,
   fullKeyNote,
   value,
   onChange,
@@ -141,6 +142,8 @@ function SavedKey({
   provider: string;
   masked: string;
   onRemove: () => void;
+  /** Extra line in the remove confirmation, for a key that is hard to get back. */
+  removeWarning?: string;
   fullKeyNote: React.ReactNode;
   value: string;
   onChange: (v: string) => void;
@@ -151,6 +154,10 @@ function SavedKey({
 }) {
   const [replacing, setReplacing] = useState(false);
   const [show, setShow] = useState(false);
+  // Removing asks first, inline. No setting to skip it: removing a key is rare
+  // enough that the second click costs nothing, and a Claude key cannot be
+  // copied again once it is gone from here.
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   const close = () => {
     setReplacing(false);
@@ -178,23 +185,60 @@ function SavedKey({
           <StatusLight tone="green" />
           Active · in this browser
         </span>
-        <div className="ml-auto flex items-center gap-1">
-          {!replacing && (
+        {!confirmingRemove && (
+          <div className="ml-auto flex items-center gap-1">
+            {!replacing && (
+              <button
+                onClick={() => setReplacing(true)}
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
+              >
+                Replace
+              </button>
+            )}
             <button
-              onClick={() => setReplacing(true)}
+              onClick={() => {
+                cancel();
+                setConfirmingRemove(true);
+              }}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+
+      {confirmingRemove && (
+        <div
+          role="alertdialog"
+          aria-label={`Remove the ${provider} key?`}
+          className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-red-500/10 px-3 py-2 ring-1 ring-inset ring-red-500/20"
+        >
+          <p className="min-w-0 flex-1 text-xs text-fg-secondary">
+            <span className="font-medium text-fg-strong">Remove this key?</span> AI features stop until you add one.
+            {removeWarning && <> {removeWarning}</>}
+          </p>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              autoFocus
+              onClick={() => setConfirmingRemove(false)}
               className="rounded-md px-3 py-1.5 text-sm font-medium text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
             >
-              Replace
+              Cancel
             </button>
-          )}
-          <button
-            onClick={onRemove}
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-          >
-            Remove
-          </button>
+            <button
+              onClick={() => {
+                setConfirmingRemove(false);
+                onRemove();
+              }}
+              className="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
+            >
+              Remove
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
       <p className="mt-2 text-[11px] text-fg-faint">{fullKeyNote}</p>
 
       {replacing && (
@@ -590,6 +634,7 @@ export function AIKeySettings() {
                 provider="Claude"
                 masked={mask(anthSaved)}
                 onRemove={removeAnthropic}
+                removeWarning="You can't copy this key from the Anthropic Console again."
                 fullKeyNote={
                   <>
                     The full key was only shown once, when it was created in{' '}

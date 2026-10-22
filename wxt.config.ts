@@ -99,15 +99,20 @@ export default defineConfig({
     // media.licdn.com: lets the background worker fetch avatar images for
     // native notification icons (MV3 notifications can't use remote URLs).
     host_permissions: ['https://www.linkedin.com/*', 'https://media.licdn.com/*', 'https://generativelanguage.googleapis.com/*', 'https://api.anthropic.com/*', 'https://api.github.com/*'],
+    // Rendered from assets/brand/inflow-mark*.svg. 16 and 32 use the simplified
+    // two-stream mark, which stays legible at toolbar size (32 is what a Retina
+    // display draws for the 16px toolbar slot); 48 and 128 use the full mark.
     action: {
       default_icon: {
         '16': 'icon-16.png',
+        '32': 'icon-32.png',
         '48': 'icon-48.png',
         '128': 'icon-128.png',
       },
     },
     icons: {
       '16': 'icon-16.png',
+      '32': 'icon-32.png',
       '48': 'icon-48.png',
       '128': 'icon-128.png',
     },

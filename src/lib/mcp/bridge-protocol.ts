@@ -61,6 +61,8 @@ export interface BridgeHandlers {
   onActivity: (text: string) => void;
   /** Companion code sha this build expects, for the staleness comparison. */
   appCompanionSha?: string;
+  /** The commit-based stamp older companions carry for the same code; see describeBuildMatch. */
+  appCompanionLegacySha?: string;
   /** Learn which provider keys the companion holds (from hello_ack). */
   onCompanionKeys?: (keys: CompanionKeys) => void;
   /** Resolve a pending Anthropic proxy request (bridge-client owns the map). */
@@ -136,10 +138,18 @@ export function describeCompanion(status?: CompanionStatus): string {
  * codeCommit), because a confident wrong answer here costs the user a pointless
  * reinstall and makes the warning easy to ignore when it is real.
  */
-export function describeBuildMatch(status?: CompanionStatus, appCompanionSha?: string): string | null {
+export function describeBuildMatch(
+  status?: CompanionStatus,
+  appCompanionSha?: string,
+  appCompanionLegacySha?: string,
+): string | null {
   const theirs = status?.codeCommit;
-  if (!theirs || !appCompanionSha || theirs === 'unknown' || appCompanionSha === 'nogit') return null;
+  if (!theirs || !appCompanionSha || theirs === 'unknown' || appCompanionSha === 'nogit' || appCompanionSha === 'unknown') return null;
   if (theirs === appCompanionSha) return 'Companion is up to date ✓';
+  // Companions packed before the stamp became a code fingerprint carry the
+  // commit that last changed the companion's code instead. Matching that commit
+  // means the same code, so it's current too, and needs no reinstall.
+  if (appCompanionLegacySha && theirs === appCompanionLegacySha) return 'Companion is up to date ✓';
   return (
     `Companion is out of date — it has ${theirs}, this build expects ${appCompanionSha}. ` +
     'Reinstall it from the MCP connector.'
@@ -168,7 +178,7 @@ export function createBridgeSession(h: BridgeHandlers) {
           h.onActivity('Connected to Claude');
           h.onActivity(describeCompanion(msg.status));
           {
-            const match = describeBuildMatch(msg.status, h.appCompanionSha);
+            const match = describeBuildMatch(msg.status, h.appCompanionSha, h.appCompanionLegacySha);
             if (match) h.onActivity(match);
           }
           // Older companions omit `keys`. Preserve the prior behavior (Anthropic

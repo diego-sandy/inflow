@@ -196,3 +196,14 @@ it('adds the match line to the feed on connect', async () => {
   await session.handleMessage(JSON.stringify({ type: 'hello_ack', status: { commit: 'packed99', codeCommit: 'code111', port: 8123, ownsBridge: true } }));
   expect(activity).toContain('Companion is up to date ✓');
 });
+
+describe('describeBuildMatch with an older companion stamp', () => {
+  it('treats the commit that last changed the code as current, so no reinstall is asked for', () => {
+    // A companion packed before the stamp became a fingerprint carries that commit.
+    expect(describeBuildMatch({ codeCommit: '6604768' }, 'bdef751', '6604768')).toBe('Companion is up to date ✓');
+  });
+
+  it('still flags an older companion whose code really changed since', () => {
+    expect(describeBuildMatch({ codeCommit: '462427f' }, 'bdef751', '6604768')).toMatch(/out of date/);
+  });
+});

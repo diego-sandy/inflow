@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+// @ts-expect-error plain .mjs shared with the companion packer; no type declarations
+import { companionCodeHash } from './scripts/companion-hash.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const pkg = createRequire(import.meta.url)('./package.json');
@@ -24,15 +26,29 @@ function shortSha(): string {
   }
 }
 /**
- * The last commit touching the companion's own code — what the companion
- * stamps itself with. Comparing this instead of HEAD means the "reinstall the
- * companion" nudge fires only when the companion actually changed, rather than
- * after every unrelated commit.
+ * A fingerprint of the companion's code — what the companion stamps itself
+ * with when packed (scripts/companion-hash.mjs). The "reinstall the companion"
+ * nudge fires only when the code actually differs: not after unrelated
+ * commits, not after an icon change, and not because the companion was packed
+ * before its change was committed.
  */
 function companionSha(): string {
   try {
+    return companionCodeHash(resolve(__dirname, 'mcp-companion'));
+  } catch {
+    return 'unknown';
+  }
+}
+/**
+ * The last commit that changed the companion's code: the stamp companions
+ * carried before the fingerprint, and still carry until reinstalled. Matching
+ * it means the same code, so those installs aren't told to reinstall for a
+ * stamp format change alone.
+ */
+function companionLegacySha(): string {
+  try {
     return execSync(
-      "git log -1 --format=%h -- mcp-companion ':(exclude)mcp-companion/src/default-tools.json'",
+      "git log -1 --format=%h -- mcp-companion/src mcp-companion/package.json ':(exclude)mcp-companion/src/default-tools.json' ':(exclude)mcp-companion/src/build-info.json'",
       { stdio: ['ignore', 'pipe', 'ignore'] },
     )
       .toString()
@@ -127,6 +143,7 @@ export default defineConfig({
     define: {
       __COMMIT_SHA__: JSON.stringify(shortSha()),
       __COMPANION_SHA__: JSON.stringify(companionSha()),
+      __COMPANION_LEGACY_SHA__: JSON.stringify(companionLegacySha()),
     },
     plugins: [tailwindcss()],
     resolve: {

@@ -169,6 +169,7 @@ function open() {
       }
     },
     appCompanionSha: appCompanionSha(),
+    appCompanionLegacySha: typeof __COMPANION_LEGACY_SHA__ === 'string' ? __COMPANION_LEGACY_SHA__ : undefined,
     onActivity: (t) => pushActivity(t),
     onCompanionKeys: (keys) => {
       companionKeys = keys;

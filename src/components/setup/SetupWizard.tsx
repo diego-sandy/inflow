@@ -7,6 +7,7 @@ import {
   completeSetup,
   dismissSetup,
   getSetupStep,
+  getSetupCompletedAt,
   isSetupPending,
   setSetupStep,
   type SetupStep,
@@ -119,16 +120,34 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
 
   const pinned = useToolbarPinned(open);
   const hasKey = useHasAIKey();
+  const [completedBefore, setCompletedBefore] = useState(false);
+  useEffect(() => {
+    if (open) getSetupCompletedAt().then((at) => setCompletedBefore(at !== null));
+  }, [open]);
   if (!open || !step) return null;
 
-  // Ticks reflect what's actually true where it can be checked, not just
-  // having clicked past a step.
+  // Ticks reflect what's actually true, so running setup again on a working
+  // install shows it as working, rather than ticking only what was clicked
+  // past this time.
   const isDone = (s: SetupStep): boolean => {
-    if (s === 'linkedin') return auth === 'authenticated';
-    if (s === 'pin') return pinned === true;
-    if (s === 'key') return hasKey;
-    if (s === 'ai') return SETUP_STEPS.indexOf(s) < index;
-    return false;
+    const passed = SETUP_STEPS.indexOf(s) < index;
+    switch (s) {
+      case 'welcome':
+        return passed || completedBefore;
+      case 'linkedin':
+        return auth === 'authenticated';
+      case 'pin':
+        return pinned === true;
+      case 'ai':
+        // A working key means AI was set up; so does finishing setup before.
+        return passed || hasKey || completedBefore;
+      case 'key':
+        return hasKey;
+      case 'done':
+        // Everything that matters is in place. Pinning counts when Chrome
+        // can't report it (null), since the user can't be held to it then.
+        return auth === 'authenticated' && pinned !== false && (hasKey || aiSkipped);
+    }
   };
 
   return (
@@ -136,6 +155,8 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
       className={`flex items-center justify-center p-4 ${
         standalone ? 'h-screen bg-surface' : 'fixed inset-0 z-[60] bg-black/60'
       }`}
+      // Clicking outside closes, like Settings. Progress is kept either way.
+      onClick={standalone ? undefined : (e) => e.target === e.currentTarget && close()}
     >
       <div
         role="dialog"
@@ -183,7 +204,10 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
               onClick={close}
               aria-label="Close setup"
               title="Close. You can finish setup later in Settings."
-              className="absolute right-3 top-3 rounded-md p-1.5 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
+              // z-10: each step animates in with a transform, which lifts it into its
+              // own layer above anything earlier in the DOM. Without this the step
+              // covered the button and clicks never reached it.
+              className="absolute right-3 top-3 z-10 rounded-md p-1.5 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M6 6l12 12M18 6L6 18" />

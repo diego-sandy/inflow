@@ -204,3 +204,69 @@ it('Back and the step list both move between steps', async () => {
   await screen.findByRole('heading', { name: 'Add an AI key' });
   expect(await getSetupStep()).toBe('key');
 });
+
+describe('closing when opened from Settings', () => {
+  async function openFromSettings() {
+    render(<SetupWizard />);
+    act(() => useUIStore.getState().openSetup({ fromStart: true }));
+    await dialog();
+  }
+
+  it('the close button sits above the animated step, so it can be clicked', async () => {
+    await openFromSettings();
+    // jsdom has no layout, so pin the fix itself: the step animates with a
+    // transform, which stacks it over earlier siblings unless the button is lifted.
+    expect(screen.getByRole('button', { name: 'Close setup' }).className).toMatch(/\bz-10\b/);
+    fireEvent.click(screen.getByRole('button', { name: 'Close setup' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('clicking outside closes it, but clicking inside does not', async () => {
+    await openFromSettings();
+    fireEvent.click(screen.getByRole('heading', { name: 'Welcome to inflow' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('dialog').parentElement!);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+});
+
+describe('ticks on a working install', () => {
+  const stepButton = (name: RegExp) => screen.getByRole('button', { name });
+  const isTicked = (el: HTMLElement) => el.querySelector('.animate-setup-check') !== null;
+
+  it('ticks choosing AI when a key is already working, even from Welcome', async () => {
+    await chrome.storage.local.set({ geminiApiKey: 'AIzaSAVED' });
+    render(<SetupWizard />);
+    act(() => useUIStore.getState().openSetup({ fromStart: true }));
+    await dialog();
+    await waitFor(() => expect(isTicked(stepButton(/Choose what AI does/))).toBe(true));
+    expect(isTicked(stepButton(/Add an AI key/))).toBe(true);
+  });
+
+  it('ticks All set once signed in, pinned and keyed', async () => {
+    (chrome.action.getUserSettings as any).mockResolvedValue({ isOnToolbar: true });
+    await chrome.storage.local.set({ geminiApiKey: 'AIzaSAVED' });
+    render(<SetupWizard />);
+    act(() => useUIStore.getState().openSetup({ fromStart: true }));
+    await dialog();
+    await waitFor(() => expect(isTicked(stepButton(/All set/))).toBe(true));
+  });
+
+  it('leaves All set unticked while something is missing', async () => {
+    render(<SetupWizard />);
+    act(() => useUIStore.getState().openSetup({ fromStart: true }));
+    await dialog();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(isTicked(stepButton(/All set/))).toBe(false);
+    expect(isTicked(stepButton(/Choose what AI does/))).toBe(false);
+  });
+
+  it('ticks Welcome and AI after setup was finished once before', async () => {
+    await chrome.storage.local.set({ setupCompletedAt: 1 });
+    render(<SetupWizard />);
+    act(() => useUIStore.getState().openSetup({ fromStart: true }));
+    await dialog();
+    await waitFor(() => expect(isTicked(stepButton(/Welcome/))).toBe(true));
+    expect(isTicked(stepButton(/Choose what AI does/))).toBe(true);
+  });
+});

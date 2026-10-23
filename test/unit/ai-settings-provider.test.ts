@@ -102,10 +102,16 @@ describe('Gemini model tiers', () => {
   });
 
   it('persists a chosen model per tier independently', async () => {
-    await setGeminiModel('fast', 'gemini-3.5-flash');
-    await setGeminiModel('quality', 'gemini-3.5-flash');
-    expect(await getGeminiModel('fast')).toBe('gemini-3.5-flash');
-    expect(await getGeminiModel('quality')).toBe('gemini-3.5-flash');
+    await setGeminiModel('fast', 'gemini-3.6-flash');
+    await setGeminiModel('quality', 'gemini-3.1-pro-preview');
+    expect(await getGeminiModel('fast')).toBe('gemini-3.6-flash');
+    expect(await getGeminiModel('quality')).toBe('gemini-3.1-pro-preview');
+  });
+
+  it('moves a saved choice of a superseded model to its replacement, not the default', async () => {
+    // Google routes gemini-3.5-flash to gemini-3.6-flash; someone who picked Flash keeps Flash.
+    await chrome.storage.local.set({ geminiQualityModel: 'gemini-3.5-flash' });
+    expect(await getGeminiModel('quality')).toBe('gemini-3.6-flash');
   });
 
   it('ignores an unknown model id on write and falls back on read', async () => {
@@ -119,7 +125,7 @@ describe('Gemini model tiers', () => {
   it('offers Flash-Lite, Flash, and Pro in the picker, cheapest first', () => {
     expect(GEMINI_MODELS.map((m) => m.id)).toEqual([
       'gemini-3.1-flash-lite',
-      'gemini-3.5-flash',
+      'gemini-3.6-flash',
       'gemini-3.1-pro-preview',
     ]);
   });

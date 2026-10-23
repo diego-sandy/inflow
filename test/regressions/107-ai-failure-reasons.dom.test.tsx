@@ -21,9 +21,9 @@ vi.mock('@/lib/ai-settings', () => ({
   getTierProvider: async () => settings.provider,
   getAnthropicApiKey: async () => null,
   getAnthropicModel: async () => 'claude-sonnet-5',
-  getGeminiModel: async () => 'gemini-3.5-flash',
+  getGeminiModel: async () => 'gemini-3.6-flash',
   DEFAULT_GEMINI_FAST_MODEL: 'gemini-3.1-flash-lite',
-  DEFAULT_GEMINI_QUALITY_MODEL: 'gemini-3.5-flash',
+  DEFAULT_GEMINI_QUALITY_MODEL: 'gemini-3.6-flash',
 }));
 
 import { renderHook, waitFor, act } from '@testing-library/react';
@@ -86,7 +86,7 @@ it("reports Gemini's own error message instead of nothing", async () => {
 it('logs the reason, where the debug panel can show it', async () => {
   fetchMock.mockResolvedValue(httpError(403, 'API key not valid'));
   await draft((await session()).predict);
-  expect(getDebugLogs().some((e) => e.message.includes('[AI] Gemini refused the key: API key not valid'))).toBe(true);
+  expect(getDebugLogs().some((e) => e.message.includes('[AI] Gemini rejected the key saved in inflow (API key not valid)'))).toBe(true);
 });
 
 it('retries without the cap when thinking used it up before any text', async () => {

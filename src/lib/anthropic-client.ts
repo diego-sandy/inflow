@@ -10,7 +10,7 @@
  * `predict` seam without callers changing.
  */
 
-import { describeEmptyAnthropic, describeHttpFailure } from './ai-failure';
+import { describeEmptyAnthropic, describeHttpFailure, describeKeyRejection, isKeyRejection } from './ai-failure';
 
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -31,6 +31,11 @@ export interface AnthropicPredictOptions {
   onToken?: (chunk: string) => void;
   /** Called with the reason when no text comes back (see lib/ai-failure). */
   onFailure?: (reason: string) => void;
+  /**
+   * Called with Anthropic's message when it refuses the key, or null once a
+   * request is accepted, so the caller can show a bad key in Settings.
+   */
+  onKeyResult?: (rejected: string | null) => void;
 }
 
 /**
@@ -108,9 +113,15 @@ export async function predictAnthropic(
         detail = typeof body?.error?.message === 'string' ? body.error.message : '';
       } catch {}
       console.warn('[inflow] Anthropic request failed:', res.status, detail || anthropicErrorMessage(res.status));
-      options?.onFailure?.(describeHttpFailure('Claude', res.status, detail));
+      if (isKeyRejection(res.status, detail)) {
+        options?.onKeyResult?.(detail || `error ${res.status}`);
+        options?.onFailure?.(describeKeyRejection('Claude', 'browser', detail));
+      } else {
+        options?.onFailure?.(describeHttpFailure('Claude', res.status, detail));
+      }
       return null;
     }
+    options?.onKeyResult?.(null);
 
     if (stream && res.body) {
       const streamed = await readAnthropicStream(res.body, options!.onToken!);

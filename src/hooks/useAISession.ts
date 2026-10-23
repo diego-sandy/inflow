@@ -16,9 +16,12 @@ import {
   describeEmptyAnthropic,
   describeEmptyGemini,
   describeHttpFailure,
+  describeKeyRejection,
+  isKeyRejection,
   reportAIFailure,
   type AIFailureReporter,
 } from '@/lib/ai-failure';
+import { useUIStore } from '@/store/ui-store';
 
 const SYSTEM_PROMPT =
   'You are an autocomplete assistant. Given conversation history and a partial message, predict the next few words. Output ONLY the completion text. Keep it short (2-8 words). If unsure, output nothing.';
@@ -209,7 +212,14 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
       );
       return null;
     }
-    return predictAnthropic(prompt, config.anthropicKey, model, { signal, maxTokens, systemPrompt, onToken, onFailure: fail });
+    return predictAnthropic(prompt, config.anthropicKey, model, {
+      signal,
+      maxTokens,
+      systemPrompt,
+      onToken,
+      onFailure: fail,
+      onKeyResult: (rejected) => noteKeyResult('anthropic', 'browser', rejected),
+    });
   }
 
   const model = tier === 'quality' ? config.geminiQualityModel : config.geminiFastModel;
@@ -226,6 +236,60 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
     return null;
   }
   return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model, onToken, onFailure: fail });
+}
+
+type KeyProvider = 'anthropic' | 'gemini';
+const PROVIDER_NAME = { anthropic: 'Claude', gemini: 'Gemini' } as const;
+
+/**
+ * Record whether a provider accepted its key, for Settings › AI to show.
+ * `rejected` is what the provider said, or null after a call with the key went
+ * through, which clears a rejection recorded for the same place (connector or
+ * browser) and leaves one for the other place alone.
+ */
+function noteKeyResult(provider: KeyProvider, via: 'connector' | 'browser', rejected: string | null): void {
+  const store = useUIStore.getState();
+  if (rejected !== null) {
+    store.setAIKeyIssue(provider, { via, detail: rejected, at: Date.now() });
+  } else if (store.aiKeyIssues[provider]?.via === via) {
+    store.setAIKeyIssue(provider, null);
+  }
+}
+
+/** Why a request through the connector failed, recording a rejected key. */
+function connectorFailure(provider: KeyProvider, e: unknown): string {
+  const message = (e as any)?.message || 'unknown error';
+  if (isKeyRejection(undefined, message)) {
+    noteKeyResult(provider, 'connector', message);
+    return describeKeyRejection(PROVIDER_NAME[provider], 'connector', message);
+  }
+  return `The MCP connector couldn't get an answer from ${PROVIDER_NAME[provider]}: ${message}`;
+}
+
+/**
+ * Ask the connector to make the smallest possible request with its key, so
+ * Settings can check a key without waiting for a draft to fail. Resolves null
+ * when the key works, or the reason it doesn't.
+ */
+export async function checkConnectorKey(provider: KeyProvider): Promise<string | null> {
+  ensureConfigSync();
+  try {
+    if (provider === 'anthropic') {
+      await requestAnthropicViaCompanion({
+        model: config.fastModel,
+        max_tokens: 8,
+        messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }],
+      });
+    } else {
+      await requestGeminiViaCompanion(config.geminiFastModel, {
+        contents: [{ parts: [{ text: 'Say "ok" and nothing else.' }] }],
+      });
+    }
+    noteKeyResult(provider, 'connector', null);
+    return null;
+  } catch (e) {
+    return connectorFailure(provider, e);
+  }
 }
 
 /** Text from a Gemini candidate's parts (thought parts, if any, are not text). */
@@ -266,9 +330,10 @@ async function predictGeminiViaCompanion(
     };
     data = await requestGeminiViaCompanion(model, body);
   } catch (e: any) {
-    opts.onFailure?.(`The MCP connector couldn't get an answer from Gemini: ${e?.message || 'unknown error'}`);
+    opts.onFailure?.(connectorFailure('gemini', e));
     return null;
   }
+  noteKeyResult('gemini', 'connector', null);
   const candidate = data?.candidates?.[0];
   const out = geminiText(candidate).trim() || null;
   if (!out) {
@@ -306,9 +371,10 @@ async function predictAnthropicViaCompanion(
     };
     data = await requestAnthropicViaCompanion(payload);
   } catch (e: any) {
-    opts.onFailure?.(`The MCP connector couldn't get an answer from Claude: ${e?.message || 'unknown error'}`);
+    opts.onFailure?.(connectorFailure('anthropic', e));
     return null;
   }
+  noteKeyResult('anthropic', 'connector', null);
   const text = Array.isArray(data?.content)
     ? data.content.filter((b: any) => b?.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('')
     : '';
@@ -361,9 +427,15 @@ async function predictGemini(
         const body = await res.json();
         detail = typeof body?.error?.message === 'string' ? body.error.message : '';
       } catch {}
-      opts.onFailure?.(describeHttpFailure('Gemini', res.status, detail));
+      if (isKeyRejection(res.status, detail)) {
+        noteKeyResult('gemini', 'browser', detail || `error ${res.status}`);
+        opts.onFailure?.(describeKeyRejection('Gemini', 'browser', detail));
+      } else {
+        opts.onFailure?.(describeHttpFailure('Gemini', res.status, detail));
+      }
       return null;
     }
+    noteKeyResult('gemini', 'browser', null);
 
     // Read SSE stream. Buffer across reads: a single `data: {...}` line can be
     // split between two network chunks, so we only parse complete lines and keep

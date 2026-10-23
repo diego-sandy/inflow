@@ -23,7 +23,7 @@ it("passes on Anthropic's own message for a failed request", async () => {
   fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: { message: 'invalid x-api-key' } }) });
   const { out, onFailure } = await run();
   expect(out).toBeNull();
-  expect(onFailure).toHaveBeenCalledWith('Claude refused the key: invalid x-api-key');
+  expect(onFailure).toHaveBeenCalledWith('Claude rejected the key saved in inflow (invalid x-api-key). Replace it in Settings › AI');
 });
 
 it('explains an empty answer by its stop reason', async () => {

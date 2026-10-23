@@ -23,6 +23,7 @@ import {
   type ProviderModelOption,
 } from '@/lib/ai-settings';
 import { verifyAnthropicKey, verifyGeminiKey } from '@/lib/ai-key-verify';
+import { checkConnectorKey } from '@/hooks/useAISession';
 import { useCategorizeMode } from '@/hooks/useCategorizeMode';
 import { Toggle } from '@/components/common/Toggle';
 import { StatusLight } from '@/components/common/StatusLight';
@@ -74,18 +75,58 @@ function ProviderGlyph({ provider, className }: { provider: AIProvider; classNam
 
 const providerName = (p: AIProvider) => (p === 'anthropic' ? 'Claude' : 'Gemini');
 
-/** Status shown in place of the paste box when the companion holds this key. */
+/**
+ * Status shown in place of the paste box when the companion holds this key.
+ *
+ * The connector only reports that it holds a key, not that the key works, so
+ * a rejected key used to show here as Active while every draft failed. It now
+ * shows as rejected once the provider refuses it, and can be checked on demand.
+ */
 function CompanionKeyStatus({ provider, onUseBrowser }: { provider: AIProvider; onUseBrowser: () => void }) {
   const name = providerName(provider);
+  const issue = useUIStore((s) => s.aiKeyIssues[provider]);
+  const rejected = issue?.via === 'connector' ? issue : undefined;
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState<'ok' | null>(null);
+
+  const check = async () => {
+    setChecking(true);
+    setChecked(null);
+    const reason = await checkConnectorKey(provider);
+    setChecking(false);
+    if (!reason) setChecked('ok');
+  };
+
   return (
-    <div className="mt-3 rounded-lg bg-surface px-3 py-2.5 ring-1 ring-inset ring-ring">
+    <div
+      className={`mt-3 rounded-lg px-3 py-2.5 ring-1 ring-inset ${
+        rejected ? 'bg-red-500/5 ring-red-500/30' : 'bg-surface ring-ring'
+      }`}
+    >
       <div className="flex items-center gap-2">
-        <StatusLight tone="green" />
-        <p className="text-sm font-medium text-fg-strong">Active · in the MCP connector</p>
+        <StatusLight tone={rejected ? 'red' : 'green'} />
+        <p className="text-sm font-medium text-fg-strong">
+          {rejected ? `${name} rejected this key · in the MCP connector` : 'Active · in the MCP connector'}
+        </p>
+        <button
+          onClick={() => void check()}
+          disabled={checking}
+          className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong disabled:opacity-50"
+        >
+          {checking ? 'Checking…' : rejected ? 'Check again' : 'Check key'}
+        </button>
       </div>
-      <p className="mt-1 pl-4 text-xs text-fg-muted">
-        Your {name} key stays in the companion, off the browser. inflow runs {name} server-side while the connector is connected.
-      </p>
+      {rejected ? (
+        <p className="mt-1 pl-4 text-xs text-fg-secondary">
+          {name} said: <span className="font-medium text-red-500">{rejected.detail}</span>. Update the key in Claude ›
+          Settings › Extensions › inflow, then check again.
+        </p>
+      ) : (
+        <p className="mt-1 pl-4 text-xs text-fg-muted">
+          Your {name} key stays in the companion, off the browser. inflow runs {name} server-side while the connector is connected.
+          {checked === 'ok' && <span className="ml-1 font-medium text-green-600 dark:text-green-400">The key works.</span>}
+        </p>
+      )}
       <button
         onClick={onUseBrowser}
         className="mt-2 pl-4 text-xs font-medium text-blue-500 transition-colors hover:text-blue-400"
@@ -138,6 +179,7 @@ function SavedKey({
   saving,
   error,
   placeholder,
+  rejection,
 }: {
   provider: string;
   masked: string;
@@ -151,6 +193,8 @@ function SavedKey({
   saving: boolean;
   error: string | null;
   placeholder: string;
+  /** What the provider said the last time it refused this key, if it did. */
+  rejection?: string;
 }) {
   const [replacing, setReplacing] = useState(false);
   const [show, setShow] = useState(false);
@@ -182,8 +226,8 @@ function SavedKey({
           {masked}
         </span>
         <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
-          <StatusLight tone="green" />
-          Active · in this browser
+          <StatusLight tone={rejection ? 'red' : 'green'} />
+          {rejection ? 'Rejected · in this browser' : 'Active · in this browser'}
         </span>
         {!confirmingRemove && (
           <div className="ml-auto flex items-center gap-1">
@@ -239,6 +283,11 @@ function SavedKey({
         </div>
       )}
 
+      {rejection && (
+        <p className="mt-2 text-xs text-fg-secondary">
+          {provider} said: <span className="font-medium text-red-500">{rejection}</span>. Use Replace to paste a working key.
+        </p>
+      )}
       <p className="mt-2 text-[11px] text-fg-faint">{fullKeyNote}</p>
 
       {replacing && (
@@ -377,6 +426,7 @@ export function AIKeySettings() {
   const mcpError = useUIStore((s) => s.mcpError);
   const mcpConnected = mcpStatus === 'connected';
   const mcpKeys = useUIStore((s) => s.mcpKeys);
+  const keyIssues = useUIStore((s) => s.aiKeyIssues);
   const anthCompanion = mcpConnected && mcpKeys.anthropic;
   const geminiCompanion = mcpConnected && mcpKeys.gemini;
   // When the companion holds a key, we hide the browser paste box; these let the
@@ -455,6 +505,8 @@ export function AIKeySettings() {
     try {
       await verifyGeminiKey(key, geminiFastModel);
       await setGeminiApiKey(key);
+      // Verified just now, so any earlier rejection of a browser key is stale.
+      if (useUIStore.getState().aiKeyIssues.gemini?.via === 'browser') useUIStore.getState().setAIKeyIssue('gemini', null);
       setGeminiSaved(key);
       setGeminiInput('');
       setGeminiStatus('idle');
@@ -485,6 +537,7 @@ export function AIKeySettings() {
     try {
       await verifyAnthropicKey(key, fastModel);
       await setAnthropicApiKey(key);
+      if (useUIStore.getState().aiKeyIssues.anthropic?.via === 'browser') useUIStore.getState().setAIKeyIssue('anthropic', null);
       setAnthSaved(key);
       setAnthInput('');
       setAnthStatus('idle');
@@ -593,6 +646,7 @@ export function AIKeySettings() {
             {anthSaved ? (
               <SavedKey
                 provider="Claude"
+                rejection={keyIssues.anthropic?.via === 'browser' ? keyIssues.anthropic.detail : undefined}
                 masked={mask(anthSaved)}
                 onRemove={removeAnthropic}
                 removeWarning="You can't copy this key from the Anthropic Console again."
@@ -728,6 +782,7 @@ export function AIKeySettings() {
           {geminiSaved ? (
             <SavedKey
               provider="Gemini"
+              rejection={keyIssues.gemini?.via === 'browser' ? keyIssues.gemini.detail : undefined}
               masked={mask(geminiSaved)}
               onRemove={removeGemini}
               fullKeyNote={

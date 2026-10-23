@@ -62,3 +62,22 @@ export function describeEmptyAnthropic(stopReason?: string): string {
   if (stopReason === 'refusal') return 'Claude declined to write this';
   return stopReason ? `Claude returned no text (stop reason: ${stopReason})` : 'Claude returned no text';
 }
+
+/**
+ * Whether a failure means the provider refused the key itself (as opposed to a
+ * rate limit, an outage or a bad request): a 401/403, or the messages Anthropic
+ * ("invalid x-api-key", authentication_error) and Google ("API key not valid",
+ * API_KEY_INVALID) send when the connector relays the error as text.
+ */
+export function isKeyRejection(status: number | undefined, message = ''): boolean {
+  if (status === 401 || status === 403) return true;
+  return /x-api-key|authentication_error|api key not valid|api_key_invalid|invalid api key|permission_error/i.test(message);
+}
+
+/** A rejected key, said with where that key lives and how to fix it. */
+export function describeKeyRejection(provider: 'Gemini' | 'Claude', via: 'connector' | 'browser', detail: string): string {
+  const said = detail ? ` (${detail})` : '';
+  return via === 'connector'
+    ? `The ${provider} key in the MCP connector was rejected${said}. Update it in Claude › Settings › Extensions › inflow, or choose a different model for this in Settings › AI`
+    : `${provider} rejected the key saved in inflow${said}. Replace it in Settings › AI`;
+}

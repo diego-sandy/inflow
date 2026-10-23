@@ -8,6 +8,9 @@ const setGeminiApiKey = vi.fn(async (k: string) => {
   mockSavedKey = k;
 });
 vi.mock('@/lib/ai-settings', () => ({
+  // Read by useAISession, which Settings imports for the connector key check.
+  DEFAULT_GEMINI_FAST_MODEL: 'gemini-3.1-flash-lite',
+  DEFAULT_GEMINI_QUALITY_MODEL: 'gemini-3.1-flash-lite',
   getGeminiApiKey: vi.fn(async () => mockSavedKey),
   setGeminiApiKey: (k: string) => setGeminiApiKey(k),
   clearGeminiApiKey: vi.fn(async () => {

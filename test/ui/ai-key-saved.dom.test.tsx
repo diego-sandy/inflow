@@ -3,10 +3,11 @@
 // lives, points to where the full key can be found, and can be replaced in
 // place: the old key keeps working until the new one verifies.
 import '../dom-setup';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { mockFetch } from '../mocks/fetch';
 import { AIKeySettings } from '@/components/settings/AIKeySettings';
 import { getGeminiApiKey } from '@/lib/ai-settings';
+import { useUIStore } from '@/store/ui-store';
 
 const OLD = 'AIzaOLD-0000000000000000000001a2b';
 const NEW = 'AIzaNEW-0000000000000000000009z8y';
@@ -148,5 +149,29 @@ describe('Remove', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(screen.queryByPlaceholderText('Paste your new Gemini API key')).not.toBeInTheDocument();
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  });
+});
+
+describe('a key the provider rejected', () => {
+  beforeEach(() => {
+    act(() => useUIStore.getState().setAIKeyIssue('gemini', { via: 'browser', detail: 'API key not valid', at: Date.now() }));
+  });
+  afterEach(() => act(() => useUIStore.getState().setAIKeyIssue('gemini', null)));
+
+  it('shows as rejected, with what the provider said', async () => {
+    await renderSaved();
+    expect(screen.getByText('Rejected · in this browser')).toBeInTheDocument();
+    expect(screen.getByText('API key not valid')).toBeInTheDocument();
+    expect(screen.queryByText('Active · in this browser')).not.toBeInTheDocument();
+  });
+
+  it('goes back to Active once a replacement key passes the check', async () => {
+    mockFetch('generativelanguage.googleapis.com', async () => new Response('{}', { status: 200 }));
+    await renderSaved();
+    fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+    fireEvent.change(screen.getByPlaceholderText('Paste your new Gemini API key'), { target: { value: NEW } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Active · in this browser');
+    expect(useUIStore.getState().aiKeyIssues.gemini).toBeUndefined();
   });
 });

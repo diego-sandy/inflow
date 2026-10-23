@@ -17,26 +17,33 @@ import {
   setConfirmDelete as persistConfirmDelete,
 } from '@/lib/send-settings';
 
+/** A key a provider refused: where it was used, and what the provider said. */
+export interface AIKeyIssue {
+  via: 'connector' | 'browser';
+  detail: string;
+  at: number;
+}
+
 export type SettingsSection = 'ai' | 'chat' | 'sending' | 'connections' | 'appearance' | 'backup' | 'advanced' | 'about';
 
 /**
  * Active filter over the connections list (shared so Insights can drive it).
  * Multi-select: empty arrays mean "no constraint". A connection matches when its
  * role is one of `roles` (or `roles` is empty) AND it has one of `interests`
- * (or `interests` is empty) — OR within a facet, AND across facets.
+ * (or `interests` is empty) â OR within a facet, AND across facets.
  */
 export interface ConnectionFilter {
   roles: ConnectionRole[];
   interests: string[];
 }
 
-/** The empty filter — everything shows. */
+/** The empty filter â everything shows. */
 export const EMPTY_CONNECTION_FILTER: ConnectionFilter = { roles: [], interests: [] };
 
-/** Connection state of the local MCP bridge (companion ↔ inflow). */
+/** Connection state of the local MCP bridge (companion â inflow). */
 export type McpStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-/** One line in the MCP activity feed — what Claude just did. */
+/** One line in the MCP activity feed â what Claude just did. */
 export interface McpActivityEntry {
   id: string;
   at: number;
@@ -81,7 +88,7 @@ interface UIState {
   settingsOpen: boolean;
   settingsSection: SettingsSection;
   whatsNewOpen: boolean;
-  /** The setup wizard. `setupFromStart` reopens it at Welcome (Settings › Run setup
+  /** The setup wizard. `setupFromStart` reopens it at Welcome (Settings âº Run setup
    *  again) rather than resuming at the saved step. */
   setupOpen: boolean;
   setupFromStart: boolean;
@@ -114,6 +121,10 @@ interface UIState {
   /** Which provider keys the connected companion holds (advertised on connect).
    * Lets Settings show a key as "active in the companion" vs. in the browser. */
   mcpKeys: { anthropic: boolean; gemini: boolean };
+  /** A key a provider rejected the last time it was used, by provider, until a
+   *  call with it succeeds. Shown in Settings › AI so a bad key is visible
+   *  there, not only when a draft fails. */
+  aiKeyIssues: Partial<Record<'anthropic' | 'gemini', AIKeyIssue>>;
 
   setDemoMode: (active: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -152,6 +163,7 @@ interface UIState {
   setSelectedConnectionUrn: (urn: string | null) => void;
   setMcpStatus: (status: McpStatus, error?: string | null) => void;
   setMcpKeys: (keys: { anthropic: boolean; gemini: boolean }) => void;
+  setAIKeyIssue: (provider: 'anthropic' | 'gemini', issue: AIKeyIssue | null) => void;
   pushMcpActivity: (text: string) => void;
   clearMcpActivity: () => void;
   setConnectionsFilter: (filter: ConnectionFilter) => void;
@@ -222,7 +234,7 @@ function getStoredSection(): AppSection {
   return 'inbox';
 }
 
-/** Grid or list for the Outbox. Grid by default — it fits more on screen. */
+/** Grid or list for the Outbox. Grid by default â it fits more on screen. */
 function getStoredOutboxView(): 'grid' | 'list' {
   try {
     return localStorage.getItem('inflow-outbox-view') === 'list' ? 'list' : 'grid';
@@ -266,7 +278,7 @@ applyTheme(initialTheme);
 // Restore view on load
 const initialView = getStoredView();
 
-// Listen for system theme changes (guarded — jsdom/node may lack matchMedia)
+// Listen for system theme changes (guarded â jsdom/node may lack matchMedia)
 if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     const current = useUIStore.getState().theme;
@@ -317,6 +329,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   mcpError: null,
   mcpActivity: [],
   mcpKeys: { anthropic: false, gemini: false },
+  aiKeyIssues: {},
   tabMemory: {},
   _pendingRestore: null,
 
@@ -457,6 +470,13 @@ export const useUIStore = create<UIState>((set, get) => ({
       ...(status === 'connected' ? {} : { mcpKeys: { anthropic: false, gemini: false } }),
     }),
   setMcpKeys: (keys) => set({ mcpKeys: keys }),
+  setAIKeyIssue: (provider, issue) =>
+    set((s) => {
+      const next = { ...s.aiKeyIssues };
+      if (issue) next[provider] = issue;
+      else delete next[provider];
+      return { aiKeyIssues: next };
+    }),
   pushMcpActivity: (text) =>
     set((s) => ({
       // Cap the feed so it can't grow unbounded during a long session.
@@ -544,7 +564,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 /**
  * Pull the send settings out of chrome.storage into the store. They live there
  * rather than localStorage because the background worker needs them too, and a
- * service worker has no localStorage — but the Outbox reads them on every
+ * service worker has no localStorage â but the Outbox reads them on every
  * render, so the store keeps a synchronous mirror. Called once at app start.
  */
 export async function hydrateSendSettings(): Promise<void> {

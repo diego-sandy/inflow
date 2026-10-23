@@ -63,11 +63,20 @@ export const DEFAULT_ANTHROPIC_QUALITY_MODEL = 'claude-sonnet-5';
 /** Gemini models offered in Settings, cheapest → most capable. */
 export const GEMINI_MODELS: ModelOption[] = [
   { id: 'gemini-3.1-flash-lite', label: 'Flash-Lite', blurb: 'Fastest & cheapest — best for bulk tagging' },
-  { id: 'gemini-3.5-flash', label: 'Flash', blurb: 'Balanced quality and cost' },
+  { id: 'gemini-3.6-flash', label: 'Flash', blurb: 'Balanced quality and cost' },
   { id: 'gemini-3.1-pro-preview', label: 'Pro', blurb: 'Most capable — best writing' },
 ];
 
 const GEMINI_MODEL_IDS = new Set(GEMINI_MODELS.map((m) => m.id));
+
+/**
+ * Model ids Google has superseded, mapped to what replaced them, so a saved
+ * choice follows the model rather than falling back to the default. Google's
+ * deprecations page lists gemini-3.5-flash as routed to gemini-3.6-flash.
+ */
+const GEMINI_RENAMED: Record<string, string> = {
+  'gemini-3.5-flash': 'gemini-3.6-flash',
+};
 
 /**
  * Both tiers default to Flash-Lite — the single model the app originally used
@@ -157,9 +166,10 @@ export async function setAnthropicModel(tier: AIModelTier, modelId: string): Pro
 
 /** Resolve the configured Gemini model for a tier, validating the known set. */
 export async function getGeminiModel(tier: AIModelTier): Promise<string> {
-  const stored = await readLocal<string>(
+  const saved = await readLocal<string>(
     tier === 'quality' ? GEMINI_QUALITY_MODEL_KEY : GEMINI_FAST_MODEL_KEY,
   );
+  const stored = saved ? GEMINI_RENAMED[saved] ?? saved : saved;
   if (stored && GEMINI_MODEL_IDS.has(stored)) return stored;
   return tier === 'quality' ? DEFAULT_GEMINI_QUALITY_MODEL : DEFAULT_GEMINI_FAST_MODEL;
 }

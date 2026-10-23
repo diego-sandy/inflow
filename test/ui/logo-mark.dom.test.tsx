@@ -3,6 +3,8 @@
 // vectors rather than a typed ƒ, and it lightens its dot in dark themes.
 import '../dom-setup';
 import { render } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Logo, LogoMark } from '@/components/common/Wordmark';
 
 it('draws the mark as shapes, not a font glyph', () => {
@@ -11,7 +13,16 @@ it('draws the mark as shapes, not a font glyph', () => {
   expect(svg.getAttribute('viewBox')).toBe('150 155 980 980');
   expect(svg.querySelector('text')).toBeNull();
   expect(svg.querySelector('circle')).toBeTruthy();
-  expect(svg.querySelectorAll('path')).toHaveLength(2);
+  // All three streams, like the full mark: the small cut only widens the gaps.
+  expect(svg.querySelectorAll('path')).toHaveLength(3);
+});
+
+it('uses exactly the paths of the small master, so the sidebar and toolbar match', () => {
+  const master = readFileSync(resolve(__dirname, '../../assets/brand/inflow-mark-small.svg'), 'utf8');
+  const masterPaths = [...master.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]);
+  const { container } = render(<LogoMark />);
+  const ours = [...container.querySelectorAll('path')].map((p) => p.getAttribute('d'));
+  expect(ours).toEqual(masterPaths);
 });
 
 it('lightens the dot in dark themes', () => {

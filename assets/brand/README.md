@@ -5,7 +5,7 @@
 | `inflow-icon-source.png` | The original icon artwork, 1254×1254. Reference only. |
 | `inflow-wordmark-source.png` | The original wordmark artwork. Reference only. |
 | `inflow-mark.svg` | The mark redrawn as vectors: the i's dot, and its stem flowing into three streams. The master for anything 48px and up. |
-| `inflow-mark-small.svg` | A simplified cut for small sizes: two streams with wider gaps, so they don't close up at 16–32px. |
+| `inflow-mark-small.svg` | The same mark for small sizes: all three streams, with the gaps between them widened so they stay open at 16–32px. |
 
 Both SVGs share one coordinate space (`viewBox="150 155 980 980"`, the source
 artwork's pixel grid, cropped so the mark fills the square) and one gradient:

@@ -53,3 +53,10 @@ it('gives the Claude companion the same mark', () => {
   expect(width).toBe(128);
   expect(colorType).toBe(6);
 });
+
+it('keeps all three streams in both cuts of the mark', () => {
+  for (const f of ['inflow-mark.svg', 'inflow-mark-small.svg']) {
+    const svg = readFileSync(resolve(root, 'assets/brand', f), 'utf8');
+    expect(svg.match(/<path /g), f).toHaveLength(3);
+  }
+});

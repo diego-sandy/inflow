@@ -81,6 +81,10 @@ interface UIState {
   settingsOpen: boolean;
   settingsSection: SettingsSection;
   whatsNewOpen: boolean;
+  /** The setup wizard. `setupFromStart` reopens it at Welcome (Settings › Run setup
+   *  again) rather than resuming at the saved step. */
+  setupOpen: boolean;
+  setupFromStart: boolean;
   activeSection: AppSection;
   /** Back/forward stacks for section navigation (browser-style arrows). */
   sectionHistory: AppSection[];
@@ -136,6 +140,8 @@ interface UIState {
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
   setWhatsNewOpen: (open: boolean) => void;
+  openSetup: (opts?: { fromStart?: boolean }) => void;
+  closeSetup: () => void;
   setActiveSection: (section: AppSection) => void;
   /** Go to the previously visited section (browser back). */
   goBackSection: () => void;
@@ -292,6 +298,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   settingsOpen: false,
   settingsSection: 'ai',
   whatsNewOpen: false,
+  setupOpen: false,
+  setupFromStart: false,
   activeSection: getStoredSection(),
   sectionHistory: [],
   sectionForward: [],
@@ -361,6 +369,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   openSettings: (section) => set(section ? { settingsOpen: true, settingsSection: section } : { settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
   setWhatsNewOpen: (open) => set({ whatsNewOpen: open }),
+  openSetup: (opts) => set({ setupOpen: true, setupFromStart: !!opts?.fromStart, settingsOpen: false }),
+  closeSetup: () => set({ setupOpen: false, setupFromStart: false }),
   setActiveSection: (section) => {
     const cur = get().activeSection;
     try {

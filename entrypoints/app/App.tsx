@@ -9,6 +9,7 @@ import { ConfirmDeleteModal } from '@/components/common/ConfirmDeleteModal';
 import { ConfirmSpamModal } from '@/components/common/ConfirmSpamModal';
 import { SettingsModal } from '@/components/settings/SettingsModal';
 import { WhatsNewModal } from '@/components/common/WhatsNewModal';
+import { SetupWizard } from '@/components/setup/SetupWizard';
 import { Toast } from '@/components/common/Toast';
 import { UpdateBanner } from '@/components/common/UpdateBanner';
 import { IncomingMessageToast } from '@/components/common/IncomingMessageToast';
@@ -349,6 +350,7 @@ export function App() {
       )}
       <SettingsModal />
       <WhatsNewModal />
+      <SetupWizard />
       <Toast />
       <IncomingMessageToast />
       <PendingNavigation />

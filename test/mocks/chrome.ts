@@ -66,6 +66,8 @@ function createChromeMock() {
     },
     action: {
       setBadgeText: vi.fn(),
+      // Whether the extension is pinned to the toolbar (setup wizard, Pin step).
+      getUserSettings: vi.fn().mockResolvedValue({ isOnToolbar: false }),
       setBadgeBackgroundColor: vi.fn(),
       onClicked: {
         addListener: vi.fn(),

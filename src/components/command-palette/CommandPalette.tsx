@@ -112,6 +112,9 @@ export function CommandPalette({ conversations, composeRef }: CommandPaletteProp
     openSettings: () => {
       useUIStore.getState().openSettings();
     },
+    runSetup: () => {
+      useUIStore.getState().openSetup({ fromStart: true });
+    },
     openWhatsNew: () => {
       useUIStore.getState().setWhatsNewOpen(true);
     },

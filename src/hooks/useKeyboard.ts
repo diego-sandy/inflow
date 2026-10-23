@@ -62,7 +62,7 @@ export function useKeyboard(conversations: Conversation[], composeRef: React.Ref
 
       // Don't handle any shortcuts when the debug panel or confirm modal is open
       if (document.querySelector('[data-debug-panel]')) return;
-      if (store.deleteConfirmId || store.spamConfirmId || store.settingsOpen || store.whatsNewOpen || store.lightboxImageUrl) return;
+      if (store.deleteConfirmId || store.spamConfirmId || store.settingsOpen || store.whatsNewOpen || store.setupOpen || store.lightboxImageUrl) return;
 
       // Cmd/Ctrl+, — Settings (works in any context, mirrors the OS convention).
       if (e.key === ',' && (e.metaKey || e.ctrlKey)) {

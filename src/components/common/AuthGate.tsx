@@ -3,6 +3,8 @@ import { sendBridgeMessage } from '@/lib/bridge';
 import { switchDatabase, memberIdFromUrn, getActiveAccountId, migrateDraftsFromLocalStorage } from '@/db/database';
 import { isDemoMode, seedDemoData, startDemoIncoming, stopDemoIncoming } from '@/lib/demo-mode';
 import { Wordmark } from '@/components/common/Wordmark';
+import { SetupWizard } from '@/components/setup/SetupWizard';
+import { isSetupPending } from '@/lib/setup-state';
 
 interface AuthGateProps {
   children: ReactNode;
@@ -12,6 +14,12 @@ export function AuthGate({ children }: AuthGateProps) {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
   const [online, setOnline] = useState(navigator.onLine);
   const [accountKey, setAccountKey] = useState(() => getActiveAccountId() || 'default');
+  // After a fresh install the signed-out screen is the setup wizard's first
+  // steps instead of a bare sign-in prompt. Null until known, so neither flashes.
+  const [setupPending, setSetupPending] = useState<boolean | null>(null);
+  useEffect(() => {
+    isSetupPending().then(setSetupPending).catch(() => setSetupPending(false));
+  }, []);
 
   // Track browser online/offline state
   useEffect(() => {
@@ -124,6 +132,8 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   if (authState === 'unauthenticated') {
+    if (setupPending === null) return null;
+    if (setupPending) return <SetupWizard standalone auth="unauthenticated" onCheckAuth={checkAuth} />;
     return (
       <div className="flex h-screen items-center justify-center bg-surface text-fg">
         <div className="max-w-sm text-center">

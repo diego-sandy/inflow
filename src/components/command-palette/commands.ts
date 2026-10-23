@@ -36,6 +36,7 @@ export function buildCommands(actions: {
   openSettings: () => void;
   openWhatsNew: () => void;
   openAISetup: () => void;
+  runSetup: () => void;
   toggleDemoMode: () => void;
   isDemoActive: boolean;
   toggleAISuggestions: () => void;
@@ -77,6 +78,7 @@ export function buildCommands(actions: {
     ...(actions.currentTheme !== 'system' ? [{ id: 'theme-system', label: 'Switch to System theme', shortcut: '', action: actions.setThemeSystem }] : []),
     ...(actions.currentTheme !== 'purple' ? [{ id: 'theme-purple', label: 'Switch to Purple theme', shortcut: '', action: actions.setThemePurple }] : []),
     { id: 'ai-setup', label: 'Set up AI features', shortcut: '', action: actions.openAISetup },
+    { id: 'run-setup', label: 'Run setup again', shortcut: '', action: actions.runSetup },
     {
       id: 'ai-suggestions',
       label: actions.aiSuggestionsEnabled ? 'Disable AI reply suggestions' : 'Enable AI reply suggestions',

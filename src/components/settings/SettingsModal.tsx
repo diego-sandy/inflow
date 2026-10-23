@@ -484,6 +484,12 @@ function AboutSettings() {
         >
           What&rsquo;s new
         </button>
+        <button
+          onClick={() => useUIStore.getState().openSetup({ fromStart: true })}
+          className="rounded-md bg-surface-input px-3 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
+        >
+          Run setup again
+        </button>
       </div>
       <div className="flex flex-col gap-2 border-t border-edge pt-4 text-sm">
         <a

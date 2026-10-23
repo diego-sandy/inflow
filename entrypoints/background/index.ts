@@ -12,6 +12,7 @@ import { countUnreadFocused } from '@/lib/inbox-filters';
 import { openAppTab } from './open-app-tab';
 import { setupUpdateChecker } from './update-check';
 import { setupAutoSend } from './auto-send';
+import { handleInstalled } from './on-installed';
 
 /** Count unread Focused-tab conversations and update the toolbar badge.
  *  Uses the same predicate as the Focused list (isFocusedConversation) so the
@@ -129,10 +130,7 @@ export default defineBackground(() => {
     openAppTab({ conversationId: notificationId });
   });
 
-  // Re-open the app tab after extension reload in dev mode
   chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'update') {
-      openAppTab();
-    }
+    void handleInstalled(details);
   });
 });

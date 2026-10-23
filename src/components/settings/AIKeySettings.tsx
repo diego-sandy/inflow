@@ -22,7 +22,7 @@ import {
   type AIModelTier,
   type ProviderModelOption,
 } from '@/lib/ai-settings';
-import { ANTHROPIC_URL, anthropicErrorMessage } from '@/lib/anthropic-client';
+import { verifyAnthropicKey, verifyGeminiKey } from '@/lib/ai-key-verify';
 import { useCategorizeMode } from '@/hooks/useCategorizeMode';
 import { Toggle } from '@/components/common/Toggle';
 import { StatusLight } from '@/components/common/StatusLight';
@@ -453,23 +453,7 @@ export function AIKeySettings() {
     setGeminiStatus('testing');
     setGeminiError('');
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${geminiFastModel}:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: 'Say "ok" and nothing else.' }] }],
-            generationConfig: { maxOutputTokens: 5 },
-          }),
-        },
-      );
-      if (!res.ok) {
-        if (res.status === 400) throw new Error('Invalid API key');
-        if (res.status === 403) throw new Error('API key not authorized — check AI Studio');
-        if (res.status === 429) throw new Error('Rate limit reached — try again in a minute');
-        throw new Error(`Request failed (HTTP ${res.status})`);
-      }
+      await verifyGeminiKey(key, geminiFastModel);
       await setGeminiApiKey(key);
       setGeminiSaved(key);
       setGeminiInput('');
@@ -499,30 +483,7 @@ export function AIKeySettings() {
     setAnthStatus('testing');
     setAnthError('');
     try {
-      const res = await fetch(ANTHROPIC_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: fastModel,
-          max_tokens: 8,
-          messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }],
-        }),
-      });
-      if (!res.ok) {
-        // Surface Anthropic's actual reason (e.g. "credit balance is too low")
-        // instead of a generic status message, so the fix is obvious.
-        let detail = '';
-        try {
-          const body = await res.json();
-          detail = typeof body?.error?.message === 'string' ? body.error.message : '';
-        } catch {}
-        throw new Error(detail || anthropicErrorMessage(res.status));
-      }
+      await verifyAnthropicKey(key, fastModel);
       await setAnthropicApiKey(key);
       setAnthSaved(key);
       setAnthInput('');

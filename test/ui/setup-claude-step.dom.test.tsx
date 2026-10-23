@@ -11,7 +11,7 @@ vi.mock('@/lib/mcp/bridge-client', async (importOriginal) => ({
   startMcpBridge: (...a: any[]) => startMcpBridge(...a),
 }));
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { SetupWizard } from '@/components/setup/SetupWizard';
 import { useUIStore } from '@/store/ui-store';
 import { markSetupPending, setSetupStep } from '@/lib/setup-state';
@@ -124,10 +124,46 @@ it('offers troubleshooting when the connection takes too long', async () => {
   }
 });
 
-it('goes straight to the last screen when already connected', async () => {
-  act(() => useUIStore.setState({ mcpStatus: 'connected' } as any));
+describe('when already connected', () => {
+  beforeEach(() => act(() => useUIStore.setState({ mcpStatus: 'connected' } as any)));
+
+  it('still starts at the first screen, and says it is set up', async () => {
+    // Jumping to the last screen used to hide the other five entirely.
+    await openStep();
+    await heading('Set up the MCP connector');
+    expect(screen.getByText(/Already set up and connected/)).toBeInTheDocument();
+  });
+
+  it('offers to move on, or to show the steps anyway', async () => {
+    await openStep();
+    click('Show me the steps');
+    await heading('Download the connector');
+  });
+
+  it('Continue moves on to the next wizard step', async () => {
+    await openStep();
+    click('Continue');
+    await heading("You're all set");
+  });
+});
+
+it('shows every screen as a tab, and any can be opened directly', async () => {
   await openStep();
+  const tabs = within(screen.getByRole('navigation', { name: 'MCP connector steps' })).getAllByRole('button');
+  expect(tabs.map((t) => t.textContent)).toEqual([
+    '1. Why',
+    '2. Download',
+    '3. Install',
+    '4. Code',
+    '5. Enable',
+    '6. Allow',
+  ]);
+  expect(tabs[0]).toHaveAttribute('aria-current', 'step');
+
+  fireEvent.click(tabs[5]);
   await heading('Let Claude use it without asking');
+  fireEvent.click(screen.getByRole('button', { name: '3. Install' }));
+  await heading('Open it, and install');
 });
 
 it('ticks MCP connector in the step list only while connected', async () => {

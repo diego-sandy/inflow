@@ -21,6 +21,15 @@ import { ConfigureAnimation, EnabledIllustration, InstallAnimation, PermissionsA
 export type GuidePhase = 'why' | 'download' | 'install' | 'configure' | 'enable' | 'permissions';
 export const GUIDE_PHASES: GuidePhase[] = ['why', 'download', 'install', 'configure', 'enable', 'permissions'];
 
+const PHASE_LABELS: Record<GuidePhase, string> = {
+  why: 'Why',
+  download: 'Download',
+  install: 'Install',
+  configure: 'Code',
+  enable: 'Enable',
+  permissions: 'Allow',
+};
+
 /** How long to wait for a connection before offering troubleshooting. */
 export const CONNECT_HELP_AFTER_MS = 30_000;
 
@@ -44,8 +53,9 @@ interface Props {
 export function ConnectorGuide({ onBack, onSkip, onFinish, finishLabel = 'Continue', skipIntro = false }: Props) {
   const connected = useUIStore((s) => s.mcpStatus === 'connected');
   const phases = skipIntro ? GUIDE_PHASES.filter((p) => p !== 'why') : GUIDE_PHASES;
-  // Already connected (running setup again): only the last screen is left.
-  const [phase, setPhase] = useState<GuidePhase>(connected ? 'permissions' : phases[0]);
+  // Always from the first screen, connected or not: jumping ahead when already
+  // connected hid every screen but the last, with nothing saying they existed.
+  const [phase, setPhase] = useState<GuidePhase>(phases[0]);
   const [code, setCode] = useState('');
   const [copied, setCopied] = useState<'code' | 'prompt' | null>(null);
   const [slow, setSlow] = useState(false);
@@ -95,9 +105,29 @@ export function ConnectorGuide({ onBack, onSkip, onFinish, finishLabel = 'Contin
 
   return (
     <>
-      <p className="mb-2 text-[11px] font-medium text-fg-faint">
-        MCP connector · {i + 1} of {phases.length}
-      </p>
+      {/* Every screen of the guide, always visible and clickable, so it's
+          clear how many there are and any one can be revisited. */}
+      <nav aria-label="MCP connector steps" className="mb-4 flex flex-wrap gap-1 pr-8">
+        {phases.map((p, n) => {
+          const current = p === phase;
+          return (
+            <button
+              key={p}
+              onClick={() => setPhase(p)}
+              aria-current={current ? 'step' : undefined}
+              className={`rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${
+                current
+                  ? 'bg-blue-500 text-white'
+                  : n < i
+                    ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 dark:text-blue-300'
+                    : 'bg-surface-input text-fg-muted hover:text-fg-secondary'
+              }`}
+            >
+              {n + 1}. {PHASE_LABELS[p]}
+            </button>
+          );
+        })}
+      </nav>
 
       {phase === 'why' && (
         <>
@@ -105,13 +135,23 @@ export function ConnectorGuide({ onBack, onSkip, onFinish, finishLabel = 'Contin
             The MCP connector lets Claude Desktop work with inflow: search your connections, read network
             stats, and draft messages into your Outbox. Claude never sends; you do.
           </StepTitle>
-          <p className="text-sm text-fg-secondary">
-            Optional, and about two minutes. It needs the Claude Desktop app.{' '}
-            <button onClick={() => openTab('https://claude.ai/download')} className="font-medium text-blue-500 underline hover:text-blue-400">
-              Get Claude Desktop
-            </button>
-          </p>
-          <StepFooter onBack={back} primary={{ label: 'Set it up', onClick: next }} secondary={skip} />
+          {connected ? (
+            <p className="inline-flex items-center gap-2 text-sm font-medium text-fg-strong">
+              <CheckBadge /> Already set up and connected to Claude Desktop.
+            </p>
+          ) : (
+            <p className="text-sm text-fg-secondary">
+              Optional, and about two minutes. It needs the Claude Desktop app.{' '}
+              <button onClick={() => openTab('https://claude.ai/download')} className="font-medium text-blue-500 underline hover:text-blue-400">
+                Get Claude Desktop
+              </button>
+            </p>
+          )}
+          <StepFooter
+            onBack={back}
+            primary={connected ? { label: finishLabel, onClick: onFinish } : { label: 'Set it up', onClick: next }}
+            secondary={connected ? { label: 'Show me the steps', onClick: next } : skip}
+          />
         </>
       )}
 

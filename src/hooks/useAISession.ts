@@ -12,6 +12,13 @@ import {
 } from '@/lib/ai-settings';
 import { predictAnthropic } from '@/lib/anthropic-client';
 import { requestAnthropicViaCompanion, requestGeminiViaCompanion, isCompanionConnected, companionHasKey } from '@/lib/mcp/bridge-client';
+import {
+  describeEmptyAnthropic,
+  describeEmptyGemini,
+  describeHttpFailure,
+  reportAIFailure,
+  type AIFailureReporter,
+} from '@/lib/ai-failure';
 
 const SYSTEM_PROMPT =
   'You are an autocomplete assistant. Given conversation history and a partial message, predict the next few words. Output ONLY the completion text. Keep it short (2-8 words). If unsure, output nothing.';
@@ -35,6 +42,11 @@ interface PredictOptions {
   tier?: AIModelTier;
   /** Called with each text chunk as it streams in (for live display). */
   onToken?: (chunk: string) => void;
+  /**
+   * Called with the reason when the call produces no text, so the caller can
+   * show it. The reason is also logged to the debug panel either way.
+   */
+  onFailure?: AIFailureReporter;
 }
 
 interface AISession {
@@ -174,6 +186,12 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
   const temperature = isOpts ? options.temperature ?? 0.3 : 0.3;
   const tier: AIModelTier = isOpts ? options.tier ?? 'fast' : 'fast';
   const onToken = isOpts ? options.onToken : undefined;
+  const onFailure = isOpts ? options.onFailure : undefined;
+  // Report only for calls that want a whole answer, or that asked to hear: autocomplete
+  // runs on nearly every keystroke and would flood the log with the same miss.
+  const fail: AIFailureReporter = (reason) => {
+    if (fullResponse || onFailure) reportAIFailure(onFailure, reason);
+  };
 
   const provider = tier === 'quality' ? config.qualityProvider : config.fastProvider;
 
@@ -182,11 +200,16 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
     // Prefer the companion when it holds the key (server-side — works on
     // BAA/CORS orgs, key off-browser).
     if (companionHasKey('anthropic')) {
-      return predictAnthropicViaCompanion(prompt, model, { maxTokens, systemPrompt, onToken });
+      return predictAnthropicViaCompanion(prompt, model, { maxTokens, systemPrompt, onToken, onFailure: fail });
     }
     // Fall back to a direct browser call (only works if the org allows CORS).
-    if (!config.anthropicKey) return null;
-    return predictAnthropic(prompt, config.anthropicKey, model, { signal, maxTokens, systemPrompt, onToken });
+    if (!config.anthropicKey) {
+      fail(
+        "This uses Claude, but there's no Claude key in the browser and the MCP connector isn't connected to provide one",
+      );
+      return null;
+    }
+    return predictAnthropic(prompt, config.anthropicKey, model, { signal, maxTokens, systemPrompt, onToken, onFailure: fail });
   }
 
   const model = tier === 'quality' ? config.geminiQualityModel : config.geminiFastModel;
@@ -194,9 +217,25 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
   // direct browser call. Only one path streams (the browser); the companion
   // returns the full answer once — see predictGeminiViaCompanion.
   if (companionHasKey('gemini')) {
-    return predictGeminiViaCompanion(prompt, model, { maxTokens, systemPrompt, temperature, onToken });
+    return predictGeminiViaCompanion(prompt, model, { maxTokens, systemPrompt, temperature, onToken, onFailure: fail });
   }
-  return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model, onToken });
+  if (!config.geminiKey) {
+    fail(
+      "This uses Gemini, but there's no Gemini key in the browser and the MCP connector isn't connected to provide one",
+    );
+    return null;
+  }
+  return predictGemini(prompt, { signal, fullResponse, maxTokens, systemPrompt, temperature, model, onToken, onFailure: fail });
+}
+
+/** Text from a Gemini candidate's parts (thought parts, if any, are not text). */
+function geminiText(candidate: any): string {
+  const parts = candidate?.content?.parts;
+  let text = '';
+  if (Array.isArray(parts)) {
+    for (const p of parts) if (typeof p?.text === 'string' && !p.thought) text += p.text;
+  }
+  return text;
 }
 
 /**
@@ -207,8 +246,15 @@ async function predict(prompt: string, options?: AbortSignal | PredictOptions): 
 async function predictGeminiViaCompanion(
   prompt: string,
   model: string,
-  opts: { maxTokens: number; systemPrompt: string; temperature: number; onToken?: (chunk: string) => void },
+  opts: {
+    maxTokens: number;
+    systemPrompt: string;
+    temperature: number;
+    onToken?: (chunk: string) => void;
+    onFailure?: AIFailureReporter;
+  },
 ): Promise<string | null> {
+  let data: any;
   try {
     const body = {
       system_instruction: { parts: [{ text: opts.systemPrompt }] },
@@ -218,18 +264,24 @@ async function predictGeminiViaCompanion(
         temperature: opts.temperature,
       },
     };
-    const data = await requestGeminiViaCompanion(model, body);
-    const parts = data?.candidates?.[0]?.content?.parts;
-    let text = '';
-    if (Array.isArray(parts)) {
-      for (const p of parts) if (typeof p?.text === 'string') text += p.text;
-    }
-    const out = text.trim() || null;
-    if (out && opts.onToken) opts.onToken(out); // non-streaming: deliver once
-    return out;
-  } catch {
+    data = await requestGeminiViaCompanion(model, body);
+  } catch (e: any) {
+    opts.onFailure?.(`The MCP connector couldn't get an answer from Gemini: ${e?.message || 'unknown error'}`);
     return null;
   }
+  const candidate = data?.candidates?.[0];
+  const out = geminiText(candidate).trim() || null;
+  if (!out) {
+    // Thinking can spend a small cap before any text is written; one retry
+    // without the cap gets the answer rather than nothing.
+    if (candidate?.finishReason === 'MAX_TOKENS' && opts.maxTokens > 0) {
+      return predictGeminiViaCompanion(prompt, model, { ...opts, maxTokens: 0 });
+    }
+    opts.onFailure?.(describeEmptyGemini(candidate?.finishReason, data?.promptFeedback?.blockReason));
+    return null;
+  }
+  opts.onToken?.(out); // non-streaming: deliver once
+  return out;
 }
 
 /**
@@ -240,8 +292,9 @@ async function predictGeminiViaCompanion(
 async function predictAnthropicViaCompanion(
   prompt: string,
   model: string,
-  opts: { maxTokens: number; systemPrompt: string; onToken?: (chunk: string) => void },
+  opts: { maxTokens: number; systemPrompt: string; onToken?: (chunk: string) => void; onFailure?: AIFailureReporter },
 ): Promise<string | null> {
+  let data: any;
   try {
     const maxTokens = opts.maxTokens && opts.maxTokens > 0 ? Math.max(opts.maxTokens, 64) : 1024;
     const payload: Record<string, unknown> = {
@@ -251,16 +304,21 @@ async function predictAnthropicViaCompanion(
       ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
       ...(/haiku/i.test(model) ? {} : { thinking: { type: 'disabled' } }),
     };
-    const data = await requestAnthropicViaCompanion(payload);
-    const text = Array.isArray(data?.content)
-      ? data.content.filter((b: any) => b?.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('')
-      : '';
-    const out = text.trim() || null;
-    if (out && opts.onToken) opts.onToken(out); // non-streaming: deliver once
-    return out;
-  } catch {
+    data = await requestAnthropicViaCompanion(payload);
+  } catch (e: any) {
+    opts.onFailure?.(`The MCP connector couldn't get an answer from Claude: ${e?.message || 'unknown error'}`);
     return null;
   }
+  const text = Array.isArray(data?.content)
+    ? data.content.filter((b: any) => b?.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('')
+    : '';
+  const out = text.trim() || null;
+  if (!out) {
+    opts.onFailure?.(describeEmptyAnthropic(data?.stop_reason));
+    return null;
+  }
+  opts.onToken?.(out); // non-streaming: deliver once
+  return out;
 }
 
 /** Gemini streaming prediction (the original provider). */
@@ -274,6 +332,7 @@ async function predictGemini(
     temperature: number;
     model: string;
     onToken?: (chunk: string) => void;
+    onFailure?: AIFailureReporter;
   },
 ): Promise<string | null> {
   try {
@@ -296,7 +355,15 @@ async function predictGemini(
       }),
     });
 
-    if (!res.ok || !res.body) return null;
+    if (!res.ok || !res.body) {
+      let detail = '';
+      try {
+        const body = await res.json();
+        detail = typeof body?.error?.message === 'string' ? body.error.message : '';
+      } catch {}
+      opts.onFailure?.(describeHttpFailure('Gemini', res.status, detail));
+      return null;
+    }
 
     // Read SSE stream. Buffer across reads: a single `data: {...}` line can be
     // split between two network chunks, so we only parse complete lines and keep
@@ -306,6 +373,9 @@ async function predictGemini(
     const decoder = new TextDecoder();
     let text = '';
     let buffer = '';
+    // The last finish/block reason seen, to explain an answer that never came.
+    let finishReason: string | undefined;
+    let blockReason: string | undefined;
 
     const consumeLine = (line: string) => {
       if (!line.startsWith('data:')) return;
@@ -313,14 +383,13 @@ async function predictGemini(
       if (!payload || payload === '[DONE]') return;
       try {
         const json = JSON.parse(payload);
-        const parts = json?.candidates?.[0]?.content?.parts;
-        if (Array.isArray(parts)) {
-          for (const p of parts) {
-            if (typeof p?.text === 'string') {
-              text += p.text;
-              opts.onToken?.(p.text);
-            }
-          }
+        const candidate = json?.candidates?.[0];
+        if (candidate?.finishReason) finishReason = candidate.finishReason;
+        if (json?.promptFeedback?.blockReason) blockReason = json.promptFeedback.blockReason;
+        const chunk = geminiText(candidate);
+        if (chunk) {
+          text += chunk;
+          opts.onToken?.(chunk);
         }
       } catch {
         // skip malformed SSE lines
@@ -349,10 +418,21 @@ async function predictGemini(
       reader.releaseLock();
     }
 
-    return text.trim() || null;
+    const out = text.trim() || null;
+    if (!out) {
+      // Newer Gemini models think before answering, and the thinking counts
+      // against maxOutputTokens: a small cap can be spent before a word of the
+      // answer. Retry a full answer once without the cap rather than fail.
+      if (finishReason === 'MAX_TOKENS' && opts.maxTokens > 0 && opts.fullResponse) {
+        return predictGemini(prompt, { ...opts, maxTokens: 0 });
+      }
+      opts.onFailure?.(describeEmptyGemini(finishReason, blockReason));
+    }
+    return out;
   } catch (e: any) {
     if (e?.name === 'AbortError') return null;
     console.warn('[inflow] AI autocomplete error:', e);
+    opts.onFailure?.(`Couldn't reach Gemini: ${e?.message || 'network error'}`);
     return null;
   }
 }

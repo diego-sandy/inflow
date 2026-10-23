@@ -77,6 +77,7 @@ export function useAiCompose({
     store.setDraft('');
 
     let streamed = '';
+    let failure: string | null = null;
     try {
       const prompt = buildComposePrompt(messages, participantNames, text);
       const result = await predict(prompt, {
@@ -89,11 +90,18 @@ export function useAiCompose({
           streamed += chunk;
           useAiComposeStore.getState().setDraft(streamed);
         },
+        onFailure: (reason) => {
+          failure = reason;
+        },
       });
       const final = (result || streamed).trim();
       if (!final) {
         useAiComposeStore.getState().setDraft(null);
-        useAiComposeStore.getState().setStatus('error', 'The AI returned nothing — try rephrasing your instruction.');
+        // Say what actually went wrong. Rephrasing only helps when the model
+        // genuinely came back empty, so that's the fallback, not the default.
+        useAiComposeStore
+          .getState()
+          .setStatus('error', failure ? `${failure}.` : 'The AI returned nothing. Try rephrasing your instruction.');
         return;
       }
       useAiComposeStore.getState().setDraft(final);

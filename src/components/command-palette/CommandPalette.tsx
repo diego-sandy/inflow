@@ -3,6 +3,7 @@ import { Command } from 'cmdk';
 import { useUIStore } from '@/store/ui-store';
 import { useOptimisticAction } from '@/hooks/useOptimisticAction';
 import { sendBridgeMessage } from '@/lib/bridge';
+import { getDebugLogs, mergeLogs, type LogEntry } from '@/lib/debug-log';
 import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { getAISuggestionsEnabled, setAISuggestionsEnabled } from '@/lib/ai-settings';
 import { buildCommands } from './commands';
@@ -131,7 +132,8 @@ export function CommandPalette({ conversations, composeRef }: CommandPaletteProp
       try {
         const res = await sendBridgeMessage({ type: 'GET_DEBUG_LOGS' });
         if (res.success && Array.isArray(res.data)) {
-          const logs = (res.data as { ts: number; level: string; message: string }[])
+          // Include this page's own log, where AI failures are recorded.
+          const logs = mergeLogs(res.data as LogEntry[], getDebugLogs())
             .slice(-50)
             .map((e) => {
               const t = new Date(e.ts).toISOString().slice(11, 23);

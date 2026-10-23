@@ -10,6 +10,8 @@
  * `predict` seam without callers changing.
  */
 
+import { describeEmptyAnthropic, describeHttpFailure } from './ai-failure';
+
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 /**
@@ -27,6 +29,8 @@ export interface AnthropicPredictOptions {
   systemPrompt?: string;
   /** When set, stream the response and call this with each text delta. */
   onToken?: (chunk: string) => void;
+  /** Called with the reason when no text comes back (see lib/ai-failure). */
+  onFailure?: (reason: string) => void;
 }
 
 /**
@@ -104,11 +108,14 @@ export async function predictAnthropic(
         detail = typeof body?.error?.message === 'string' ? body.error.message : '';
       } catch {}
       console.warn('[inflow] Anthropic request failed:', res.status, detail || anthropicErrorMessage(res.status));
+      options?.onFailure?.(describeHttpFailure('Claude', res.status, detail));
       return null;
     }
 
     if (stream && res.body) {
-      return await readAnthropicStream(res.body, options!.onToken!);
+      const streamed = await readAnthropicStream(res.body, options!.onToken!);
+      if (!streamed) options?.onFailure?.(describeEmptyAnthropic());
+      return streamed;
     }
 
     const data = await res.json();
@@ -118,10 +125,16 @@ export async function predictAnthropic(
           .map((b: any) => b.text)
           .join('')
       : '';
-    return text.trim() || null;
+    const out = text.trim() || null;
+    if (!out) options?.onFailure?.(describeEmptyAnthropic(data?.stop_reason));
+    return out;
   } catch (e: any) {
     if (e?.name === 'AbortError') return null;
     console.warn('[inflow] Anthropic request error:', e);
+    // A browser call blocked by the org's CORS policy lands here as a TypeError.
+    options?.onFailure?.(
+      `Couldn't reach Claude from the browser (${e?.message || 'network error'}). If your Anthropic org blocks browser access, put the key in the MCP connector instead`,
+    );
     return null;
   }
 }

@@ -54,6 +54,14 @@ export function getDebugLogs(): LogEntry[] {
   return [...entries];
 }
 
+/**
+ * Two contexts' logs as one timeline. Each extension context (the background
+ * worker, the app page) keeps its own entries; the debug panel shows both.
+ */
+export function mergeLogs(...logs: LogEntry[][]): LogEntry[] {
+  return logs.flat().sort((a, b) => a.ts - b.ts);
+}
+
 export function clearDebugLogs(): void {
   entries.length = 0;
 }

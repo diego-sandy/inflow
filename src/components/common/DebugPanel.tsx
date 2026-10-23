@@ -4,7 +4,7 @@ import { useBackgroundMessage } from '@/hooks/useBackgroundMessage';
 import { sendBridgeMessage } from '@/lib/bridge';
 import { BACKFILL_OPTIONS, getBackfillWindow, setBackfillWindow, type BackfillWindow } from '@/lib/sync-settings';
 import { db, getActiveAccountId } from '@/db/database';
-import type { LogEntry } from '@/lib/debug-log';
+import { getDebugLogs, mergeLogs, type LogEntry } from '@/lib/debug-log';
 
 interface SyncProgress {
   categories: Record<string, { phase: string; totalDiscovered: number }>;
@@ -163,7 +163,9 @@ export function DebugPanel({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const res = await sendBridgeMessage({ type: 'GET_DEBUG_LOGS' });
       if (res?.success) {
-        setLogs(res.data || []);
+        // The background's log plus this page's own: AI calls run here, not in
+        // the background, so without merging, their failures never showed up.
+        setLogs(mergeLogs(res.data || [], getDebugLogs()));
       }
     } catch {
       // extension context might not be ready

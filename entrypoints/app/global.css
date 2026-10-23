@@ -344,3 +344,22 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-setup-step, .animate-setup-check { animation: none; }
 }
+
+/* The control to click in the Claude Desktop drawings: a soft ring pulses out
+ * from it. Reduced motion keeps a steady ring instead. */
+.setup-click-hint::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px rgb(59 130 246 / 0.55);
+  pointer-events: none;
+}
+@keyframes setup-click-hint {
+  0% { box-shadow: 0 0 0 0 rgb(59 130 246 / 0.6); opacity: 1; }
+  70% { box-shadow: 0 0 0 7px rgb(59 130 246 / 0); opacity: 1; }
+  100% { box-shadow: 0 0 0 7px rgb(59 130 246 / 0); opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .setup-click-hint::after { animation: setup-click-hint 1.8s ease-out infinite; }
+}

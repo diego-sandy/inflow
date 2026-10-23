@@ -112,9 +112,11 @@ describe('choosing what AI does', () => {
     await waitFor(async () => expect(await getConnectionInterests()).toContain('Hiring'));
   });
 
-  it('skipping AI jumps to the end and says AI is off', async () => {
+  it('skipping AI goes past the key step to Claude, which needs no key, and the end says AI is off', async () => {
     await openAt('ai');
     fireEvent.click(screen.getByRole('button', { name: 'Skip AI for now' }));
+    await screen.findByRole('heading', { name: 'Work with your network in Claude' });
+    fireEvent.click(screen.getByRole('button', { name: 'Skip Claude' }));
     await screen.findByRole('heading', { name: "You're all set" });
     expect(screen.getByText(/AI is off/)).toBeInTheDocument();
   });
@@ -154,10 +156,10 @@ describe('adding a key', () => {
     expect(await getTierProvider('quality')).toBe('anthropic');
   });
 
-  it('can be put off', async () => {
+  it('can be put off, moving on to Claude', async () => {
     await openAt('key');
     fireEvent.click(screen.getByRole('button', { name: 'Do this later' }));
-    await screen.findByRole('heading', { name: "You're all set" });
+    await screen.findByRole('heading', { name: 'Work with your network in Claude' });
   });
 });
 
@@ -185,7 +187,9 @@ describe('finishing', () => {
     await openAt('done');
     expect(await screen.findByText('Pinned to the toolbar')).toBeInTheDocument();
     expect(await screen.findByText('AI key added')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
+    // Only the optional Claude row is left to finish.
+    expect(screen.getAllByRole('button', { name: 'Finish' })).toHaveLength(1);
+    expect(screen.getByText('Connect Claude Desktop (optional)')).toBeInTheDocument();
   });
 
   it('does not tick the key step in the step list without a key', async () => {

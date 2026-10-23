@@ -8,9 +8,9 @@ import { readLocal } from './storage';
  * the wizard has to carry on at the same step.
  */
 
-export type SetupStep = 'welcome' | 'linkedin' | 'pin' | 'ai' | 'key' | 'done';
+export type SetupStep = 'welcome' | 'linkedin' | 'pin' | 'ai' | 'key' | 'claude' | 'done';
 
-export const SETUP_STEPS: SetupStep[] = ['welcome', 'linkedin', 'pin', 'ai', 'key', 'done'];
+export const SETUP_STEPS: SetupStep[] = ['welcome', 'linkedin', 'pin', 'ai', 'key', 'claude', 'done'];
 
 const PENDING_KEY = 'setupPending';
 const STEP_KEY = 'setupStep';

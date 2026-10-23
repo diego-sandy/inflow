@@ -91,7 +91,7 @@ export function CheckBadge({ className = '' }: { className?: string }) {
   );
 }
 
-function Waiting({ children }: { children: ReactNode }) {
+export function Waiting({ children }: { children: ReactNode }) {
   return (
     <p className="inline-flex items-center gap-2 text-sm text-fg-muted">
       <span className="relative flex h-2.5 w-2.5">
@@ -103,7 +103,7 @@ function Waiting({ children }: { children: ReactNode }) {
   );
 }
 
-function StepTitle({ title, children }: { title: string; children?: ReactNode }) {
+export function StepTitle({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="mb-5">
       <h2 className="text-lg font-semibold text-fg-strong">{title}</h2>
@@ -112,7 +112,7 @@ function StepTitle({ title, children }: { title: string; children?: ReactNode })
   );
 }
 
-function openTab(url: string) {
+export function openTab(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
@@ -353,7 +353,8 @@ export function AIStep({ ctx }: { ctx: StepContext }) {
           label: 'Skip AI for now',
           onClick: () => {
             ctx.setAiSkipped(true);
-            ctx.go('done');
+            // Past the key step, not to the end: connecting Claude needs no key.
+            ctx.go('claude');
           },
         }}
       />
@@ -560,7 +561,7 @@ function KeyCard({
 export function DoneStep({ ctx }: { ctx: StepContext }) {
   const pinned = useToolbarPinned(true);
   const hasKey = useHasAIKey();
-  const setActiveSection = useUIStore((s) => s.setActiveSection);
+  const mcpConnected = useUIStore((s) => s.mcpStatus === 'connected');
   const [backupFolder, setBackupFolder] = useState<string | null>(null);
   const backupSupported = isDirectoryPickerSupported();
 
@@ -595,6 +596,11 @@ export function DoneStep({ ctx }: { ctx: StepContext }) {
           label={ctx.aiSkipped ? 'AI is off. Turn it on any time' : hasKey ? 'AI key added' : 'Add an AI key'}
           onFix={() => ctx.go(ctx.aiSkipped ? 'ai' : 'key')}
         />
+        <ChecklistRow
+          done={mcpConnected}
+          label={mcpConnected ? 'Claude Desktop connected' : 'Connect Claude Desktop (optional)'}
+          onFix={() => ctx.go('claude')}
+        />
         {backupSupported && (
           <li className="flex items-center gap-3 rounded-lg bg-surface-input px-3.5 py-2.5">
             {backupFolder ? <CheckBadge /> : <span className="h-5 w-5 shrink-0 rounded-full ring-2 ring-inset ring-fg-faint/40" />}
@@ -619,19 +625,6 @@ export function DoneStep({ ctx }: { ctx: StepContext }) {
           <Shortcut keys={['?']}>see every shortcut</Shortcut>
         </div>
       </div>
-
-      <p className="mt-4 text-xs text-fg-muted">
-        Want Claude to work with your network too?{' '}
-        <button
-          onClick={() => {
-            ctx.finish();
-            setActiveSection('outbox');
-          }}
-          className="font-medium text-blue-500 hover:text-blue-400"
-        >
-          Connect Claude Desktop
-        </button>
-      </p>
 
       <StepFooter onBack={ctx.back} primary={{ label: 'Start using inflow', onClick: ctx.finish }} />
     </>

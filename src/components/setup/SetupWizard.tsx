@@ -13,6 +13,7 @@ import {
   type SetupStep,
 } from '@/lib/setup-state';
 import { AIStep, CheckBadge, DoneStep, KeyStep, LinkedInStep, PinStep, WelcomeStep, type StepContext } from './SetupSteps';
+import { ClaudeStep } from './ClaudeStep';
 
 const STEP_LABELS: Record<SetupStep, string> = {
   welcome: 'Welcome',
@@ -20,6 +21,7 @@ const STEP_LABELS: Record<SetupStep, string> = {
   pin: 'Pin to the toolbar',
   ai: 'Choose what AI does',
   key: 'Add an AI key',
+  claude: 'Connect Claude',
   done: 'All set',
 };
 
@@ -120,6 +122,7 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
 
   const pinned = useToolbarPinned(open);
   const hasKey = useHasAIKey();
+  const mcpConnected = useUIStore((s) => s.mcpStatus === 'connected');
   const [completedBefore, setCompletedBefore] = useState(false);
   useEffect(() => {
     if (open) getSetupCompletedAt().then((at) => setCompletedBefore(at !== null));
@@ -143,6 +146,8 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
         return passed || hasKey || completedBefore;
       case 'key':
         return hasKey;
+      case 'claude':
+        return mcpConnected;
       case 'done':
         // Everything that matters is in place. Pinning counts when Chrome
         // can't report it (null), since the user can't be held to it then.
@@ -223,6 +228,7 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
             {step === 'pin' && <PinStep ctx={ctx} />}
             {step === 'ai' && <AIStep ctx={ctx} />}
             {step === 'key' && <KeyStep ctx={ctx} />}
+            {step === 'claude' && <ClaudeStep ctx={ctx} />}
             {step === 'done' && <DoneStep ctx={ctx} />}
           </div>
         </div>

@@ -25,13 +25,34 @@ beforeEach(() => {
   act(() => useUIStore.setState({ mcpStatus: 'disconnected', mcpError: null, mcpActivity: [] }));
 });
 
-it('reveals setup (pairing code + download) via the Setup button', async () => {
+it('Setup opens the same step-by-step guide as the setup wizard', async () => {
   render(<McpStatusBar />);
   fireEvent.click(screen.getByRole('button', { name: /^Setup$/ }));
-  expect(screen.getByText(/Claude Desktop extension/i)).toBeInTheDocument();
-  expect(await screen.findByText('A1B2-C3D4')).toBeInTheDocument();
+  // Straight to the download: this section already says what the connector is.
+  expect(screen.getByRole('heading', { name: 'Download the connector' })).toBeInTheDocument();
   const dl = screen.getByRole('link', { name: /Download inflow\.mcpb/i });
   expect(dl).toHaveAttribute('download', 'inflow.mcpb');
+
+  fireEvent.click(screen.getByRole('button', { name: 'I have it' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Installed' }));
+  expect(await screen.findByText('A1B2-C3D4')).toBeInTheDocument();
+});
+
+it('stays open after connecting, to show Always allow, and closes with Done', async () => {
+  render(<McpStatusBar />);
+  fireEvent.click(screen.getByRole('button', { name: /^Setup$/ }));
+  for (const name of ['I have it', 'Installed', 'Saved']) fireEvent.click(screen.getByRole('button', { name }));
+  act(() => useUIStore.setState({ mcpStatus: 'connected' } as any));
+
+  // Connecting used to close the panel here, before its most useful screen.
+  await screen.findByText('Connected to Claude Desktop.');
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await screen.findByRole('heading', { name: 'Let Claude use it without asking' });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('heading', { name: 'Let Claude use it without asking' })).not.toBeInTheDocument(),
+  );
 });
 
 it('reveals CLI-client instructions under the Advanced toggle', () => {

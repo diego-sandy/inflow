@@ -363,3 +363,100 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .setup-click-hint::after { animation: setup-click-hint 1.8s ease-out infinite; }
 }
+
+/* --- MCP connector guide: Claude Desktop drawings ------------------------
+ * Three 7s loops (ClaudeIllustrations.tsx), each with a cursor moved by
+ * coordinate. Base styles are each loop's useful end frame, which is what
+ * reduced motion shows: installed with no dialog, the code in and Save lit,
+ * Tool permissions on Always allow. */
+.setup-inst-cursor, .setup-cfg-cursor, .setup-perm-cursor { opacity: 0; }
+.setup-inst-dim, .setup-inst-dialog, .setup-perm-menu { opacity: 0; }
+.setup-cfg-save { background: #fff; color: #1a1a19; }
+.setup-perm-before { opacity: 0; }
+.setup-perm-after { opacity: 1; }
+
+@keyframes setup-inst-cursor {
+  0% { opacity: 0; transform: translate(170px, 200px); }
+  5% { opacity: 1; transform: translate(170px, 200px); }
+  20% { transform: translate(297px, 32px) scale(1); }
+  23% { transform: translate(297px, 32px) scale(0.8); }
+  26% { transform: translate(297px, 32px) scale(1); }
+  44% { transform: translate(205px, 132px) scale(1); }
+  47% { transform: translate(205px, 132px) scale(0.8); }
+  50% { transform: translate(205px, 132px) scale(1); }
+  64% { opacity: 1; transform: translate(240px, 190px); }
+  92% { opacity: 1; transform: translate(240px, 190px); }
+  100% { opacity: 0; transform: translate(240px, 190px); }
+}
+@keyframes setup-inst-dim {
+  0%, 27% { opacity: 0; }
+  30%, 51% { opacity: 1; }
+  55%, 100% { opacity: 0; }
+}
+@keyframes setup-inst-dialog {
+  0%, 27% { opacity: 0; transform: scale(0.94); }
+  30%, 51% { opacity: 1; transform: scale(1); }
+  55%, 100% { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes setup-cfg-cursor {
+  0% { opacity: 0; transform: translate(300px, 200px); }
+  5% { opacity: 1; transform: translate(300px, 200px); }
+  12% { transform: translate(70px, 82px) scale(1); }
+  14% { transform: translate(70px, 82px) scale(0.8); }
+  16% { transform: translate(70px, 82px) scale(1); }
+  40% { transform: translate(70px, 82px); }
+  55% { transform: translate(286px, 180px) scale(1); }
+  58% { transform: translate(286px, 180px) scale(0.8); }
+  61% { transform: translate(286px, 180px) scale(1); }
+  92% { opacity: 1; transform: translate(286px, 180px); }
+  100% { opacity: 0; transform: translate(286px, 180px); }
+}
+@keyframes setup-cfg-typed {
+  0%, 18% { max-width: 0; }
+  38%, 100% { max-width: 90px; }
+}
+@keyframes setup-cfg-save {
+  0%, 39% { background: #3a3a37; color: #8a8780; }
+  42%, 100% { background: #fff; color: #1a1a19; }
+}
+
+@keyframes setup-perm-cursor {
+  0% { opacity: 0; transform: translate(180px, 205px); }
+  5% { opacity: 1; transform: translate(180px, 205px); }
+  22% { transform: translate(287px, 180px) scale(1); }
+  25% { transform: translate(287px, 180px) scale(0.8); }
+  28% { transform: translate(287px, 180px) scale(1); }
+  44% { transform: translate(288px, 129px) scale(1); }
+  47% { transform: translate(288px, 129px) scale(0.8); }
+  50% { transform: translate(288px, 129px) scale(1); }
+  66% { opacity: 1; transform: translate(220px, 200px); }
+  92% { opacity: 1; transform: translate(220px, 200px); }
+  100% { opacity: 0; transform: translate(220px, 200px); }
+}
+@keyframes setup-perm-menu {
+  0%, 27% { opacity: 0; transform: translateY(4px); }
+  30%, 50% { opacity: 1; transform: translateY(0); }
+  53%, 100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes setup-perm-before {
+  0%, 50% { opacity: 1; }
+  52%, 100% { opacity: 0; }
+}
+@keyframes setup-perm-after {
+  0%, 50% { opacity: 0; }
+  52%, 100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setup-inst-cursor { animation: setup-inst-cursor 7s ease-in-out infinite; }
+  .setup-inst-dim { animation: setup-inst-dim 7s ease-out infinite; }
+  .setup-inst-dialog { animation: setup-inst-dialog 7s ease-out infinite; }
+  .setup-cfg-cursor { animation: setup-cfg-cursor 7s ease-in-out infinite; }
+  .setup-cfg-typed { animation: setup-cfg-typed 7s steps(9, end) infinite; }
+  .setup-cfg-save { animation: setup-cfg-save 7s step-end infinite; }
+  .setup-perm-cursor { animation: setup-perm-cursor 7s ease-in-out infinite; }
+  .setup-perm-menu { animation: setup-perm-menu 7s ease-out infinite; }
+  .setup-perm-before { animation: setup-perm-before 7s step-end infinite; }
+  .setup-perm-after { animation: setup-perm-after 7s step-end infinite; }
+}

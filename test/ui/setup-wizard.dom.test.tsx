@@ -112,11 +112,11 @@ describe('choosing what AI does', () => {
     await waitFor(async () => expect(await getConnectionInterests()).toContain('Hiring'));
   });
 
-  it('skipping AI goes past the key step to Claude, which needs no key, and the end says AI is off', async () => {
+  it('skipping AI goes past the key step to the MCP connector, which needs no key, and the end says AI is off', async () => {
     await openAt('ai');
     fireEvent.click(screen.getByRole('button', { name: 'Skip AI for now' }));
-    await screen.findByRole('heading', { name: 'Work with your network in Claude' });
-    fireEvent.click(screen.getByRole('button', { name: 'Skip Claude' }));
+    await screen.findByRole('heading', { name: 'Set up the MCP connector' });
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
     await screen.findByRole('heading', { name: "You're all set" });
     expect(screen.getByText(/AI is off/)).toBeInTheDocument();
   });
@@ -156,10 +156,10 @@ describe('adding a key', () => {
     expect(await getTierProvider('quality')).toBe('anthropic');
   });
 
-  it('can be put off, moving on to Claude', async () => {
+  it('can be put off, moving on to the MCP connector', async () => {
     await openAt('key');
     fireEvent.click(screen.getByRole('button', { name: 'Do this later' }));
-    await screen.findByRole('heading', { name: 'Work with your network in Claude' });
+    await screen.findByRole('heading', { name: 'Set up the MCP connector' });
   });
 });
 
@@ -189,7 +189,7 @@ describe('finishing', () => {
     expect(await screen.findByText('AI key added')).toBeInTheDocument();
     // Only the optional Claude row is left to finish.
     expect(screen.getAllByRole('button', { name: 'Finish' })).toHaveLength(1);
-    expect(screen.getByText('Connect Claude Desktop (optional)')).toBeInTheDocument();
+    expect(screen.getByText('Set up the MCP connector (optional)')).toBeInTheDocument();
   });
 
   it('does not tick the key step in the step list without a key', async () => {

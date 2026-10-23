@@ -21,7 +21,7 @@ const STEP_LABELS: Record<SetupStep, string> = {
   pin: 'Pin to the toolbar',
   ai: 'Choose what AI does',
   key: 'Add an AI key',
-  claude: 'Connect Claude',
+  claude: 'MCP connector',
   done: 'All set',
 };
 

@@ -5,6 +5,7 @@ import { SparkleIcon } from '@/components/common/SparkleIcon';
 import { StatusLight, type StatusTone } from '@/components/common/StatusLight';
 import { getOrCreatePairingCode, getMcpEnabled, setMcpEnabled } from '@/lib/mcp/pairing';
 import { startMcpBridge, stopMcpBridge } from '@/lib/mcp/bridge-client';
+import { ConnectorGuide } from '@/components/setup/ConnectorGuide';
 
 const STATUS_META: Record<McpStatus, { label: string; tone: StatusTone }> = {
   disconnected: { label: 'Claude not connected', tone: 'red' },
@@ -27,7 +28,7 @@ export function McpStatusBar() {
   const [pairCode, setPairCode] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [copied, setCopied] = useState<null | 'code' | 'config'>(null);
+  const [copied, setCopied] = useState<null | 'config'>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,15 +51,6 @@ export function McpStatusBar() {
     stopMcpBridge();
   };
 
-  // The companion bundle ships inside the extension for a one-click download.
-  const mcpbUrl = (() => {
-    try {
-      return chrome.runtime.getURL('inflow.mcpb');
-    } catch {
-      return '#';
-    }
-  })();
-
   // Config for CLI / other MCP clients that run a command (not the .mcpb).
   const cliConfig = JSON.stringify(
     {
@@ -78,9 +70,10 @@ export function McpStatusBar() {
     2,
   );
 
-  const copy = async (what: 'code' | 'config') => {
+  // The pairing code itself is copied from the guide; this is the CLI config.
+  const copy = async (what: 'config') => {
     try {
-      await navigator.clipboard.writeText(what === 'code' ? pairCode : cliConfig);
+      await navigator.clipboard.writeText(cliConfig);
       setCopied(what);
       setTimeout(() => setCopied(null), 2000);
     } catch {}
@@ -157,44 +150,14 @@ export function McpStatusBar() {
         </div>
       )}
 
-      {showSetup && !connected && (
+      {/* Stays open once connected: the guide still has its last screen (Always
+          allow) to show, and closes itself with Done. */}
+      {showSetup && (
         <div className="space-y-3 border-t border-edge px-3 py-2.5 text-xs leading-relaxed text-fg-secondary">
-          <p className="font-medium text-fg-strong">Connect Claude to your network</p>
-
-          {/* The code inflow owns — the user hands it to Claude at install. */}
-          <div className="rounded-lg bg-surface-input px-2.5 py-2 ring-1 ring-inset ring-edge">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">Your pairing code</p>
-            <div className="mt-1 flex items-center gap-2">
-              <code className="font-mono text-sm font-semibold tracking-widest text-fg-strong">{pairCode || '····-····'}</code>
-              <button
-                onClick={() => copy('code')}
-                className="ml-auto rounded-md bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
-              >
-                {copied === 'code' ? 'copied ✓' : 'Copy'}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
-              Recommended · Claude Desktop extension
-            </p>
-            <ol className="mt-1 ml-4 list-decimal space-y-1 marker:text-fg-faint">
-              <li>Download the inflow companion below.</li>
-              <li>In Claude Desktop → Settings → Extensions, install the downloaded <code className="rounded bg-surface px-1 py-0.5 font-mono">inflow.mcpb</code>.</li>
-              <li>When it asks for the pairing code, paste the one above. To also use the in-app AI Chat agent, paste an Anthropic API key in the optional second field (it stays in the companion, never the browser).</li>
-              <li>Restart Claude. No terminal.</li>
-            </ol>
-            <a
-              href={mcpbUrl}
-              download="inflow.mcpb"
-              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 dark:text-blue-300"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
-              </svg>
-              Download inflow.mcpb
-            </a>
+          {/* The same step-by-step guide the setup wizard uses, so coming back
+              later gets the same help as first-time setup. */}
+          <div className="flex flex-col">
+            <ConnectorGuide skipIntro finishLabel="Done" onFinish={() => setShowSetup(false)} />
           </div>
 
           {/* Advanced: CLI / other MCP clients run a command instead of a .mcpb. */}

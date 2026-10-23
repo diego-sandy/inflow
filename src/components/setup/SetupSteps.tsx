@@ -598,7 +598,7 @@ export function DoneStep({ ctx }: { ctx: StepContext }) {
         />
         <ChecklistRow
           done={mcpConnected}
-          label={mcpConnected ? 'Claude Desktop connected' : 'Connect Claude Desktop (optional)'}
+          label={mcpConnected ? 'MCP connector set up' : 'Set up the MCP connector (optional)'}
           onFix={() => ctx.go('claude')}
         />
         {backupSupported && (

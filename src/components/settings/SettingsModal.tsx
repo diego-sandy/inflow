@@ -30,6 +30,7 @@ import { checkForUpdateAndToast } from '@/lib/check-update';
 import { AIKeySettings } from './AIKeySettings';
 import { BackupSettings } from './BackupSettings';
 import { ConnectionsSettings } from './ConnectionsSettings';
+import { SetupSettings } from './SetupSettings';
 import { Toggle } from '@/components/common/Toggle';
 import { Logo } from '@/components/common/Wordmark';
 
@@ -115,6 +116,7 @@ interface SectionDef {
 }
 
 const SECTIONS: SectionDef[] = [
+  { id: 'setup', label: 'Setup' },
   { id: 'ai', label: 'AI', children: [{ id: 'chat', label: 'Chat' }, { id: 'sending', label: 'Drafts' }] },
   { id: 'connections', label: 'Connections' },
   { id: 'appearance', label: 'Appearance' },
@@ -484,12 +486,6 @@ function AboutSettings() {
         >
           What&rsquo;s new
         </button>
-        <button
-          onClick={() => useUIStore.getState().openSetup({ fromStart: true })}
-          className="rounded-md bg-surface-input px-3 py-1.5 text-sm font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
-        >
-          Run setup again
-        </button>
       </div>
       <div className="flex flex-col gap-2 border-t border-edge pt-4 text-sm">
         <a
@@ -629,6 +625,7 @@ export function SettingsModal() {
           </div>
 
           <div className="min-w-0 flex-1 overflow-y-auto px-6 pb-6 pt-1">
+            {section === 'setup' && <SetupSettings />}
             {section === 'ai' && <AIKeySettings />}
             {section === 'chat' && <ChatSettings />}
             {section === 'sending' && <SendingSettings />}

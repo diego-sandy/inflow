@@ -40,8 +40,8 @@ interface Props {
 /**
  * First-run setup: one decision per screen, every step skippable but LinkedIn,
  * and steps that are already done show as done. It opens on its own only after
- * a fresh install, resumes where it was left, and Settings › About can run it
- * again from the start.
+ * a fresh install, resumes where it was left, and Settings › Setup can open it
+ * at any step or run it again from the start.
  */
 export function SetupWizard({ standalone = false, auth = 'authenticated', onCheckAuth }: Props) {
   const storeOpen = useUIStore((s) => s.setupOpen);

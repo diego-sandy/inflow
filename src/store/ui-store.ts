@@ -25,7 +25,7 @@ export interface AIKeyIssue {
   at: number;
 }
 
-export type SettingsSection = 'ai' | 'chat' | 'sending' | 'connections' | 'appearance' | 'backup' | 'advanced' | 'about';
+export type SettingsSection = 'setup' | 'ai' | 'chat' | 'sending' | 'connections' | 'appearance' | 'backup' | 'advanced' | 'about';
 
 /**
  * Active filter over the connections list (shared so Insights can drive it).

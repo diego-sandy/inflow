@@ -5,7 +5,6 @@ import { SparkleIcon } from '@/components/common/SparkleIcon';
 import { StatusLight, type StatusTone } from '@/components/common/StatusLight';
 import { getOrCreatePairingCode, getMcpEnabled, setMcpEnabled } from '@/lib/mcp/pairing';
 import { startMcpBridge, stopMcpBridge } from '@/lib/mcp/bridge-client';
-import { ConnectorGuide } from '@/components/setup/ConnectorGuide';
 
 const STATUS_META: Record<McpStatus, { label: string; tone: StatusTone }> = {
   disconnected: { label: 'Claude not connected', tone: 'red' },
@@ -23,7 +22,6 @@ export function McpStatusBar() {
   const status = useUIStore((s) => s.mcpStatus);
   const error = useUIStore((s) => s.mcpError);
   const activity = useUIStore((s) => s.mcpActivity);
-  const [showSetup, setShowSetup] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [pairCode, setPairCode] = useState('');
   const [enabled, setEnabled] = useState(true);
@@ -39,6 +37,9 @@ export function McpStatusBar() {
 
   const meta = STATUS_META[status];
   const connected = status === 'connected';
+  // Shown as on while connected or connecting, even if this card's copy of the
+  // setting is stale: the wizard can switch the bridge back on behind it.
+  const on = enabled || status === 'connected' || status === 'connecting';
 
   const turnOn = async () => {
     setEnabled(true);
@@ -101,14 +102,14 @@ export function McpStatusBar() {
         <span className="flex-1" />
         {!connected && (
           <button
-            onClick={() => setShowSetup((v) => !v)}
-            aria-expanded={showSetup}
+            // The setup guide lives in the wizard, so it exists in one place only.
+            onClick={() => useUIStore.getState().openSetup({ step: 'claude' })}
             className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted ring-1 ring-inset ring-transparent transition-colors hover:bg-surface-hover hover:text-fg-strong hover:ring-edge"
           >
-            Setup
+            Set up
           </button>
         )}
-        {enabled ? (
+        {on ? (
           <button
             onClick={turnOff}
             className="rounded-md px-2.5 py-1 text-xs font-medium text-fg-muted ring-1 ring-inset ring-edge transition-colors hover:text-fg-strong"
@@ -150,18 +151,11 @@ export function McpStatusBar() {
         </div>
       )}
 
-      {/* Stays open once connected: the guide still has its last screen (Always
-          allow) to show, and closes itself with Done. */}
-      {showSetup && (
-        <div className="space-y-3 border-t border-edge px-3 py-2.5 text-xs leading-relaxed text-fg-secondary">
-          {/* The same step-by-step guide the setup wizard uses, so coming back
-              later gets the same help as first-time setup. */}
-          <div className="flex flex-col">
-            <ConnectorGuide skipIntro finishLabel="Done" onFinish={() => setShowSetup(false)} />
-          </div>
-
-          {/* Advanced: CLI / other MCP clients run a command instead of a .mcpb. */}
-          <div className="border-t border-edge pt-2.5">
+      {/* Advanced: CLI / other MCP clients run a command instead of a .mcpb.
+          Claude Desktop setup is in the wizard (Set up, above). */}
+      {!connected && (
+        <div className="border-t border-edge px-3 py-2 text-xs leading-relaxed text-fg-secondary">
+          <div>
             <button
               onClick={() => setAdvancedOpen((v) => !v)}
               aria-expanded={advancedOpen}
@@ -196,10 +190,6 @@ export function McpStatusBar() {
               </div>
             )}
           </div>
-
-          <p className="text-[11px] text-fg-faint">
-            inflow connects automatically once Claude has the code. Claude only reads your network and drafts messages — it never sends. You always send, from your Inbox.
-          </p>
         </div>
       )}
     </div>

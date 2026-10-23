@@ -46,6 +46,7 @@ interface Props {
 export function SetupWizard({ standalone = false, auth = 'authenticated', onCheckAuth }: Props) {
   const storeOpen = useUIStore((s) => s.setupOpen);
   const fromStart = useUIStore((s) => s.setupFromStart);
+  const startStep = useUIStore((s) => s.setupStartStep);
   const openSetup = useUIStore((s) => s.openSetup);
   const closeSetup = useUIStore((s) => s.closeSetup);
   const open = standalone || storeOpen;
@@ -61,11 +62,16 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
     });
   }, [standalone, openSetup]);
 
-  // Where to start each time it opens: Welcome when asked to, otherwise the
-  // saved step. The standalone wizard never goes past LinkedIn.
+  // Where to start each time it opens: a step asked for by name (the MCP
+  // connector section's Set up), Welcome when running setup again, otherwise
+  // the saved step. The standalone wizard never goes past LinkedIn.
   useEffect(() => {
     if (!open) {
       setStep(null);
+      return;
+    }
+    if (startStep && !standalone) {
+      setStep(startStep);
       return;
     }
     if (fromStart) {
@@ -76,7 +82,7 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
       const i = SETUP_STEPS.indexOf(saved);
       setStep(standalone && i > SETUP_STEPS.indexOf('linkedin') ? 'linkedin' : saved);
     });
-  }, [open, fromStart, standalone]);
+  }, [open, fromStart, startStep, standalone]);
 
   const go = useCallback(
     (next: SetupStep) => {
@@ -167,7 +173,7 @@ export function SetupWizard({ standalone = false, auth = 'authenticated', onChec
         role="dialog"
         aria-modal="true"
         aria-label="Set up inflow"
-        className="flex h-[min(580px,100%)] w-[min(780px,100%)] overflow-hidden rounded-2xl bg-surface shadow-2xl ring-1 ring-ring"
+        className="flex h-[min(660px,100%)] w-[min(780px,100%)] overflow-hidden rounded-2xl bg-surface shadow-2xl ring-1 ring-ring"
       >
         {/* Step list */}
         <nav aria-label="Setup steps" className="hidden w-56 shrink-0 flex-col gap-1 border-r border-edge bg-surface-raised p-4 sm:flex">

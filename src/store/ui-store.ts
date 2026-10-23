@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Message } from '@/types/message';
 import type { ConnectionRole } from '@/types/connection';
+import type { SetupStep } from '@/lib/setup-state';
 import { isDemoMode as checkDemoMode } from '@/lib/demo-mode';
 import { type InboxLabels, DEFAULT_INBOX_LABELS, normalizeInboxLabels, DEFAULT_INBOX_SECTION_LABEL, normalizeSectionLabel } from '@/lib/inbox-labels';
 
@@ -30,20 +31,20 @@ export type SettingsSection = 'ai' | 'chat' | 'sending' | 'connections' | 'appea
  * Active filter over the connections list (shared so Insights can drive it).
  * Multi-select: empty arrays mean "no constraint". A connection matches when its
  * role is one of `roles` (or `roles` is empty) AND it has one of `interests`
- * (or `interests` is empty) â OR within a facet, AND across facets.
+ * (or `interests` is empty) — OR within a facet, AND across facets.
  */
 export interface ConnectionFilter {
   roles: ConnectionRole[];
   interests: string[];
 }
 
-/** The empty filter â everything shows. */
+/** The empty filter — everything shows. */
 export const EMPTY_CONNECTION_FILTER: ConnectionFilter = { roles: [], interests: [] };
 
-/** Connection state of the local MCP bridge (companion â inflow). */
+/** Connection state of the local MCP bridge (companion ↔ inflow). */
 export type McpStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-/** One line in the MCP activity feed â what Claude just did. */
+/** One line in the MCP activity feed — what Claude just did. */
 export interface McpActivityEntry {
   id: string;
   at: number;
@@ -88,10 +89,12 @@ interface UIState {
   settingsOpen: boolean;
   settingsSection: SettingsSection;
   whatsNewOpen: boolean;
-  /** The setup wizard. `setupFromStart` reopens it at Welcome (Settings âº Run setup
+  /** The setup wizard. `setupFromStart` reopens it at Welcome (Settings › Run setup
    *  again) rather than resuming at the saved step. */
   setupOpen: boolean;
   setupFromStart: boolean;
+  /** Open at this step instead (the MCP connector section's Set up button). */
+  setupStartStep: SetupStep | null;
   activeSection: AppSection;
   /** Back/forward stacks for section navigation (browser-style arrows). */
   sectionHistory: AppSection[];
@@ -151,7 +154,7 @@ interface UIState {
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
   setWhatsNewOpen: (open: boolean) => void;
-  openSetup: (opts?: { fromStart?: boolean }) => void;
+  openSetup: (opts?: { fromStart?: boolean; step?: SetupStep }) => void;
   closeSetup: () => void;
   setActiveSection: (section: AppSection) => void;
   /** Go to the previously visited section (browser back). */
@@ -234,7 +237,7 @@ function getStoredSection(): AppSection {
   return 'inbox';
 }
 
-/** Grid or list for the Outbox. Grid by default â it fits more on screen. */
+/** Grid or list for the Outbox. Grid by default — it fits more on screen. */
 function getStoredOutboxView(): 'grid' | 'list' {
   try {
     return localStorage.getItem('inflow-outbox-view') === 'list' ? 'list' : 'grid';
@@ -278,7 +281,7 @@ applyTheme(initialTheme);
 // Restore view on load
 const initialView = getStoredView();
 
-// Listen for system theme changes (guarded â jsdom/node may lack matchMedia)
+// Listen for system theme changes (guarded — jsdom/node may lack matchMedia)
 if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     const current = useUIStore.getState().theme;
@@ -312,6 +315,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   whatsNewOpen: false,
   setupOpen: false,
   setupFromStart: false,
+  setupStartStep: null,
   activeSection: getStoredSection(),
   sectionHistory: [],
   sectionForward: [],
@@ -382,8 +386,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   openSettings: (section) => set(section ? { settingsOpen: true, settingsSection: section } : { settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
   setWhatsNewOpen: (open) => set({ whatsNewOpen: open }),
-  openSetup: (opts) => set({ setupOpen: true, setupFromStart: !!opts?.fromStart, settingsOpen: false }),
-  closeSetup: () => set({ setupOpen: false, setupFromStart: false }),
+  openSetup: (opts) =>
+    set({ setupOpen: true, setupFromStart: !!opts?.fromStart, setupStartStep: opts?.step ?? null, settingsOpen: false }),
+  closeSetup: () => set({ setupOpen: false, setupFromStart: false, setupStartStep: null }),
   setActiveSection: (section) => {
     const cur = get().activeSection;
     try {
@@ -564,7 +569,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 /**
  * Pull the send settings out of chrome.storage into the store. They live there
  * rather than localStorage because the background worker needs them too, and a
- * service worker has no localStorage â but the Outbox reads them on every
+ * service worker has no localStorage — but the Outbox reads them on every
  * render, so the store keeps a synchronous mirror. Called once at app start.
  */
 export async function hydrateSendSettings(): Promise<void> {

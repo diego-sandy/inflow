@@ -25,39 +25,27 @@ beforeEach(() => {
   act(() => useUIStore.setState({ mcpStatus: 'disconnected', mcpError: null, mcpActivity: [] }));
 });
 
-it('Setup opens the same step-by-step guide as the setup wizard', async () => {
+it('Set up opens the setup wizard at its MCP connector step, rather than a second copy here', () => {
+  act(() => useUIStore.setState({ setupOpen: false, setupStartStep: null } as any));
   render(<McpStatusBar />);
-  fireEvent.click(screen.getByRole('button', { name: /^Setup$/ }));
-  // Straight to the download: this section already says what the connector is.
-  expect(screen.getByRole('heading', { name: 'Download the connector' })).toBeInTheDocument();
-  const dl = screen.getByRole('link', { name: /Download inflow\.mcpb/i });
-  expect(dl).toHaveAttribute('download', 'inflow.mcpb');
-
-  fireEvent.click(screen.getByRole('button', { name: 'I have it' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Installed' }));
-  expect(await screen.findByText('A1B2-C3D4')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /^Set up$/ }));
+  expect(useUIStore.getState().setupOpen).toBe(true);
+  expect(useUIStore.getState().setupStartStep).toBe('claude');
+  // No guide is rendered in this card any more.
+  expect(screen.queryByRole('list', { name: 'MCP connector steps' })).not.toBeInTheDocument();
 });
 
-it('stays open after connecting, to show Always allow, and closes with Done', async () => {
-  render(<McpStatusBar />);
-  fireEvent.click(screen.getByRole('button', { name: /^Setup$/ }));
-  for (const name of ['I have it', 'Installed', 'Saved']) fireEvent.click(screen.getByRole('button', { name }));
+it('reads as on while connected, even if its own copy of the setting is stale', async () => {
+  // The wizard can switch the bridge back on behind this card.
+  getMcpEnabled.mockResolvedValue(false);
   act(() => useUIStore.setState({ mcpStatus: 'connected' } as any));
-
-  // Connecting used to close the panel here, before its most useful screen.
-  await screen.findByText('Connected to Claude Desktop.');
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  await screen.findByRole('heading', { name: 'Let Claude use it without asking' });
-
-  fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-  await waitFor(() =>
-    expect(screen.queryByRole('heading', { name: 'Let Claude use it without asking' })).not.toBeInTheDocument(),
-  );
+  render(<McpStatusBar />);
+  expect(await screen.findByRole('button', { name: /^Disconnect$/ })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Connect$/ })).not.toBeInTheDocument();
 });
 
 it('reveals CLI-client instructions under the Advanced toggle', () => {
   render(<McpStatusBar />);
-  fireEvent.click(screen.getByRole('button', { name: /^Setup$/ }));
   expect(screen.queryByText(/copy config/i)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /Advanced · CLI/i }));
   expect(screen.getByText(/copy config/i)).toBeInTheDocument();
@@ -93,7 +81,7 @@ it('reveals the connection log when the status is clicked', () => {
 
 it('makes Setup look like the control it is, not a label', () => {
   render(<McpStatusBar />);
-  const setup = screen.getByRole('button', { name: /^Setup$/ });
+  const setup = screen.getByRole('button', { name: /^Set up$/ });
 
   // Its two neighbours carry weight at rest (Connect is filled and ringed,
   // Disconnect is ringed); Setup carried none, so it read as plain text.

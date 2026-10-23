@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-// The MCP connector guide, as the setup wizard's step. It follows what Claude
-// Desktop really shows when inflow.mcpb is opened: inflow's page with Install,
-// a confirmation, Configure with the pairing code, the Enabled switch, and Tool
-// permissions. The connection screen waits for the real connection.
+// The wizard's MCP connector step: installing inflow.mcpb in Claude Desktop as
+// one checklist on one screen. Each row has its action inline; the open row
+// shows its animation and a Done button; "Enabled" ticks itself when the
+// connector really connects.
 import '../dom-setup';
 
 const startMcpBridge = vi.fn();
@@ -20,88 +20,98 @@ import { CONNECT_HELP_AFTER_MS } from '@/components/setup/ConnectorGuide';
 
 beforeEach(() => {
   startMcpBridge.mockClear();
-  act(() => useUIStore.setState({ setupOpen: false, setupFromStart: false, mcpStatus: 'disconnected' } as any));
+  act(() =>
+    useUIStore.setState({ setupOpen: false, setupFromStart: false, setupStartStep: null, mcpStatus: 'disconnected' } as any),
+  );
 });
 
 async function openStep() {
   await markSetupPending();
   await setSetupStep('claude');
   render(<SetupWizard />);
-  await screen.findByRole('dialog', { name: 'Set up inflow' });
+  await screen.findByRole('heading', { name: 'Set up the MCP connector' });
 }
 
-const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }));
-const heading = (name: string) => screen.findByRole('heading', { name });
+const list = () => screen.getByRole('list', { name: 'MCP connector steps' });
+const rows = () => within(list()).getAllByRole('listitem');
+const rowTitled = (title: string) => rows().find((r) => r.textContent?.includes(title))!;
+const isOpen = (title: string) => rowTitled(title).getAttribute('aria-current') === 'step';
+const isTicked = (title: string) => rowTitled(title).querySelector('.animate-setup-check') !== null;
+const header = (title: string) => within(rowTitled(title)).getAllByRole('button')[0];
 
-/** From the intro to the connection screen. */
-function toEnable() {
-  click('Set it up');
-  click('I have it');
-  click('Installed');
-  click('Saved');
-}
-
-it('walks the real Claude Desktop flow, from download to Always allow', async () => {
+it('shows every instruction on one screen, in order', async () => {
   await openStep();
-  await heading('Set up the MCP connector');
-  expect(screen.getByText(/Claude never sends; you do/)).toBeInTheDocument();
+  expect(rows().map((r) => within(r).getAllByRole('button')[0].textContent)).toEqual([
+    '1Download inflow.mcpb',
+    '2Open it, and click Install twice',
+    '3Paste your pairing code',
+    '4Check it says Enabled',
+    '5Set Tool permissions to Always allow',
+  ]);
+  // No separate screens or tabs: the first row is simply open.
+  expect(isOpen('Download inflow.mcpb')).toBe(true);
+});
 
-  click('Set it up');
-  await heading('Download the connector');
-  const link = screen.getByRole('link', { name: 'Download inflow.mcpb' });
-  expect(link).toHaveAttribute('download', 'inflow.mcpb');
-  expect(link.getAttribute('href')).toContain('inflow.mcpb');
-
-  click('I have it');
-  await heading('Open it, and install');
-  // Install, then Install again on Claude's confirmation.
-  expect(screen.getByText(/then/).textContent).toMatch(/Install, then Install again to confirm/);
-  expect(screen.getByText(/same warning for every extension/)).toBeInTheDocument();
-  click('Installed');
-
-  await heading('Paste your pairing code');
+it('keeps each action on its row: download, the code with Copy, the live status', async () => {
+  await openStep();
+  const download = within(rowTitled('Download inflow.mcpb')).getByRole('link', { name: 'Download' });
+  expect(download).toHaveAttribute('download', 'inflow.mcpb');
   const code = await getOrCreatePairingCode();
-  await screen.findByText(code);
-  // Claude's own field title, so the user can match it on screen.
-  expect(screen.getAllByText(/inflow pairing code/).length).toBeGreaterThan(0);
-  click('Saved');
+  await waitFor(() => expect(within(rowTitled('Paste your pairing code')).getByText(code)).toBeInTheDocument());
+  expect(within(rowTitled('Check it says Enabled')).getByText('Waiting…')).toBeInTheDocument();
+});
 
-  await heading("Check it's enabled");
-  expect(screen.getByText(/Waiting for the connector/)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+it('downloading ticks the row and opens the next', async () => {
+  await openStep();
+  fireEvent.click(within(rowTitled('Download inflow.mcpb')).getByRole('link', { name: 'Download' }));
+  expect(isTicked('Download inflow.mcpb')).toBe(true);
+  expect(isOpen('Open it, and click Install twice')).toBe(true);
+  expect(rowTitled('Open it, and click Install twice').textContent).toMatch(/click Install, then Install again to confirm/);
+});
 
-  act(() => useUIStore.setState({ mcpStatus: 'connected' } as any));
-  await screen.findByText('Connected to Claude Desktop.');
-  click('Continue');
+it('Done ticks a row and opens the next one still to do', async () => {
+  await openStep();
+  fireEvent.click(within(rowTitled('Download inflow.mcpb')).getByRole('link', { name: 'Download' }));
+  fireEvent.click(within(rowTitled('Open it, and click Install twice')).getByRole('button', { name: 'Done' }));
+  expect(isTicked('Open it, and click Install twice')).toBe(true);
+  expect(isOpen('Paste your pairing code')).toBe(true);
+});
 
-  await heading('Let Claude use it without asking');
-  expect(screen.getByText('Tool permissions', { selector: 'b' })).toBeInTheDocument();
-  expect(screen.getByText('Always allow', { selector: 'b' })).toBeInTheDocument();
-  click('Continue');
-  await heading("You're all set");
-  expect(screen.getByText('MCP connector set up')).toBeInTheDocument();
+it('any row can be opened again by clicking it', async () => {
+  await openStep();
+  fireEvent.click(header('Set Tool permissions to Always allow'));
+  expect(isOpen('Set Tool permissions to Always allow')).toBe(true);
+  expect(isOpen('Download inflow.mcpb')).toBe(false);
 });
 
 it('copies the pairing code', async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.assign(navigator, { clipboard: { writeText } });
   await openStep();
-  click('Set it up');
-  click('I have it');
-  click('Installed');
-  await heading('Paste your pairing code');
   const code = await getOrCreatePairingCode();
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Copy' })).toBeEnabled());
-  click('Copy');
+  const row = rowTitled('Paste your pairing code');
+  await waitFor(() => expect(within(row).getByRole('button', { name: 'Copy' })).toBeEnabled());
+  fireEvent.click(within(row).getByRole('button', { name: 'Copy' }));
   expect(writeText).toHaveBeenCalledWith(code);
-  await screen.findByRole('button', { name: 'Copied' });
+});
+
+it('ticks Enabled on its own when the connector connects, and moves to permissions', async () => {
+  await openStep();
+  fireEvent.click(header('Check it says Enabled'));
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+
+  act(() => useUIStore.setState({ mcpStatus: 'connected' } as any));
+  await waitFor(() => expect(isTicked('Check it says Enabled')).toBe(true));
+  // Connecting proves the earlier rows were done too.
+  expect(isTicked('Download inflow.mcpb')).toBe(true);
+  expect(isOpen('Set Tool permissions to Always allow')).toBe(true);
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
 });
 
 it('switches inflow back on to listen for the connector if it had been turned off', async () => {
   await setMcpEnabled(false);
   await openStep();
-  toEnable();
-  await heading("Check it's enabled");
+  fireEvent.click(header('Check it says Enabled'));
   await waitFor(() => expect(startMcpBridge).toHaveBeenCalledWith(expect.any(String)));
   expect(await getMcpEnabled()).toBe(true);
 });
@@ -110,74 +120,38 @@ it('offers troubleshooting when the connection takes too long', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
     await openStep();
-    toEnable();
-    await heading("Check it's enabled");
+    fireEvent.click(header('Check it says Enabled'));
     expect(screen.queryByText(/Still waiting\?/)).not.toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(CONNECT_HELP_AFTER_MS + 100);
     });
     expect(await screen.findByText(/Still waiting\?/)).toBeInTheDocument();
-    expect(screen.getByText(/check the pairing code/)).toBeInTheDocument();
     expect(screen.getByText(/Keep this inflow tab open/)).toBeInTheDocument();
   } finally {
     vi.useRealTimers();
   }
 });
 
-describe('when already connected', () => {
-  beforeEach(() => act(() => useUIStore.setState({ mcpStatus: 'connected' } as any)));
-
-  it('still starts at the first screen, and says it is set up', async () => {
-    // Jumping to the last screen used to hide the other five entirely.
-    await openStep();
-    await heading('Set up the MCP connector');
-    expect(screen.getByText(/Already set up and connected/)).toBeInTheDocument();
-  });
-
-  it('offers to move on, or to show the steps anyway', async () => {
-    await openStep();
-    click('Show me the steps');
-    await heading('Download the connector');
-  });
-
-  it('Continue moves on to the next wizard step', async () => {
-    await openStep();
-    click('Continue');
-    await heading("You're all set");
-  });
-});
-
-it('shows every screen as a tab, and any can be opened directly', async () => {
-  await openStep();
-  const tabs = within(screen.getByRole('navigation', { name: 'MCP connector steps' })).getAllByRole('button');
-  expect(tabs.map((t) => t.textContent)).toEqual([
-    '1. Why',
-    '2. Download',
-    '3. Install',
-    '4. Code',
-    '5. Enable',
-    '6. Allow',
-  ]);
-  expect(tabs[0]).toHaveAttribute('aria-current', 'step');
-
-  fireEvent.click(tabs[5]);
-  await heading('Let Claude use it without asking');
-  fireEvent.click(screen.getByRole('button', { name: '3. Install' }));
-  await heading('Open it, and install');
-});
-
-it('ticks MCP connector in the step list only while connected', async () => {
-  await openStep();
-  const stepButton = () => screen.getByRole('button', { name: /MCP connector/ });
-  expect(stepButton().querySelector('.animate-setup-check')).toBeNull();
+it('when already connected, shows the rows up to it ticked and opens permissions', async () => {
   act(() => useUIStore.setState({ mcpStatus: 'connected' } as any));
-  await waitFor(() => expect(stepButton().querySelector('.animate-setup-check')).not.toBeNull());
+  await openStep();
+  expect(screen.getByText('Connected to Claude Desktop.')).toBeInTheDocument();
+  expect(isTicked('Paste your pairing code')).toBe(true);
+  expect(isOpen('Set Tool permissions to Always allow')).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await screen.findByRole('heading', { name: "You're all set" });
+  expect(screen.getByText('MCP connector set up')).toBeInTheDocument();
 });
 
-it('can be skipped from any screen', async () => {
+it('can be skipped', async () => {
   await openStep();
-  click('Set it up');
-  click('Skip for now');
-  await heading("You're all set");
+  fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+  await screen.findByRole('heading', { name: "You're all set" });
   expect(screen.getByText('Set up the MCP connector (optional)')).toBeInTheDocument();
+});
+
+it('opens straight at this step when asked to (the MCP connector section)', async () => {
+  render(<SetupWizard />);
+  act(() => useUIStore.getState().openSetup({ step: 'claude' }));
+  await screen.findByRole('heading', { name: 'Set up the MCP connector' });
 });

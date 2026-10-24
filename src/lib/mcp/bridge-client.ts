@@ -194,6 +194,7 @@ function open() {
     // missing companion is the common, expected case.
   };
   ws.onclose = () => {
+    session.close();
     ws = null;
     connected = false;
     companionKeys = { anthropic: false, gemini: false };

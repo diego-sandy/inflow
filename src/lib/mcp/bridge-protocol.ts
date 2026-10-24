@@ -4,12 +4,36 @@
  * localhost WebSocket. Kept pure and transport-free so it can be unit-tested;
  * bridge-client.ts wires it to a real WebSocket and the store.
  *
- * Flow: on open the extension sends `hello` (pairing token + advertised tools).
- * The companion replies `hello_ack` (or `error`). Thereafter the companion
- * forwards each of Claude's tool calls as `call`; the extension runs it and
- * replies `result`. `ping`/`pong` keep the socket warm.
+ * Flow: the companion speaks first with a `challenge`. The extension answers
+ * `hello` (a proof that it holds the pairing code, plus the advertised tools)
+ * and the companion replies `hello_ack` carrying its own proof (or `error`).
+ * Neither side ever sends the code itself; see pairing-proof.ts. Thereafter the
+ * companion forwards each of Claude's tool calls as `call`; the extension runs
+ * it and replies `result`. `ping`/`pong` keep the socket warm.
+ *
+ * Nothing but the handshake is acted on until the companion's proof checks
+ * out. Whatever is listening on the port could be any program on the
+ * computer, and before this the extension answered its tool calls regardless.
  */
 import type { McpToolDescriptor } from './tools';
+import { isNonce, newNonce, pairingProof, verifyServerProof } from './pairing-proof';
+
+/** Version of the pairing handshake this build speaks. */
+export const PAIRING_VERSION = 2;
+
+/**
+ * How long to wait for the companion's challenge. Companions from before
+ * mutual pairing wait for the extension to speak first, so silence this long
+ * means an old one.
+ */
+export const CHALLENGE_TIMEOUT_MS = 3000;
+
+export const OLD_COMPANION_MESSAGE =
+  'The MCP connector needs updating. Reinstall inflow.mcpb (Settings › Setup).';
+
+export const UNPROVEN_COMPANION_MESSAGE =
+  'The program on the inflow connector’s port could not prove it has your pairing code, so inflow is not talking to it. ' +
+  'Check the code in Claude matches the one in inflow (Settings › Setup), or quit whatever else is using the port.';
 
 export type BridgeStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
 
@@ -39,9 +63,10 @@ export interface CompanionKeys {
 
 /** Messages the companion sends to the extension. */
 export type InboundMessage =
+  | { type: 'challenge'; v?: number; nonce?: string }
   // `keys` tells the extension which provider keys the companion holds, so it can
   // route a provider through the companion only when that key is actually set.
-  | { type: 'hello_ack'; keys?: Partial<CompanionKeys>; status?: CompanionStatus }
+  | { type: 'hello_ack'; serverProof?: string; keys?: Partial<CompanionKeys>; status?: CompanionStatus }
   | { type: 'error'; message?: string }
   | { type: 'call'; id: string; name: string; args?: Record<string, any> }
   | { type: 'ping' }
@@ -53,6 +78,7 @@ export type InboundMessage =
   | { type: 'gemini_result'; id: string; ok: boolean; data?: any; error?: string };
 
 export interface BridgeHandlers {
+  /** The pairing code. Used to compute proofs; never sent. */
   token: string;
   tools: McpToolDescriptor[];
   callTool: (name: string, args: Record<string, any>) => Promise<unknown>;
@@ -69,6 +95,8 @@ export interface BridgeHandlers {
   onAnthropicResult?: (id: string, ok: boolean, data: any, error?: string) => void;
   /** Resolve a pending Gemini proxy request (bridge-client owns the map). */
   onGeminiResult?: (id: string, ok: boolean, data: any, error?: string) => void;
+  /** Override for tests. */
+  challengeTimeoutMs?: number;
 }
 
 /** Friendly one-line description of a tool call for the activity feed. */
@@ -157,64 +185,130 @@ export function describeBuildMatch(
 }
 
 export function createBridgeSession(h: BridgeHandlers) {
+  let serverNonce: string | null = null;
+  let clientNonce: string | null = null;
+  /** The companion has proved it holds the pairing code. */
+  let verified = false;
+  /** Gave up on this socket (bad proof, or an old companion). */
+  let refused = false;
+  let challengeTimer: ReturnType<typeof setTimeout> | undefined;
+  // Until the handshake is done, frames are handled one at a time: checking a
+  // proof is async, and a call arriving right behind hello_ack must wait for
+  // the verdict rather than be dropped as unverified.
+  let handshake: Promise<void> = Promise.resolve();
+
+  function refuse(message: string) {
+    refused = true;
+    clearTimeout(challengeTimer);
+    h.onStatus('error', message);
+    h.onActivity(message);
+  }
+
   return {
-    /** Call once the socket opens: authenticate and advertise the toolbox. */
+    /** Call once the socket opens: wait for the companion's challenge. */
     open() {
       h.onStatus('connecting');
-      h.send({ type: 'hello', token: h.token, tools: h.tools });
+      challengeTimer = setTimeout(() => {
+        if (!serverNonce && !refused) refuse(OLD_COMPANION_MESSAGE);
+      }, h.challengeTimeoutMs ?? CHALLENGE_TIMEOUT_MS);
+    },
+
+    /** Call when the socket closes. */
+    close() {
+      clearTimeout(challengeTimer);
     },
 
     /** Handle one raw message from the companion. */
-    async handleMessage(raw: string) {
-      let msg: InboundMessage;
-      try {
-        msg = JSON.parse(raw);
-      } catch {
-        return; // ignore malformed frames
-      }
-      switch (msg.type) {
-        case 'hello_ack':
-          h.onStatus('connected');
-          h.onActivity('Connected to Claude');
-          h.onActivity(describeCompanion(msg.status));
-          {
-            const match = describeBuildMatch(msg.status, h.appCompanionSha, h.appCompanionLegacySha);
-            if (match) h.onActivity(match);
-          }
-          // Older companions omit `keys`. Preserve the prior behavior (Anthropic
-          // routed through the companion when connected) and require an explicit
-          // signal to route Gemini through it.
-          h.onCompanionKeys?.({
-            anthropic: msg.keys ? !!msg.keys.anthropic : true,
-            gemini: msg.keys ? !!msg.keys.gemini : false,
-          });
-          return;
-        case 'error':
-          h.onStatus('error', msg.message || 'Connection rejected');
-          return;
-        case 'ping':
-          h.send({ type: 'pong' });
-          return;
-        case 'activity':
-          if (msg.text) h.onActivity(msg.text);
-          return;
-        case 'anthropic_result':
-          h.onAnthropicResult?.(msg.id, msg.ok, msg.data, msg.error);
-          return;
-        case 'gemini_result':
-          h.onGeminiResult?.(msg.id, msg.ok, msg.data, msg.error);
-          return;
-        case 'call': {
-          h.onActivity(activityLabel(msg.name, msg.args));
-          try {
-            const data = await h.callTool(msg.name, msg.args || {});
-            h.send({ type: 'result', id: msg.id, ok: true, data });
-          } catch (e: any) {
-            h.send({ type: 'result', id: msg.id, ok: false, error: e?.message || 'Tool failed' });
-          }
-          return;
-        }
-      }
+    handleMessage(raw: string): Promise<void> {
+      if (verified) return handle(raw);
+      const run = handshake.then(() => handle(raw));
+      handshake = run.catch(() => {});
+      return run;
     },
   };
+
+  async function handle(raw: string) {
+    let msg: InboundMessage;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return; // ignore malformed frames
+    }
+    if (refused) return;
+
+    if (!verified) {
+      if (msg.type === 'challenge' && !serverNonce) {
+        if (msg.v !== PAIRING_VERSION || !isNonce(msg.nonce)) {
+          refuse(OLD_COMPANION_MESSAGE);
+          return;
+        }
+        clearTimeout(challengeTimer);
+        serverNonce = msg.nonce;
+        clientNonce = newNonce();
+        const proof = await pairingProof(h.token, 'client', serverNonce, clientNonce);
+        h.send({ type: 'hello', v: PAIRING_VERSION, nonce: clientNonce, proof, tools: h.tools });
+        return;
+      }
+      if (msg.type === 'hello_ack') {
+        if (!serverNonce || !clientNonce || !(await verifyServerProof(h.token, serverNonce, clientNonce, msg.serverProof))) {
+          refuse(UNPROVEN_COMPANION_MESSAGE);
+          return;
+        }
+        verified = true;
+        // Falls through to the connected handling below.
+      } else if (msg.type === 'error') {
+        // The companion hangs up right after, and the reconnect resets the
+        // status, so the feed is where a wrong code stays visible.
+        h.onStatus('error', msg.message || 'Connection rejected');
+        h.onActivity(`The connector refused inflow: ${msg.message || 'connection rejected'}`);
+        return;
+      } else {
+        return; // nothing else counts before the companion has proved itself
+      }
+    }
+
+    switch (msg.type) {
+      case 'hello_ack':
+        h.onStatus('connected');
+        h.onActivity('Connected to Claude');
+        h.onActivity(describeCompanion(msg.status));
+        {
+          const match = describeBuildMatch(msg.status, h.appCompanionSha, h.appCompanionLegacySha);
+          if (match) h.onActivity(match);
+        }
+        // Older companions omit `keys`. Preserve the prior behavior (Anthropic
+        // routed through the companion when connected) and require an explicit
+        // signal to route Gemini through it.
+        h.onCompanionKeys?.({
+          anthropic: msg.keys ? !!msg.keys.anthropic : true,
+          gemini: msg.keys ? !!msg.keys.gemini : false,
+        });
+        return;
+      case 'error':
+        h.onStatus('error', msg.message || 'Connection rejected');
+        return;
+      case 'ping':
+        h.send({ type: 'pong' });
+        return;
+      case 'activity':
+        if (msg.text) h.onActivity(msg.text);
+        return;
+      case 'anthropic_result':
+        h.onAnthropicResult?.(msg.id, msg.ok, msg.data, msg.error);
+        return;
+      case 'gemini_result':
+        h.onGeminiResult?.(msg.id, msg.ok, msg.data, msg.error);
+        return;
+      case 'call': {
+        h.onActivity(activityLabel(msg.name, msg.args));
+        try {
+          const data = await h.callTool(msg.name, msg.args || {});
+          h.send({ type: 'result', id: msg.id, ok: true, data });
+        } catch (e: any) {
+          h.send({ type: 'result', id: msg.id, ok: false, error: e?.message || 'Tool failed' });
+        }
+        return;
+      }
+    }
+  }
 }

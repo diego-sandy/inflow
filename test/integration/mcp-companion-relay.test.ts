@@ -13,6 +13,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { newNonce, pairingProof } from '../../mcp-companion/src/pairing.mjs';
 
 const COMPANION = join(process.cwd(), 'mcp-companion', 'src', 'index.mjs');
 const PORT = '8195';
@@ -58,18 +59,23 @@ function fakeExtension(onCall: (name: string) => void, onAck?: (ack: any) => voi
   // Killing the owner in a test's finally block resets this socket; without a
   // listener that surfaces as an unhandled error and fails the run at random.
   ws.addEventListener('error', () => {});
-  ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({
-      type: 'hello',
-      token: CODE,
-      tools: [
-        { name: 'search_messages', description: 'd', inputSchema: { type: 'object' } },
-        { name: 'create_draft', description: 'd', inputSchema: { type: 'object' } },
-      ],
-    }));
-  });
   ws.addEventListener('message', (ev: any) => {
     const msg = JSON.parse(String(ev.data));
+    // The companion challenges first; prove we hold the code without sending it.
+    if (msg.type === 'challenge') {
+      const nonce = newNonce();
+      ws.send(JSON.stringify({
+        type: 'hello',
+        v: 2,
+        nonce,
+        proof: pairingProof(CODE, 'client', msg.nonce, nonce),
+        tools: [
+          { name: 'search_messages', description: 'd', inputSchema: { type: 'object' } },
+          { name: 'create_draft', description: 'd', inputSchema: { type: 'object' } },
+        ],
+      }));
+      return;
+    }
     if (msg.type === 'hello_ack') { onAck?.(msg); return; }
     if (msg.type === 'call') {
       onCall(msg.name);

@@ -38,6 +38,9 @@ interface Props {
 
 export function ConnectorGuide({ onBack, onSkip, onFinish }: Props) {
   const connected = useUIStore((s) => s.mcpStatus === 'connected');
+  // Why the connector can't connect, when inflow knows (an outdated connector,
+  // or one that couldn't prove it has the pairing code).
+  const problem = useUIStore((s) => (s.mcpStatus === 'error' ? s.mcpError : null));
   // Already connected: everything up to the connection is evidently done.
   const [done, setDone] = useState<Set<GuideRow>>(
     () => new Set(connected ? (['download', 'install', 'code', 'enable'] as GuideRow[]) : []),
@@ -207,7 +210,12 @@ export function ConnectorGuide({ onBack, onSkip, onFinish }: Props) {
           <Drawing>
             <EnabledIllustration />
           </Drawing>
-          {!connected && slow && (
+          {!connected && problem && (
+            <p role="alert" className="mt-3 rounded-lg bg-red-500/10 px-3.5 py-3 text-xs text-red-600 ring-1 ring-inset ring-red-500/25 dark:text-red-400">
+              {problem}
+            </p>
+          )}
+          {!connected && !problem && slow && (
             <div className="mt-3 rounded-lg bg-surface px-3.5 py-3 text-xs text-fg-secondary ring-1 ring-inset ring-edge">
               <p className="mb-1 font-medium text-fg-strong">Still waiting? Try these:</p>
               <ul className="list-disc space-y-0.5 pl-4">

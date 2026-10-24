@@ -9,8 +9,9 @@
  *   3. Learns the available tools from the extension's `hello`, exposes them to
  *      Claude, and relays each `tools/call` to the extension, returning results.
  *
- * Security: the extension must present the pairing code (printed to stderr and
- * persisted). Only 127.0.0.1 is bound. Read-only in this version — the extension
+ * Security: both sides prove they hold the pairing code (printed to stderr and
+ * persisted) without sending it; see pairing.mjs. Web pages are turned away by
+ * Origin, and only 127.0.0.1 is bound. Read-only in this version — the extension
  * only advertises read tools, and this relay adds nothing.
  *
  * NOTE: run `npm install` in this folder before first use. This file was authored
@@ -26,6 +27,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { PAIRING_VERSION, isNonce, newNonce, pairingProof, verifyPairingProof } from './pairing.mjs';
 
 const PORT = Number(process.env.INFLOW_MCP_PORT || 8123);
 const CONFIG_DIR = join(homedir(), '.inflow-mcp');
@@ -226,6 +228,9 @@ let wss = null;
 const peers = new Set();
 /** Peer side: our socket to the owner, and calls awaiting its reply. */
 let peerSocket = null;
+// Whether the companion on the other end of peerSocket has proved it holds
+// the pairing code. No call goes to it until it has.
+let peerVerified = false;
 // Set once we are confirmed to be relaying, and cleared only after we announce
 // taking the bridge over. The socket itself is already gone by then (the owner
 // exiting is what frees the port), so it can't be used to detect a takeover.
@@ -249,7 +254,7 @@ function bindWs() {
     setTimeout(bindWs, 2000);
     return;
   }
-  wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
+  wss = new WebSocketServer({ host: '127.0.0.1', port: PORT, verifyClient: isAllowedOrigin });
   wss.on('listening', () => {
     ownsBridge = true;
     log(`bridge port ${PORT} is FREE — listening on ws://127.0.0.1:${PORT}; inflow can pair with this companion`);
@@ -258,6 +263,7 @@ function bindWs() {
     if (peerSocket || wasRelaying) {
       try { peerSocket?.close(); } catch {}
       peerSocket = null;
+      peerVerified = false;
       wasRelaying = false;
       log('took over the bridge — no longer relaying through another companion');
     }
@@ -279,19 +285,56 @@ function bindWs() {
   });
 }
 
+/**
+ * Who may open the bridge socket at all. A browser always sends Origin, so this
+ * turns away any web page someone has open (it would otherwise get unlimited
+ * guesses at the pairing code); the inflow extension's origin passes, and so
+ * do other companions, which send none. A local program can fake the header,
+ * but it can also read the code from disk, so the pairing proof is what
+ * actually keeps it out.
+ */
+function isAllowedOrigin({ origin }) {
+  return !origin || /^(chrome|moz)-extension:\/\//.test(origin);
+}
+
+/**
+ * Check a client's pairing proof and return ours, or tell it why not and hang
+ * up: a current client that gets this wrong has the wrong code, and an old one
+ * still sending the code itself needs updating.
+ */
+function acceptProof(socket, msg, serverNonce, who) {
+  const what = who === 'peer' ? 'a peer companion' : 'an extension';
+  if (msg.v !== PAIRING_VERSION || !isNonce(msg.nonce)) {
+    const message = who === 'peer'
+      ? 'Another inflow companion is out of date. Reinstall inflow.mcpb in every Claude app.'
+      : 'inflow needs updating to talk to this companion. Update the inflow extension, then reload its tab.';
+    socket.send(JSON.stringify({ type: 'error', message }));
+    log(`refused ${what} using the old pairing, which sends the code itself`);
+    socket.close();
+    return null;
+  }
+  if (!verifyPairingProof(PAIRING_CODE, 'client', serverNonce, msg.nonce, msg.proof)) {
+    socket.send(JSON.stringify({ type: 'error', message: 'Wrong pairing code' }));
+    log(`refused ${what}: wrong pairing code`);
+    socket.close();
+    return null;
+  }
+  return pairingProof(PAIRING_CODE, 'server', serverNonce, msg.nonce);
+}
+
 function onConnection(socket) {
   let authed = false;
   let isPeer = false;
+  // Fresh per connection, so a proof recorded from one is useless on the next.
+  const serverNonce = newNonce();
+  socket.send(JSON.stringify({ type: 'challenge', v: PAIRING_VERSION, nonce: serverNonce }));
   socket.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
 
-    if (msg.type === 'hello') {
-      if (msg.token !== PAIRING_CODE) {
-        socket.send(JSON.stringify({ type: 'error', message: 'Wrong pairing code' }));
-        socket.close();
-        return;
-      }
+    if (msg.type === 'hello' && !authed) {
+      const serverProof = acceptProof(socket, msg, serverNonce, 'extension');
+      if (!serverProof) return;
       authed = true;
       extension = socket;
       // Only replace the catalog with a non-empty one, so a malformed hello can
@@ -304,6 +347,8 @@ function onConnection(socket) {
       // provider through us when we can actually run it server-side.
       socket.send(JSON.stringify({
         type: 'hello_ack',
+        // Our half: the extension answers nothing until this checks out.
+        serverProof,
         keys: { anthropic: !!ANTHROPIC_API_KEY, gemini: !!GEMINI_API_KEY },
         // Companion-side facts the browser otherwise has no way to know.
         status: {
@@ -322,16 +367,13 @@ function onConnection(socket) {
       return;
     }
     // Another companion asking us (the bridge owner) to work on its behalf.
-    if (msg.type === 'peer_hello') {
-      if (msg.token !== PAIRING_CODE) {
-        socket.send(JSON.stringify({ type: 'error', message: 'Wrong pairing code' }));
-        socket.close();
-        return;
-      }
+    if (msg.type === 'peer_hello' && !authed) {
+      const serverProof = acceptProof(socket, msg, serverNonce, 'peer');
+      if (!serverProof) return;
       authed = true;
       isPeer = true;
       peers.add(socket);
-      socket.send(JSON.stringify({ type: 'peer_ack', tools: advertisedTools }));
+      socket.send(JSON.stringify({ type: 'peer_ack', serverProof, tools: advertisedTools }));
       log(`peer companion attached (${peers.size} now relaying through this one)`);
       sendActivity(`Another Claude client attached — ${peers.size} relaying through this companion`);
       return;
@@ -490,12 +532,37 @@ function connectAsPeer() {
     return;
   }
   peerSocket = sock;
-
-  sock.on('open', () => sock.send(JSON.stringify({ type: 'peer_hello', token: PAIRING_CODE })));
+  peerVerified = false;
+  // The owner speaks first, with a challenge. Until it has proved it holds the
+  // pairing code too, nothing it says is believed and no call is sent to it:
+  // whatever holds the port could be anything.
+  let serverNonce = null;
+  let clientNonce = null;
 
   sock.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
+
+    if (msg.type === 'challenge' && !serverNonce) {
+      if (msg.v !== PAIRING_VERSION || !isNonce(msg.nonce)) return;
+      serverNonce = msg.nonce;
+      clientNonce = newNonce();
+      sock.send(JSON.stringify({
+        type: 'peer_hello', v: PAIRING_VERSION, nonce: clientNonce,
+        proof: pairingProof(PAIRING_CODE, 'client', serverNonce, clientNonce),
+      }));
+      return;
+    }
+    if (msg.type === 'error') { log('bridge owner rejected us:', msg.message); return; }
+    if (msg.type === 'peer_ack' && peerSocket === sock && !peerVerified) {
+      if (!serverNonce || !verifyPairingProof(PAIRING_CODE, 'server', serverNonce, clientNonce, msg.serverProof)) {
+        log('the program on the bridge port could not prove it has the pairing code; not relaying through it');
+        sock.close();
+        return;
+      }
+      peerVerified = true;
+    }
+    if (peerSocket !== sock || !peerVerified) return;
 
     if (msg.type === 'peer_ack' || msg.type === 'peer_tools') {
       if (Array.isArray(msg.tools) && msg.tools.length) {
@@ -517,11 +584,10 @@ function connectAsPeer() {
       else pend.reject(new Error(msg.error || 'Tool failed'));
       return;
     }
-    if (msg.type === 'error') log('bridge owner rejected us:', msg.message);
   });
 
   const drop = () => {
-    if (peerSocket === sock) peerSocket = null;
+    if (peerSocket === sock) { peerSocket = null; peerVerified = false; }
     // Fail fast rather than leaving the client hanging until each timeout.
     for (const [, pend] of peerPending) {
       clearTimeout(pend.timer);
@@ -574,9 +640,9 @@ function relayCall(name, args) {
   // We own the bridge: straight to the extension.
   if (extension && extension.readyState === extension.OPEN) return callExtension(name, args);
   // Another companion owns it: ask them to run it for us.
-  if (peerSocket && peerSocket.readyState === WebSocket.OPEN) return callViaPeer(name, args);
+  if (peerSocket && peerSocket.readyState === WebSocket.OPEN && peerVerified) return callViaPeer(name, args);
   // Neither: the tab is closed (or we have not attached to the owner yet).
-  if (peerSocket && peerSocket.readyState === WebSocket.CONNECTING) {
+  if (peerSocket && (peerSocket.readyState === WebSocket.CONNECTING || peerSocket.readyState === WebSocket.OPEN)) {
     return Promise.reject(new Error('Still attaching to the companion that owns the inflow bridge — try again in a moment.'));
   }
   return Promise.reject(new Error('inflow is not connected. Open the inflow tab — it pairs automatically.'));

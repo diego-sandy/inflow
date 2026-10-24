@@ -17,11 +17,12 @@ import { useUIStore } from '@/store/ui-store';
 import { markSetupPending, setSetupStep } from '@/lib/setup-state';
 import { getMcpEnabled, getOrCreatePairingCode, setMcpEnabled } from '@/lib/mcp/pairing';
 import { CONNECT_HELP_AFTER_MS } from '@/components/setup/ConnectorGuide';
+import { OLD_COMPANION_MESSAGE } from '@/lib/mcp/bridge-protocol';
 
 beforeEach(() => {
   startMcpBridge.mockClear();
   act(() =>
-    useUIStore.setState({ setupOpen: false, setupFromStart: false, setupStartStep: null, mcpStatus: 'disconnected' } as any),
+    useUIStore.setState({ setupOpen: false, setupFromStart: false, setupStartStep: null, mcpStatus: 'disconnected', mcpError: null } as any),
   );
 });
 
@@ -130,6 +131,16 @@ it('offers troubleshooting when the connection takes too long', async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('says why when the connector cannot connect, such as an outdated one', async () => {
+  await openStep();
+  fireEvent.click(header('Check it says Enabled'));
+  act(() => useUIStore.setState({ mcpStatus: 'error', mcpError: OLD_COMPANION_MESSAGE } as any));
+  const alert = await within(rowTitled('Check it says Enabled')).findByRole('alert');
+  expect(alert).toHaveTextContent('Reinstall inflow.mcpb');
+  // The reason replaces the generic tips rather than sitting beside them.
+  expect(screen.queryByText(/Still waiting\?/)).not.toBeInTheDocument();
 });
 
 it('when already connected, shows the rows up to it ticked and opens permissions', async () => {

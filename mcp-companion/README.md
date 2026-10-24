@@ -15,7 +15,7 @@ MCP client  ──stdio (MCP)──▶  inflow-mcp  ──ws://127.0.0.1:8123─
  (the brain)                   (relay)                                (tools + your data)
 ```
 
-inflow generates a **pairing code** and shows it in the app (MCP connector → Connect Claude). The client passes that code to the companion (`INFLOW_PAIRING_CODE`); the companion only accepts the extension's WebSocket handshake when the codes match. It notifies the client when tools appear/disappear, exits when the client quits (no orphaned port holders), and retries the port if a stale instance is still up.
+inflow generates a **pairing code** and shows it in the app (MCP connector → Connect Claude). The client passes that code to the companion (`INFLOW_PAIRING_CODE`); on every connection the two sides prove to each other that they hold the same code, without either one sending it (an HMAC challenge–response; see `src/pairing.mjs`), and inflow answers nothing until the companion has proved itself. Web pages are turned away before they can try. It notifies the client when tools appear/disappear, exits when the client quits (no orphaned port holders), and retries the port if a stale instance is still up.
 
 ### Running AI keys through the companion (optional)
 

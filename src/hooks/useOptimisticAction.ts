@@ -58,10 +58,24 @@ async function createPendingAction(
   return id;
 }
 
+/**
+ * A `draft-` row is a local stand-in the new-message composer mints to hold
+ * its recipients. LinkedIn has no thread behind it, so sending its id to
+ * Voyager earns a 400 ("The EntityKey draft-… is in an invalid format") and a
+ * "failed, rolling back" over a row that looks real. Archiving, starring,
+ * moving or marking one read means nothing anyway, so those stop here.
+ * Sending is the exception: that is how a draft becomes a real thread.
+ * (Ported from upstream 2e2d3a6.)
+ */
+function isLocalDraft(conversation: Pick<Conversation, 'draft' | 'id'>): boolean {
+  return conversation.draft === 1 || conversation.id.startsWith('draft-');
+}
+
 export function useOptimisticAction() {
   const showToast = useUIStore((s) => s.showToast);
 
   async function archiveConversation(conversation: Conversation) {
+    if (isLocalDraft(conversation)) return;
     const actionId = nanoid();
     const previousCategory = conversation.category || 'PRIMARY_INBOX';
     const bridgeMsg = { type: 'ARCHIVE' as const, conversationId: conversation.id };
@@ -128,6 +142,7 @@ export function useOptimisticAction() {
    * (the twin isn't in the list, so nothing else can ever mark it).
    */
   async function markRead(conversationId: string, mergedIds?: string[]) {
+    if (conversationId.startsWith('draft-')) return;
     if (mergedIds?.length) {
       for (const id of mergedIds) {
         const twin = await db.conversations.get(id);
@@ -169,6 +184,7 @@ export function useOptimisticAction() {
   }
 
   async function markUnread(conversationId: string) {
+    if (conversationId.startsWith('draft-')) return;
     await db.conversations.update(conversationId, { read: 0 });
 
     const bridgeMsg = { type: 'MARK_UNREAD' as const, conversationId };
@@ -353,6 +369,12 @@ export function useOptimisticAction() {
     files?: File[],
     replyTo?: { messageUrn: string; senderUrn: string; senderName: string; sentAt: number; body: string }
   ): Promise<void> {
+    // No server-side thread to archive yet: send, and skip the archive half
+    // rather than have it fail and roll back right after a good send.
+    if (conversationId.startsWith('draft-')) {
+      await sendMessage(conversationId, body, files, replyTo);
+      return;
+    }
     const conv = await db.conversations.get(conversationId);
     if (!conv) return;
 
@@ -443,6 +465,7 @@ export function useOptimisticAction() {
       failMessage: string;
     }
   ) {
+    if (isLocalDraft(conversation)) return;
     const actionId = nanoid();
     const previousCategory = conversation.category || 'PRIMARY_INBOX';
     const bridgeMsg = { type: opts.bridgeType, conversationId: conversation.id };
@@ -611,6 +634,7 @@ export function useOptimisticAction() {
   }
 
   async function starConversation(conversation: Conversation) {
+    if (isLocalDraft(conversation)) return;
     if (conversation.starred) {
       // Unstar
       await db.conversations.update(conversation.id, { starred: 0 });

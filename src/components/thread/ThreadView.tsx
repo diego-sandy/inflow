@@ -78,6 +78,18 @@ export function ThreadView({ conversation, composeRef }: ThreadViewProps) {
   // user stays on the thread. Cancelled if they navigate away quickly (j/k browsing).
   const autoReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Unmount safety net (ported from upstream's regression 125). The
+  // visibilitychange handler below can arm the timer, but its cleanup only
+  // removes the listener, and the effect below registers no cleanup when it
+  // returns early (say it ran while the tab was hidden). Without this, closing
+  // the thread inside the 2s window still marked it read.
+  useEffect(() => () => {
+    if (autoReadTimer.current) {
+      clearTimeout(autoReadTimer.current);
+      autoReadTimer.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (autoReadTimer.current) clearTimeout(autoReadTimer.current);
     if (suppressAutoRead.current) return;

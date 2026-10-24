@@ -9,6 +9,8 @@ vi.mock('@/lib/anthropic-client', () => ({
 }));
 
 vi.mock('@/lib/ai-settings', () => ({
+  DEFAULT_ANTHROPIC_FAST_MODEL: 'claude-haiku-5-5',
+  DEFAULT_ANTHROPIC_QUALITY_MODEL: 'claude-sonnet-5-5',
   getGeminiApiKey: async () => null,
   getAIProvider: async () => 'anthropic',
   getTierProvider: async () => 'anthropic',

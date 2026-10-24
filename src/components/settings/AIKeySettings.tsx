@@ -18,6 +18,10 @@ import {
   getAIComposeHideWhenUnavailable,
   setAIComposeHideWhenUnavailable,
   AI_MODEL_CATALOG,
+  DEFAULT_ANTHROPIC_FAST_MODEL,
+  DEFAULT_ANTHROPIC_QUALITY_MODEL,
+  DEFAULT_GEMINI_FAST_MODEL,
+  DEFAULT_GEMINI_QUALITY_MODEL,
   type AIProvider,
   type AIModelTier,
   type ProviderModelOption,
@@ -443,8 +447,8 @@ export function AIKeySettings() {
   const [geminiShow, setGeminiShow] = useState(false);
   const [geminiStatus, setGeminiStatus] = useState<TestStatus>('idle');
   const [geminiError, setGeminiError] = useState('');
-  const [geminiFastModel, setGeminiFastModel] = useState('gemini-3.1-flash-lite');
-  const [geminiQualityModel, setGeminiQualityModel] = useState('gemini-3.1-flash-lite');
+  const [geminiFastModel, setGeminiFastModel] = useState(DEFAULT_GEMINI_FAST_MODEL);
+  const [geminiQualityModel, setGeminiQualityModel] = useState(DEFAULT_GEMINI_QUALITY_MODEL);
 
   // Anthropic key state
   const [anthInput, setAnthInput] = useState('');
@@ -452,8 +456,8 @@ export function AIKeySettings() {
   const [anthShow, setAnthShow] = useState(false);
   const [anthStatus, setAnthStatus] = useState<TestStatus>('idle');
   const [anthError, setAnthError] = useState('');
-  const [fastModel, setFastModel] = useState('claude-haiku-4-5');
-  const [qualityModel, setQualityModel] = useState('claude-sonnet-5');
+  const [fastModel, setFastModel] = useState(DEFAULT_ANTHROPIC_FAST_MODEL);
+  const [qualityModel, setQualityModel] = useState(DEFAULT_ANTHROPIC_QUALITY_MODEL);
 
   const [suggestionsOn, setSuggestionsOn] = useState(true);
   const [hideAiCompose, setHideAiCompose] = useState(false);

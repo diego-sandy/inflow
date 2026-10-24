@@ -7,6 +7,8 @@ import '../dom-setup';
 
 const getGeminiApiKey = vi.fn();
 vi.mock('@/lib/ai-settings', () => ({
+  DEFAULT_ANTHROPIC_FAST_MODEL: 'claude-haiku-5-5',
+  DEFAULT_ANTHROPIC_QUALITY_MODEL: 'claude-sonnet-5-5',
   getGeminiApiKey: () => getGeminiApiKey(),
   getAIProvider: async () => 'gemini',
   getTierProvider: async () => 'gemini',

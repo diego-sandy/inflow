@@ -65,15 +65,15 @@ describe('Anthropic model tiers', () => {
   it('defaults fast → Haiku and quality → Sonnet', async () => {
     expect(await getAnthropicModel('fast')).toBe(DEFAULT_ANTHROPIC_FAST_MODEL);
     expect(await getAnthropicModel('quality')).toBe(DEFAULT_ANTHROPIC_QUALITY_MODEL);
-    expect(DEFAULT_ANTHROPIC_FAST_MODEL).toBe('claude-haiku-4-5');
-    expect(DEFAULT_ANTHROPIC_QUALITY_MODEL).toBe('claude-sonnet-5');
+    expect(DEFAULT_ANTHROPIC_FAST_MODEL).toBe('claude-haiku-5-5');
+    expect(DEFAULT_ANTHROPIC_QUALITY_MODEL).toBe('claude-sonnet-5-5');
   });
 
   it('persists a chosen model per tier independently', async () => {
-    await setAnthropicModel('fast', 'claude-sonnet-5');
-    await setAnthropicModel('quality', 'claude-opus-5');
-    expect(await getAnthropicModel('fast')).toBe('claude-sonnet-5');
-    expect(await getAnthropicModel('quality')).toBe('claude-opus-5');
+    await setAnthropicModel('fast', 'claude-sonnet-5-5');
+    await setAnthropicModel('quality', 'claude-opus-5-5');
+    expect(await getAnthropicModel('fast')).toBe('claude-sonnet-5-5');
+    expect(await getAnthropicModel('quality')).toBe('claude-opus-5-5');
   });
 
   it('ignores an unknown model id on write and falls back on read', async () => {
@@ -86,9 +86,9 @@ describe('Anthropic model tiers', () => {
 
   it('offers Haiku, Sonnet, and Opus in the picker, cheapest first', () => {
     expect(ANTHROPIC_MODELS.map((m) => m.id)).toEqual([
-      'claude-haiku-4-5',
-      'claude-sonnet-5',
-      'claude-opus-5',
+      'claude-haiku-5-5',
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
     ]);
   });
 });
@@ -97,21 +97,38 @@ describe('Gemini model tiers', () => {
   it('defaults both tiers to Flash-Lite (unchanged from the original single model)', async () => {
     expect(await getGeminiModel('fast')).toBe(DEFAULT_GEMINI_FAST_MODEL);
     expect(await getGeminiModel('quality')).toBe(DEFAULT_GEMINI_QUALITY_MODEL);
-    expect(DEFAULT_GEMINI_FAST_MODEL).toBe('gemini-3.1-flash-lite');
-    expect(DEFAULT_GEMINI_QUALITY_MODEL).toBe('gemini-3.1-flash-lite');
+    expect(DEFAULT_GEMINI_FAST_MODEL).toBe('gemini-3.5-flash-lite');
+    expect(DEFAULT_GEMINI_QUALITY_MODEL).toBe('gemini-3.5-flash-lite');
   });
 
   it('persists a chosen model per tier independently', async () => {
-    await setGeminiModel('fast', 'gemini-3.6-flash');
+    await setGeminiModel('fast', 'gemini-3.8-flash');
     await setGeminiModel('quality', 'gemini-3.1-pro-preview');
-    expect(await getGeminiModel('fast')).toBe('gemini-3.6-flash');
+    expect(await getGeminiModel('fast')).toBe('gemini-3.8-flash');
     expect(await getGeminiModel('quality')).toBe('gemini-3.1-pro-preview');
   });
 
   it('moves a saved choice of a superseded model to its replacement, not the default', async () => {
-    // Google routes gemini-3.5-flash to gemini-3.6-flash; someone who picked Flash keeps Flash.
+    // Each superseded id inflow offered moves to the current one in its line.
     await chrome.storage.local.set({ geminiQualityModel: 'gemini-3.5-flash' });
-    expect(await getGeminiModel('quality')).toBe('gemini-3.6-flash');
+    expect(await getGeminiModel('quality')).toBe('gemini-3.8-flash');
+  });
+
+  it.each([
+    ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'],
+    ['gemini-3.6-flash', 'gemini-3.8-flash'],
+  ])('moves a saved %s to %s', async (old, current) => {
+    await chrome.storage.local.set({ geminiFastModel: old });
+    expect(await getGeminiModel('fast')).toBe(current);
+  });
+
+  it.each([
+    ['claude-haiku-4-5', 'claude-haiku-5-5'],
+    ['claude-sonnet-5', 'claude-sonnet-5-5'],
+    ['claude-opus-5', 'claude-opus-5-5'],
+  ])('moves a saved Claude %s to %s', async (old, current) => {
+    await chrome.storage.local.set({ anthropicQualityModel: old });
+    expect(await getAnthropicModel('quality')).toBe(current);
   });
 
   it('ignores an unknown model id on write and falls back on read', async () => {
@@ -124,8 +141,8 @@ describe('Gemini model tiers', () => {
 
   it('offers Flash-Lite, Flash, and Pro in the picker, cheapest first', () => {
     expect(GEMINI_MODELS.map((m) => m.id)).toEqual([
-      'gemini-3.1-flash-lite',
-      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
       'gemini-3.1-pro-preview',
     ]);
   });

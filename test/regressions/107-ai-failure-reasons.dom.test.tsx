@@ -16,6 +16,8 @@ vi.mock('@/lib/anthropic-client', async (importOriginal) => ({ ...((await import
 
 const settings = vi.hoisted(() => ({ geminiKey: 'gm-key' as string | null, provider: 'gemini' }));
 vi.mock('@/lib/ai-settings', () => ({
+  DEFAULT_ANTHROPIC_FAST_MODEL: 'claude-haiku-5-5',
+  DEFAULT_ANTHROPIC_QUALITY_MODEL: 'claude-sonnet-5-5',
   getGeminiApiKey: async () => settings.geminiKey,
   getAIProvider: async () => settings.provider,
   getTierProvider: async () => settings.provider,

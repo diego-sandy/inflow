@@ -8,6 +8,8 @@ const setGeminiApiKey = vi.fn(async (k: string) => {
   mockSavedKey = k;
 });
 vi.mock('@/lib/ai-settings', () => ({
+  DEFAULT_ANTHROPIC_FAST_MODEL: 'claude-haiku-5-5',
+  DEFAULT_ANTHROPIC_QUALITY_MODEL: 'claude-sonnet-5-5',
   // Read by useAISession, which Settings imports for the connector key check.
   DEFAULT_GEMINI_FAST_MODEL: 'gemini-3.1-flash-lite',
   DEFAULT_GEMINI_QUALITY_MODEL: 'gemini-3.1-flash-lite',

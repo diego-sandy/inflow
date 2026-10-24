@@ -7,10 +7,13 @@ import {
   getTierProvider,
   DEFAULT_GEMINI_FAST_MODEL,
   DEFAULT_GEMINI_QUALITY_MODEL,
+  DEFAULT_ANTHROPIC_FAST_MODEL,
+  DEFAULT_ANTHROPIC_QUALITY_MODEL,
   type AIProvider,
   type AIModelTier,
 } from '@/lib/ai-settings';
 import { predictAnthropic } from '@/lib/anthropic-client';
+import { anthropicRequestShape } from '@/lib/anthropic-thinking';
 import { requestAnthropicViaCompanion, requestGeminiViaCompanion, isCompanionConnected, companionHasKey } from '@/lib/mcp/bridge-client';
 import {
   describeEmptyAnthropic,
@@ -81,8 +84,8 @@ const config: AIConfig = {
   qualityProvider: 'gemini',
   geminiKey: null,
   anthropicKey: null,
-  fastModel: 'claude-haiku-4-5',
-  qualityModel: 'claude-sonnet-5',
+  fastModel: DEFAULT_ANTHROPIC_FAST_MODEL,
+  qualityModel: DEFAULT_ANTHROPIC_QUALITY_MODEL,
   geminiFastModel: DEFAULT_GEMINI_FAST_MODEL,
   geminiQualityModel: DEFAULT_GEMINI_QUALITY_MODEL,
 };
@@ -361,13 +364,14 @@ async function predictAnthropicViaCompanion(
 ): Promise<string | null> {
   let data: any;
   try {
-    const maxTokens = opts.maxTokens && opts.maxTokens > 0 ? Math.max(opts.maxTokens, 64) : 1024;
+    // The same per-model thinking settings as the direct call (anthropic-thinking).
+    const shape = anthropicRequestShape(model, opts.maxTokens && opts.maxTokens > 0 ? Math.max(opts.maxTokens, 64) : 1024);
     const payload: Record<string, unknown> = {
       model,
-      max_tokens: maxTokens,
+      max_tokens: shape.maxTokens,
       messages: [{ role: 'user', content: prompt }],
       ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
-      ...(/haiku/i.test(model) ? {} : { thinking: { type: 'disabled' } }),
+      ...shape.extra,
     };
     data = await requestAnthropicViaCompanion(payload);
   } catch (e: any) {

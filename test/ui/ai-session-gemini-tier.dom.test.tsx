@@ -6,6 +6,8 @@ import '../dom-setup';
 vi.mock('@/lib/anthropic-client', () => ({ predictAnthropic: vi.fn() }));
 
 vi.mock('@/lib/ai-settings', () => ({
+  DEFAULT_ANTHROPIC_FAST_MODEL: 'claude-haiku-5-5',
+  DEFAULT_ANTHROPIC_QUALITY_MODEL: 'claude-sonnet-5-5',
   getGeminiApiKey: async () => 'gm-test-key',
   getAIProvider: async () => 'gemini',
   getTierProvider: async () => 'gemini',

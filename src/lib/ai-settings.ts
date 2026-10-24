@@ -46,36 +46,56 @@ export interface ModelOption {
 /** @deprecated Use {@link ModelOption}. Kept for existing imports. */
 export type AnthropicModelOption = ModelOption;
 
-/** Claude models offered in Settings, cheapest → most capable. */
+/**
+ * Claude models offered in Settings, cheapest → most capable. Keep these the
+ * newest of each line: `npm run check:models` flags newer ones and retirements
+ * at release time. Each needs its own thinking setting (see anthropic-thinking).
+ */
 export const ANTHROPIC_MODELS: ModelOption[] = [
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5', blurb: 'Fastest & cheapest — best for bulk tagging' },
-  { id: 'claude-sonnet-5', label: 'Sonnet 5', blurb: 'Balanced quality and cost' },
-  { id: 'claude-opus-5', label: 'Opus 5', blurb: 'Most capable — best writing' },
+  { id: 'claude-haiku-5-5', label: 'Haiku 5.5', blurb: 'Fastest & cheapest — best for bulk tagging' },
+  { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', blurb: 'Balanced quality and cost' },
+  { id: 'claude-opus-5-5', label: 'Opus 5.5', blurb: 'Most capable — best writing' },
 ];
 
 const ANTHROPIC_MODEL_IDS = new Set(ANTHROPIC_MODELS.map((m) => m.id));
 
+/**
+ * Model ids inflow used to offer, mapped to their successor in the same line,
+ * so a saved choice moves up with the line instead of falling back to the
+ * default. Haiku 4.5 is past its earliest retirement date; Sonnet and Opus 5
+ * have 5.5 successors (Anthropic's model status table).
+ */
+const ANTHROPIC_RENAMED: Record<string, string> = {
+  'claude-haiku-4-5': 'claude-haiku-5-5',
+  'claude-sonnet-5': 'claude-sonnet-5-5',
+  'claude-opus-5': 'claude-opus-5-5',
+};
+
 /** Cheap tier default: Haiku for bulk categorization/summaries. */
-export const DEFAULT_ANTHROPIC_FAST_MODEL = 'claude-haiku-4-5';
+export const DEFAULT_ANTHROPIC_FAST_MODEL = 'claude-haiku-5-5';
 /** Quality tier default: Sonnet for drafting and the insights chat. */
-export const DEFAULT_ANTHROPIC_QUALITY_MODEL = 'claude-sonnet-5';
+export const DEFAULT_ANTHROPIC_QUALITY_MODEL = 'claude-sonnet-5-5';
 
 /** Gemini models offered in Settings, cheapest → most capable. */
 export const GEMINI_MODELS: ModelOption[] = [
-  { id: 'gemini-3.1-flash-lite', label: 'Flash-Lite', blurb: 'Fastest & cheapest — best for bulk tagging' },
-  { id: 'gemini-3.6-flash', label: 'Flash', blurb: 'Balanced quality and cost' },
+  { id: 'gemini-3.5-flash-lite', label: 'Flash-Lite', blurb: 'Fastest & cheapest — best for bulk tagging' },
+  { id: 'gemini-3.8-flash', label: 'Flash', blurb: 'Balanced quality and cost' },
   { id: 'gemini-3.1-pro-preview', label: 'Pro', blurb: 'Most capable — best writing' },
 ];
 
 const GEMINI_MODEL_IDS = new Set(GEMINI_MODELS.map((m) => m.id));
 
 /**
- * Model ids Google has superseded, mapped to what replaced them, so a saved
- * choice follows the model rather than falling back to the default. Google's
- * deprecations page lists gemini-3.5-flash as routed to gemini-3.6-flash.
+ * Model ids inflow used to offer, mapped to what replaced them, so a saved
+ * choice follows the model rather than falling back to the default. From
+ * Google's deprecations page: gemini-3.1-flash-lite shuts down May 7, 2027
+ * with gemini-3.5-flash-lite as its replacement; gemini-3.5-flash routes to
+ * gemini-3.6-flash, itself superseded by gemini-3.8-flash.
  */
 const GEMINI_RENAMED: Record<string, string> = {
-  'gemini-3.5-flash': 'gemini-3.6-flash',
+  'gemini-3.1-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-3.5-flash': 'gemini-3.8-flash',
+  'gemini-3.6-flash': 'gemini-3.8-flash',
 };
 
 /**
@@ -83,8 +103,8 @@ const GEMINI_RENAMED: Record<string, string> = {
  * for everything, so out of the box behavior is unchanged. Users can bump the
  * quality tier up to Flash or Pro in Settings if they want stronger writing.
  */
-export const DEFAULT_GEMINI_FAST_MODEL = 'gemini-3.1-flash-lite';
-export const DEFAULT_GEMINI_QUALITY_MODEL = 'gemini-3.1-flash-lite';
+export const DEFAULT_GEMINI_FAST_MODEL = 'gemini-3.5-flash-lite';
+export const DEFAULT_GEMINI_QUALITY_MODEL = 'gemini-3.5-flash-lite';
 
 export async function getAIProvider(): Promise<AIProvider> {
   return (await readLocal<AIProvider>(PROVIDER_KEY)) === 'anthropic' ? 'anthropic' : 'gemini';
@@ -131,7 +151,7 @@ export const AI_MODEL_CATALOG: ProviderModelOption[] = [
 ].map((m) =>
   m.id === DEFAULT_GEMINI_FAST_MODEL
     ? { ...m, recommendedFor: 'fast' as const }
-    : m.id === 'claude-sonnet-5'
+    : m.id === DEFAULT_ANTHROPIC_QUALITY_MODEL
       ? { ...m, recommendedFor: 'quality' as const }
       : m,
 );
@@ -150,9 +170,10 @@ export async function clearAnthropicApiKey(): Promise<void> {
 
 /** Resolve the configured model for a tier, validating against the known set. */
 export async function getAnthropicModel(tier: AIModelTier): Promise<string> {
-  const stored = await readLocal<string>(
+  const saved = await readLocal<string>(
     tier === 'quality' ? ANTHROPIC_QUALITY_MODEL_KEY : ANTHROPIC_FAST_MODEL_KEY,
   );
+  const stored = saved ? ANTHROPIC_RENAMED[saved] ?? saved : saved;
   if (stored && ANTHROPIC_MODEL_IDS.has(stored)) return stored;
   return tier === 'quality' ? DEFAULT_ANTHROPIC_QUALITY_MODEL : DEFAULT_ANTHROPIC_FAST_MODEL;
 }

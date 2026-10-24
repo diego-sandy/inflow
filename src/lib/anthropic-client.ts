@@ -11,6 +11,7 @@
  */
 
 import { describeEmptyAnthropic, describeHttpFailure, describeKeyRejection, isKeyRejection } from './ai-failure';
+import { anthropicRequestShape } from './anthropic-thinking';
 
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -64,10 +65,9 @@ export function anthropicErrorMessage(status: number): string {
 /**
  * One-shot, non-streaming completion against the Messages API.
  *
- * Thinking: Haiku 4.5 has extended thinking OFF by default, so we omit the
- * field. The Claude 5 family turns adaptive thinking ON by default, which would
- * consume our (deliberately small) `max_tokens` before any answer text — so we
- * explicitly disable it for those models to keep responses fast and untruncated.
+ * Thinking would consume our (deliberately small) `max_tokens` before any
+ * answer text, so each model gets the setting that turns it down furthest; see
+ * anthropicRequestShape for why that differs by model.
  *
  * Returns the concatenated text blocks, or null on any error (including a
  * non-OK status) so it drops into the same seam as the Gemini predictor.
@@ -82,8 +82,10 @@ export async function predictAnthropic(
   // answers aren't truncated. A positive value is an explicit cap (floored so a
   // response can't be truncated to nothing).
   const requested = options?.maxTokens;
-  const maxTokens = requested && requested > 0 ? Math.max(requested, 64) : ANTHROPIC_UNCAPPED_MAX;
-  const thinking = /haiku/i.test(model) ? undefined : { type: 'disabled' as const };
+  const shape = anthropicRequestShape(
+    model,
+    requested && requested > 0 ? Math.max(requested, 64) : ANTHROPIC_UNCAPPED_MAX,
+  );
   const stream = !!options?.onToken;
 
   try {
@@ -98,9 +100,9 @@ export async function predictAnthropic(
       signal: options?.signal,
       body: JSON.stringify({
         model,
-        max_tokens: maxTokens,
+        max_tokens: shape.maxTokens,
         ...(stream ? { stream: true } : {}),
-        ...(thinking ? { thinking } : {}),
+        ...shape.extra,
         ...(options?.systemPrompt ? { system: options.systemPrompt } : {}),
         messages: [{ role: 'user', content: prompt }],
       }),

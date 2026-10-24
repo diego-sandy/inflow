@@ -28,6 +28,12 @@ jobs:
       # Gate the release on the test suite.
       - run: npm test
 
+      # Are the AI models inflow offers still current? Reads Anthropic's and
+      # Google's public lifecycle pages (no keys). Fails only if a model inflow
+      # offers is retired or shut down; deprecations and newer models are
+      # printed as warnings in the log.
+      - run: npm run check:models
+
       # Builds the extension and produces dist/inflow-<version>-chrome.zip
       - run: npm run zip
 

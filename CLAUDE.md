@@ -37,10 +37,11 @@ inflow is a Chrome extension (MV3) that provides a keyboard-driven messaging cli
 
 Ship small and often — normally bump the **patch** each release (`0.5.1`, `0.5.2`, …); reserve minor/major for larger milestones.
 
-1. Update `CHANGELOG.md` with the new `## [x.y.z] - DATE` section (the What's-new modal reads these — see `src/lib/changelog.ts`)
-2. `npm version <patch|minor|major>` — bumps `package.json` + creates `vX.Y.Z` tag (keep this 3-part semver)
-3. `git push --follow-tags` — triggers the GitHub Actions release workflow
-4. CI runs tests, builds the zip, and creates a GitHub Release with release notes from the changelog
+1. Run `npm run check:models` and read the warnings. It compares the AI models inflow offers (`src/lib/ai-settings.ts`) with Anthropic's and Google's public lifecycle pages: retired or shut-down models fail it; deprecations, announced shutdowns, replacements and newer models are warnings to decide on. CI runs it again, but deciding whether to move to a newer model belongs before the release, not in the log after.
+2. Update `CHANGELOG.md` with the new `## [x.y.z] - DATE` section (the What's-new modal reads these — see `src/lib/changelog.ts`)
+3. `npm version <patch|minor|major>` — bumps `package.json` + creates `vX.Y.Z` tag (keep this 3-part semver)
+4. `git push --follow-tags` — triggers the GitHub Actions release workflow
+5. CI runs tests and the model check, builds the zip, and creates a GitHub Release with release notes from the changelog
 
 ### Versioning note
 

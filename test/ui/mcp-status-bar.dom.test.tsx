@@ -83,9 +83,11 @@ it('makes Setup look like the control it is, not a label', () => {
   render(<McpStatusBar />);
   const setup = screen.getByRole('button', { name: /^Set up$/ });
 
-  // Its two neighbours carry weight at rest (Connect is filled and ringed,
-  // Disconnect is ringed); Setup carried none, so it read as plain text.
-  // It stays quiet at rest and gains a surface and a border under the pointer.
+  // Its neighbours carry weight at rest (Connect is filled and ringed,
+  // Disconnect is ringed). Set up used to gain a border only on hover, so at
+  // rest it read as plain text; it now has its surface and outline at rest too.
+  expect(setup.className).toMatch(/(^|\s)ring-edge(\s|$)/);
+  expect(setup.className).toMatch(/(^|\s)bg-surface(\s|$)/);
+  expect(setup.className).not.toMatch(/ring-transparent/);
   expect(setup.className).toMatch(/hover:bg-surface-hover/);
-  expect(setup.className).toMatch(/hover:ring-edge/);
 });

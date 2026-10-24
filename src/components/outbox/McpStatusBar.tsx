@@ -104,9 +104,12 @@ export function McpStatusBar() {
           <button
             // The setup guide lives in the wizard, so it exists in one place only.
             onClick={() => useUIStore.getState().openSetup({ step: 'claude' })}
-            className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted ring-1 ring-inset ring-transparent transition-colors hover:bg-surface-hover hover:text-fg-strong hover:ring-edge"
+            // Outlined and on a surface at rest, so it reads as a button next to the
+            // filled Connect even before the pointer is over it.
+            className="inline-flex items-center gap-1 rounded-md bg-surface px-2.5 py-1 text-xs font-medium text-fg-secondary shadow-sm ring-1 ring-inset ring-edge transition-colors hover:bg-surface-hover hover:text-fg-strong"
           >
             Set up
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </button>
         )}
         {on ? (

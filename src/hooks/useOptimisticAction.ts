@@ -78,6 +78,11 @@ export function useOptimisticAction() {
     if (isLocalDraft(conversation)) return;
     const actionId = nanoid();
     const previousCategory = conversation.category || 'PRIMARY_INBOX';
+    // Roll back to the archived flag we saw — hardcoding archived: 0 with a
+    // previousCategory of 'ARCHIVE' (an archived thread archived again from the
+    // InMail tab) produces a row no tab query matches, and the conversation
+    // vanishes from the UI until a sync heals it.
+    const previousArchived = conversation.archived ?? 0;
     const bridgeMsg = { type: 'ARCHIVE' as const, conversationId: conversation.id };
 
     // Optimistically update IndexedDB
@@ -88,7 +93,7 @@ export function useOptimisticAction() {
       conversationId: conversation.id,
       status: 'pending',
       timestamp: Date.now(),
-      rollbackData: { archived: 0, category: previousCategory },
+      rollbackData: { archived: previousArchived, category: previousCategory },
     });
 
     // Show undo toast
@@ -96,7 +101,7 @@ export function useOptimisticAction() {
       message: 'Conversation archived',
       undoConversationId: conversation.id,
       undoAction: async () => {
-        await db.conversations.update(conversation.id, { archived: 0, category: previousCategory });
+        await db.conversations.update(conversation.id, { archived: previousArchived, category: previousCategory });
         await db.pendingActions.delete(actionId);
         if (navigator.onLine) {
           sendBridgeMessage({ type: 'UNARCHIVE', conversationId: conversation.id }).catch(() => {});
@@ -117,7 +122,7 @@ export function useOptimisticAction() {
           await db.pendingActions.update(actionId, { status: 'confirmed' });
         } else {
           // Rollback
-          await db.conversations.update(conversation.id, { archived: 0, category: previousCategory });
+          await db.conversations.update(conversation.id, { archived: previousArchived, category: previousCategory });
           await db.pendingActions.update(actionId, { status: 'failed' });
           showToast({ message: 'Failed to archive — rolled back' });
         }
@@ -128,7 +133,7 @@ export function useOptimisticAction() {
           await queueAction(actionId, bridgeMsg);
           return;
         }
-        await db.conversations.update(conversation.id, { archived: 0, category: previousCategory });
+        await db.conversations.update(conversation.id, { archived: previousArchived, category: previousCategory });
         await db.pendingActions.update(actionId, { status: 'failed' });
         showToast({ message: 'Failed to archive — rolled back' });
       });
@@ -380,6 +385,10 @@ export function useOptimisticAction() {
 
     const actionId = nanoid();
     const previousCategory = conv.category || 'PRIMARY_INBOX';
+    // See archiveConversation: rolling back to archived: 0 with category
+    // 'ARCHIVE' (sending from an already-archived thread) matches no tab
+    // query and the conversation vanishes from the UI.
+    const previousArchived = conv.archived ?? 0;
     const archiveBridgeMsg = { type: 'ARCHIVE' as const, conversationId };
 
     // 1. Archive optimistically FIRST
@@ -390,7 +399,7 @@ export function useOptimisticAction() {
       conversationId,
       status: 'pending',
       timestamp: Date.now(),
-      rollbackData: { archived: 0, category: previousCategory },
+      rollbackData: { archived: previousArchived, category: previousCategory },
     });
 
     // 2. Show undo toast
@@ -398,7 +407,7 @@ export function useOptimisticAction() {
       message: 'Message sent & archived',
       undoConversationId: conversationId,
       undoAction: async () => {
-        await db.conversations.update(conversationId, { archived: 0, category: previousCategory });
+        await db.conversations.update(conversationId, { archived: previousArchived, category: previousCategory });
         await db.pendingActions.delete(actionId);
         if (navigator.onLine) {
           sendBridgeMessage({ type: 'UNARCHIVE', conversationId }).catch(() => {});
@@ -417,6 +426,11 @@ export function useOptimisticAction() {
 
     const ok = await sendMessage(conversationId, body, files, replyTo);
     if (!ok) {
+      // The archive was optimistic on a send that never happened — undo it and
+      // retire the action, or the stranded 'pending' row would guard the
+      // conversation from server merges indefinitely.
+      await db.conversations.update(conversationId, { archived: previousArchived, category: previousCategory });
+      await db.pendingActions.update(actionId, { status: 'failed' });
       showToast({ message: 'Failed to send message' });
       return;
     }
@@ -425,7 +439,7 @@ export function useOptimisticAction() {
       if (res.success) {
         await db.pendingActions.update(actionId, { status: 'confirmed' });
       } else {
-        await db.conversations.update(conversationId, { archived: 0, category: previousCategory });
+        await db.conversations.update(conversationId, { archived: previousArchived, category: previousCategory });
         await db.pendingActions.update(actionId, { status: 'failed' });
         showToast({ message: 'Failed to archive — rolled back' });
       }
@@ -434,7 +448,7 @@ export function useOptimisticAction() {
         await queueAction(actionId, archiveBridgeMsg);
         return;
       }
-      await db.conversations.update(conversationId, { archived: 0, category: previousCategory });
+      await db.conversations.update(conversationId, { archived: previousArchived, category: previousCategory });
       await db.pendingActions.update(actionId, { status: 'failed' });
       showToast({ message: 'Failed to archive — rolled back' });
     }

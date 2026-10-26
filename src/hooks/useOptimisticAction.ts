@@ -745,6 +745,17 @@ export function useOptimisticAction() {
     // Optimistically update local DB
     await db.messages.update(messageId, { body: newBody, editedAt: Date.now() });
 
+    // Rollback = revert only if OUR write is still in place — a rapid second
+    // edit may have landed since, and restoring the pre-THIS-edit body would
+    // clobber it.
+    const rollbackEdit = async () => {
+      await db.transaction('rw', db.messages, async () => {
+        const cur = await db.messages.get(messageId);
+        if (!cur || cur.body !== newBody) return;
+        await db.messages.update(messageId, { body: oldMessage.body, editedAt: oldMessage.editedAt });
+      });
+    };
+
     if (!navigator.onLine) {
       await createQueuedAction({
         type: 'edit_message',
@@ -765,7 +776,7 @@ export function useOptimisticAction() {
       const res = await sendBridgeMessage(bridgeMsg);
 
       if (!res.success) {
-        await db.messages.update(messageId, { body: oldMessage.body, editedAt: oldMessage.editedAt });
+        await rollbackEdit();
         await db.pendingActions.update(actionId, { status: 'failed' });
         showToast({ message: res.error || 'Failed to edit message' });
         return false;
@@ -777,7 +788,7 @@ export function useOptimisticAction() {
         await queueAction(actionId, bridgeMsg);
         return true;
       }
-      await db.messages.update(messageId, { body: oldMessage.body, editedAt: oldMessage.editedAt });
+      await rollbackEdit();
       await db.pendingActions.update(actionId, { status: 'failed' });
       showToast({ message: 'Failed to edit message' });
       return false;
@@ -789,6 +800,7 @@ export function useOptimisticAction() {
     // the same message can't both read the old reactions and clobber each other.
     let oldReactions: ReactionSummary[] = [];
     let found = false;
+    let appliedViewerReaction = false;
     await db.transaction('rw', db.messages, async () => {
       const msg = await db.messages.get(messageId);
       if (!msg) return;
@@ -809,11 +821,13 @@ export function useOptimisticAction() {
         }
       } else if (existingIdx >= 0) {
         // Emoji exists but viewer hasn't reacted — increment
+        appliedViewerReaction = true;
         newReactions = oldReactions.map((r, i) =>
           i === existingIdx ? { ...r, count: r.count + 1, viewerReacted: true } : r
         );
       } else {
         // New reaction
+        appliedViewerReaction = true;
         newReactions = [...oldReactions, { emoji, count: 1, firstReactedAt: Date.now(), viewerReacted: true }];
       }
 
@@ -821,6 +835,33 @@ export function useOptimisticAction() {
       await db.messages.update(messageId, { reactions: newReactions.length > 0 ? newReactions : undefined });
     });
     if (!found) return;
+
+    // Rollback = undo only THIS call's delta against CURRENT state — never
+    // write the pre-call snapshot back wholesale, which would clobber a
+    // concurrent reaction that succeeded in the meantime.
+    const rollbackReaction = async () => {
+      await db.transaction('rw', db.messages, async () => {
+        const msg = await db.messages.get(messageId);
+        if (!msg) return;
+        const current = msg.reactions || [];
+        const idx = current.findIndex((r) => r.emoji === emoji);
+        let next: ReactionSummary[];
+        if (appliedViewerReaction) {
+          // We added our reaction — remove it, but only if it's still there.
+          if (idx < 0 || !current[idx].viewerReacted) return;
+          next = current[idx].count <= 1
+            ? current.filter((_, i) => i !== idx)
+            : current.map((r, i) => (i === idx ? { ...r, count: r.count - 1, viewerReacted: false } : r));
+        } else {
+          // We removed our reaction — re-add it, unless it's back already.
+          if (idx >= 0 && current[idx].viewerReacted) return;
+          next = idx < 0
+            ? [...current, { emoji, count: 1, firstReactedAt: Date.now(), viewerReacted: true }]
+            : current.map((r, i) => (i === idx ? { ...r, count: r.count + 1, viewerReacted: true } : r));
+        }
+        await db.messages.update(messageId, { reactions: next.length > 0 ? next : undefined });
+      });
+    };
 
     const bridgeMsg = { type: 'REACT_EMOJI' as const, conversationId, messageId, emoji };
 
@@ -845,7 +886,7 @@ export function useOptimisticAction() {
         if (res.success) {
           await db.pendingActions.update(actionId, { status: 'confirmed' });
         } else {
-          await db.messages.update(messageId, { reactions: oldReactions.length > 0 ? oldReactions : undefined });
+          await rollbackReaction();
           await db.pendingActions.update(actionId, { status: 'failed' });
           showToast({ message: 'Failed to react' });
         }
@@ -855,7 +896,7 @@ export function useOptimisticAction() {
           await queueAction(actionId, bridgeMsg);
           return;
         }
-        await db.messages.update(messageId, { reactions: oldReactions.length > 0 ? oldReactions : undefined });
+        await rollbackReaction();
         await db.pendingActions.update(actionId, { status: 'failed' });
         showToast({ message: 'Failed to react' });
       });

@@ -13,7 +13,7 @@
 
 import { getMemberUrn } from '../auth/session';
 import { fetchMessages } from '../api/messages';
-import { normalizeMessages, extractProfileId, getParticipantPicture, extractReactions, needsParticipantRepair, extractAudioAttachment, extractParticipantsFromIncluded, isValidProfileUrn, type ExtractedParticipants } from '@/lib/voyager-normalizer';
+import { normalizeMessages, extractProfileId, getParticipantPicture, extractReactions, messagePreviewText, needsParticipantRepair, extractAudioAttachment, extractParticipantsFromIncluded, isValidProfileUrn, type ExtractedParticipants } from '@/lib/voyager-normalizer';
 import { withoutRecalled, preserveSseFields } from '@/lib/message-dedup';
 import { repairConversationParticipants } from '../sync/repair-participants';
 import { reconcileRecalledMessages } from '../sync/reconcile-messages';
@@ -166,7 +166,7 @@ async function applyInboundMessageToConversation(
       // deliveredAt and should update the preview text). An edit echo of an
       // OLDER message must not rewind the preview under a newer timestamp.
       if (hasNewInbound || latest.createdAt >= conv.lastActivityAt) {
-        updates.lastMessage = latest.body || 'New message';
+        updates.lastMessage = messagePreviewText(latest);
       }
       if (!isMutationSuppressed(convId) && !pending && conv.category !== 'SPAM' && hasNewInbound) {
         // Mark unread unless our own newer reply in the same batch (a catch-up
@@ -217,7 +217,7 @@ async function applyInboundMessageToConversation(
       participantUrns: haveEventParts ? eventParticipants!.participantUrns : sender ? [sender.senderUrn] : [],
       participantNames: haveEventParts ? eventParticipants!.participantNames : sender ? [sender.senderName] : [],
       participantPictures: haveEventParts ? eventParticipants!.participantPictures : sender ? [sender.senderPicture] : [],
-      lastMessage: latest.body || 'New message',
+      lastMessage: messagePreviewText(latest),
       lastActivityAt: latest.createdAt,
       read: senders.length > 0 ? 0 : 1,
       archived: 0,
@@ -1194,7 +1194,7 @@ async function _doFetchLatest(
       lastActivityAt: Math.max(latest.createdAt, existing.lastActivityAt),
     };
     if (hasNewInbound || latest.createdAt >= existing.lastActivityAt) {
-      updates.lastMessage = latest.body || 'New message';
+      updates.lastMessage = messagePreviewText(latest);
     }
     if (hasNewInbound && !isMutationSuppressed(conversationId) && existing.category !== 'SPAM') {
       // Always mark as unread for genuinely new messages, even during

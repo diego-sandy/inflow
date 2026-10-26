@@ -373,13 +373,16 @@ export function useKeyboard(conversations: Conversation[], composeRef: React.Ref
         return;
       }
 
-      // O — Move to Other
+      // O — Move to Other (or back to Focused if already in Other)
       if (e.key === 'o' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         const conv = store.selectedConversationId
           ? convs.find((c) => c.id === store.selectedConversationId)
           : convs[store.selectedIndex];
-        if (conv) act.moveToOther(conv);
+        if (conv) {
+          if (conv.category === 'SECONDARY_INBOX') act.moveToFocused(conv);
+          else act.moveToOther(conv);
+        }
         return;
       }
 
@@ -434,7 +437,10 @@ export function useKeyboard(conversations: Conversation[], composeRef: React.Ref
       if (e.key === 'r' && !e.shiftKey && !e.metaKey && !e.ctrlKey && store.selectedConversationId) {
         e.preventDefault();
         if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
-        act.markRead(store.selectedConversationId);
+        // Pass mergedIds like every other markRead call site — the display-merged
+        // twin isn't in the list, so nothing else can ever clear its unread flag.
+        const selected = convs.find((c) => c.id === store.selectedConversationId);
+        act.markRead(store.selectedConversationId, selected?.mergedIds);
         store.setComposeActive(true);
         setTimeout(() => composeRef.current?.focus(), 0);
         return;

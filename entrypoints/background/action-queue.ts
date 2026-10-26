@@ -30,6 +30,15 @@ let draining = false;
 /** Age threshold after which confirmed/failed actions are cleaned up. */
 const ACTION_CLEANUP_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
 
+/**
+ * Age after which a 'pending' row is considered stranded. Pending rows are
+ * transitioned only by an in-page promise callback — a tab closed, crashed,
+ * or discarded mid-flight leaves the row 'pending' forever, where it guards
+ * its conversation from server merges indefinitely (hasPendingAction) and
+ * grows the table without bound. Real in-flight actions resolve in seconds.
+ */
+const PENDING_ABANDON_AGE_MS = 60 * 60 * 1000; // 1 hour
+
 function replayPriority(action: PendingAction): number {
   // LinkedIn moves a thread back to Focused when a new message lands. For
   // offline send+archive / send+move flows, replay sends before later category
@@ -47,12 +56,36 @@ function replayPriority(action: PendingAction): number {
   return 0;
 }
 
-function orderQueuedActions(a: PendingAction, b: PendingAction): number {
-  if (a.conversationId === b.conversationId) {
-    const priority = replayPriority(a) - replayPriority(b);
-    if (priority !== 0) return priority;
+/**
+ * Order queued actions for replay: global timestamp order, but within each
+ * conversation's subsequence sends replay before category mutations (see
+ * replayPriority). Implemented as a per-conversation stable partition
+ * reassembled into the original slots — NOT as one Array.sort comparator:
+ * "priority only within the same conversation" is not a transitive relation,
+ * and an intransitive comparator makes the sort order implementation-defined
+ * (interleaved conversations replayed a category move before that
+ * conversation's own send).
+ */
+function orderQueuedActions(queued: PendingAction[]): PendingAction[] {
+  const byConv = new Map<string, PendingAction[]>();
+  for (const action of queued) {
+    let list = byConv.get(action.conversationId);
+    if (!list) byConv.set(action.conversationId, (list = []));
+    list.push(action);
   }
-  return a.timestamp - b.timestamp;
+  for (const list of byConv.values()) {
+    // Array.sort is stable, so equal priorities keep their timestamp order.
+    list.sort((a, b) => replayPriority(a) - replayPriority(b));
+  }
+  // Each slot keeps its conversation; consume that conversation's reordered
+  // actions in sequence so cross-conversation chronology is untouched.
+  const cursors = new Map<string, number>();
+  return queued.map((action) => {
+    const list = byConv.get(action.conversationId)!;
+    const idx = cursors.get(action.conversationId) ?? 0;
+    cursors.set(action.conversationId, idx + 1);
+    return list[idx];
+  });
 }
 
 /**
@@ -61,6 +94,18 @@ function orderQueuedActions(a: PendingAction, b: PendingAction): number {
  */
 async function cleanupStaleActions(): Promise<void> {
   try {
+    // Reclaim stranded in-flight actions: mark hour-old 'pending' rows as
+    // 'failed' so they stop guarding their conversation and age out with the
+    // normal cleanup below.
+    const abandonCutoff = Date.now() - PENDING_ABANDON_AGE_MS;
+    const abandoned = await db.pendingActions
+      .filter((a) => a.status === 'pending' && a.timestamp < abandonCutoff)
+      .toArray();
+    if (abandoned.length > 0) {
+      await db.pendingActions.bulkPut(abandoned.map((a) => ({ ...a, status: 'failed' as const })));
+      debugLog('info', `[ACTION-QUEUE] Reclaimed ${abandoned.length} abandoned pending action(s)`);
+    }
+
     const cutoff = Date.now() - ACTION_CLEANUP_AGE_MS;
     const stale = await db.pendingActions
       .filter((a) =>
@@ -97,11 +142,9 @@ export async function drainActionQueue(): Promise<void> {
     // Prune old confirmed/failed actions before draining
     await cleanupStaleActions();
 
-    const queued = await db.pendingActions
-      .where('status')
-      .equals('queued')
-      .sortBy('timestamp');
-    queued.sort(orderQueuedActions);
+    const queued = orderQueuedActions(
+      await db.pendingActions.where('status').equals('queued').sortBy('timestamp'),
+    );
 
     if (queued.length === 0) return;
 

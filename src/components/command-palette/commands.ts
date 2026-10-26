@@ -13,7 +13,9 @@ export function buildCommands(actions: {
   /** User's custom name for the Inbox section (e.g. "Messages"). */
   inboxSectionLabel?: string;
   archiveSelected: () => void;
+  /** Moves the selection to Other — or back to Focused when it's already there. */
   moveToOtherSelected: () => void;
+  selectedInOther?: boolean;
   moveToSpamSelected: () => void;
   markReadSelected: () => void;
   markUnreadSelected: () => void;
@@ -52,7 +54,12 @@ export function buildCommands(actions: {
   const inbox = actions.inboxSectionLabel?.trim() || 'Inbox';
   return [
     { id: 'archive', label: 'Archive conversation', shortcut: 'E', action: actions.archiveSelected },
-    { id: 'move-to-other', label: `Move to ${labels.other}`, shortcut: 'O', action: actions.moveToOtherSelected },
+    {
+      id: 'move-to-other',
+      label: actions.selectedInOther ? `Move to ${labels.focused}` : `Move to ${labels.other}`,
+      shortcut: 'O',
+      action: actions.moveToOtherSelected,
+    },
     { id: 'move-to-spam', label: 'Mark as spam', shortcut: '!', action: actions.moveToSpamSelected },
     { id: 'mark-read', label: 'Mark as read', shortcut: '', action: actions.markReadSelected },
     { id: 'mark-unread', label: 'Mark as unread', shortcut: 'U', action: actions.markUnreadSelected },

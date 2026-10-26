@@ -8,13 +8,19 @@ import { GroupAvatar } from '../common/GroupAvatar';
 import { McpStatusBar } from './McpStatusBar';
 import { OutboxRow } from './OutboxRow';
 
-type Group = 'ready' | 'scheduled' | 'drafts' | 'failed';
+type Group = 'ready' | 'review' | 'scheduled' | 'drafts' | 'waiting' | 'failed';
 
-/** Shown in this order, which is also the order j/k walk through them. */
+/**
+ * Shown in this order, which is also the order j/k walk through them. The two
+ * held groups (lib/queue-holds) sit by what they need: "They replied" wants
+ * the user's eyes now, "Waiting for their reply" wants nothing until it moves.
+ */
 const GROUPS: { key: Group; title: string }[] = [
   { key: 'ready', title: 'Ready to send' },
+  { key: 'review', title: 'They replied' },
   { key: 'scheduled', title: 'Scheduled' },
   { key: 'drafts', title: 'Drafts' },
+  { key: 'waiting', title: 'Waiting for their reply' },
   { key: 'failed', title: 'Failed' },
 ];
 
@@ -23,6 +29,10 @@ function chip(group: Group, msg: ScheduledMessage): { label: string; className: 
   switch (group) {
     case 'ready':
       return { label: 'Ready', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' };
+    case 'review':
+      return { label: 'Replied', className: 'bg-violet-500/15 text-violet-700 dark:text-violet-300' };
+    case 'waiting':
+      return { label: 'Waiting', className: 'bg-surface-input text-fg-muted' };
     case 'scheduled':
       return { label: 'Scheduled', className: 'bg-blue-500/15 text-blue-700 dark:text-blue-300' };
     case 'failed':
@@ -96,7 +106,7 @@ function QueueItem({
  * Invitations, so j/k move through it the same way.
  */
 export function OutboxView() {
-  const { ready, scheduled, drafts, failed } = useOutbox();
+  const { ready, scheduled, drafts, failed, holds } = useOutbox();
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The queue's order as last rendered, to find what follows a message that
@@ -125,20 +135,23 @@ export function OutboxView() {
     (m.inMailSubject || '').toLowerCase().includes(q) ||
     m.body.toLowerCase().includes(q);
 
-  const shown: Record<Group, ScheduledMessage[]> = { ready: [], scheduled: [], drafts: [], failed: [] };
-  const held: { g: Group; m: ScheduledMessage }[] = [];
+  const shown: Record<Group, ScheduledMessage[]> = { ready: [], review: [], scheduled: [], drafts: [], waiting: [], failed: [] };
+  const inFlight: { g: Group; m: ScheduledMessage }[] = [];
   for (const [group, list] of [['ready', ready], ['scheduled', scheduled], ['drafts', drafts], ['failed', failed]] as const) {
     for (const m of list) {
-      const g = (m.status === 'sending' && groupOf.current.get(m.id)) || group;
+      const hold = holds.get(m.id);
+      const g: Group =
+        (m.status === 'sending' && groupOf.current.get(m.id)) ||
+        (hold ? (hold.kind === 'waiting' ? 'waiting' : 'review') : group);
       groupOf.current.set(m.id, g);
       if (!match(m)) continue;
-      if (g !== group) held.push({ g, m });
+      if (g !== group && m.status === 'sending') inFlight.push({ g, m });
       else shown[g].push(m);
     }
   }
-  // A message held in its old group goes back where it was in that group,
+  // A message being sent goes back where it was in its old group,
   // not to the end of it.
-  for (const { g, m } of held) {
+  for (const { g, m } of inFlight) {
     const was = prevOrder.current.indexOf(m.id);
     const at = shown[g].findIndex((o) => prevOrder.current.indexOf(o.id) > was);
     shown[g].splice(at === -1 ? shown[g].length : at, 0, m);
@@ -293,7 +306,13 @@ export function OutboxView() {
               <>
                 {/* Keyed so per-message state (Edit, Reschedule, the delete
                     question) never carries over to the next message. */}
-                <OutboxRow key={selected.msg.id} msg={selected.msg} ready={selected.group === 'ready'} expanded />
+                <OutboxRow
+                  key={selected.msg.id}
+                  msg={selected.msg}
+                  ready={selected.group === 'ready'}
+                  hold={holds.get(selected.msg.id)}
+                  expanded
+                />
                 <p className="mt-6 pl-[52px] text-[11px] text-fg-faint">j / k to move through the queue</p>
               </>
             ) : (

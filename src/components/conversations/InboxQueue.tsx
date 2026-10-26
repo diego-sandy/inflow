@@ -7,7 +7,7 @@ import { OutboxRow } from '../outbox/OutboxRow';
  * drafts; Scheduled shows scheduled items (past-due ones surface as ready).
  */
 export function InboxQueue({ kind }: { kind: 'drafts' | 'scheduled' }) {
-  const { drafts, scheduled, ready } = useOutbox();
+  const { drafts, scheduled, ready, holds } = useOutbox();
   const readyIds = new Set(ready.map((r) => r.id));
   const items = kind === 'drafts' ? drafts : [...ready, ...scheduled];
 
@@ -27,7 +27,7 @@ export function InboxQueue({ kind }: { kind: 'drafts' | 'scheduled' }) {
       ) : (
         <div className="space-y-2 p-3">
           {items.map((m) => (
-            <OutboxRow key={m.id} msg={m} ready={readyIds.has(m.id)} />
+            <OutboxRow key={m.id} msg={m} ready={readyIds.has(m.id)} hold={holds.get(m.id)} />
           ))}
         </div>
       )}

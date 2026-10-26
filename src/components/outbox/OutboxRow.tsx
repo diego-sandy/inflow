@@ -6,12 +6,18 @@ import { sendBridgeMessage } from '@/lib/bridge';
 import { statusLabel, awaitsRecipientConfirmation, isTooLateToAutoSend } from '@/lib/scheduled-messages';
 import { GroupAvatar } from '../common/GroupAvatar';
 import type { ScheduledMessage } from '@/types/scheduled-message';
+import { INMAIL_WAIT_ERROR_RE, type QueueHold } from '@/lib/queue-holds';
 
 /** Convert epoch ms → value for <input type="datetime-local">. */
 function toLocalInput(ms: number): string {
   const d = new Date(ms - new Date().getTimezoneOffset() * 60000);
   return d.toISOString().slice(0, 16);
 }
+
+const HOLD_CHIP: Record<QueueHold['kind'], string> = {
+  waiting: 'bg-surface-input text-fg-secondary ring-edge',
+  replied: 'bg-violet-500/15 text-violet-700 ring-violet-500/30 dark:text-violet-300',
+};
 
 function badgeClass(status: ScheduledMessage['status'], ready: boolean): string {
   if (ready) return 'bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300';
@@ -34,8 +40,25 @@ function badgeClass(status: ScheduledMessage['status'], ready: boolean): string 
  *  Drafts/Scheduled views.
  *
  *  `expanded` is the reading pane: the whole message, never clamped, and the
- *  card sized to its content rather than stretched to its neighbours. */
-export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessage; ready?: boolean; dense?: boolean; expanded?: boolean }) {
+ *  card sized to its content rather than stretched to its neighbours.
+ *
+ *  `hold` says why it shouldn't go out yet (lib/queue-holds): Send is off
+ *  until that's resolved, and the reason is shown in place of a bare error. */
+export function OutboxRow({
+  msg,
+  ready: dueNow,
+  dense,
+  expanded,
+  hold,
+}: {
+  msg: ScheduledMessage;
+  ready?: boolean;
+  dense?: boolean;
+  expanded?: boolean;
+  hold?: QueueHold;
+}) {
+  // A held message is not "ready to send", whatever its time says.
+  const ready = dueNow && !hold;
   const showToast = useUIStore((s) => s.showToast);
   const [busy, setBusy] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
@@ -66,7 +89,7 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
   };
 
   const sendNow = async () => {
-    if (!db || busy) return;
+    if (!db || busy || hold) return;
     setBusy(true);
     await save({ status: 'sending' }); // claim locally so nothing double-sends
     try {
@@ -128,6 +151,9 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
       ...(body !== msg.body || subject !== (msg.inMailSubject ?? '')
         ? { recipientConfirmedAt: undefined }
         : {}),
+      // Saving an edit is looking it over: a reply that came before this no
+      // longer holds it (lib/queue-holds).
+      reviewedAt: Date.now(),
       updatedAt: Date.now(),
     });
     setEditing(false);
@@ -138,11 +164,22 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
   };
 
   const name = msg.recipientName || 'Unknown';
-  const statusChip = (
+  const statusChip = hold ? (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${HOLD_CHIP[hold.kind]}`}>
+      {hold.kind === 'waiting' ? 'Waiting for their reply' : 'They replied'}
+    </span>
+  ) : (
     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${badgeClass(msg.status, !!ready)}`}>
       {ready ? 'Ready to send' : statusLabel(msg.status)}
     </span>
   );
+  // "Still send it": the user has looked again and it still stands.
+  const keepAfterReply = () => save({ reviewedAt: Date.now() });
+  const openReply = (conversationId: string) => {
+    const store = useUIStore.getState();
+    store.setActiveSection('inbox');
+    store.openThread(conversationId, 0);
+  };
   const inMailChip = msg.inMailSubject !== undefined && (
     <span
       title="Sends as a Premium InMail and uses one credit"
@@ -207,9 +244,7 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
       <div className="mb-1 flex items-center gap-2">
         <GroupAvatar names={[msg.recipientName || 'Unknown']} pictures={['']} size={24} />
         <span className="truncate text-sm font-semibold text-fg-strong">{msg.recipientName || 'Unknown'}</span>
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${badgeClass(msg.status, !!ready)}`}>
-          {ready ? 'Ready to send' : statusLabel(msg.status)}
-        </span>
+        {statusChip}
         {msg.inMailSubject !== undefined && (
           <span
             title="Sends as a Premium InMail and uses one credit"
@@ -279,7 +314,45 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
           )}
         </>
       )}
-      {msg.status === 'failed' && msg.error && <p className="mt-1 text-[11px] text-red-500 dark:text-red-400">{msg.error}</p>}
+      {/* LinkedIn's refusal is explained by the hold below, in plainer words. */}
+      {msg.status === 'failed' && msg.error && !(hold && INMAIL_WAIT_ERROR_RE.test(msg.error)) && (
+        <p className="mt-1 text-[11px] text-red-500 dark:text-red-400">{msg.error}</p>
+      )}
+
+      {hold?.kind === 'waiting' && (
+        <div role="note" className="mt-3 rounded-md bg-surface-input px-3 py-2 text-xs text-fg-secondary ring-1 ring-inset ring-edge">
+          <p>
+            <span className="font-medium text-fg-strong">{name}</span> hasn’t replied to your InMail of{' '}
+            {format(new Date(hold.since), 'MMM d')} (“{hold.subject}”). LinkedIn won’t deliver another message until
+            they do, so this one is held.
+          </p>
+          <p className="mt-1 text-fg-muted">
+            If they reply, it moves to “They replied” for you to look over. It never goes out on its own.
+          </p>
+        </div>
+      )}
+      {hold?.kind === 'replied' && (
+        <div role="note" className="mt-3 rounded-md bg-violet-500/10 px-3 py-2 text-xs text-fg-secondary ring-1 ring-inset ring-violet-500/25">
+          <p>
+            <span className="font-medium text-fg-strong">{name}</span> replied on {format(new Date(hold.at), 'MMM d, h:mm a')}, after
+            this was written. Read the reply first: this may no longer fit.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => openReply(hold.conversationId)}
+              className="rounded-md px-2 py-1 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge hover:text-fg-strong"
+            >
+              Open the conversation
+            </button>
+            <button
+              onClick={keepAfterReply}
+              className="rounded-md px-2 py-1 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge hover:text-fg-strong"
+            >
+              Still send it
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Otherwise its silence is a mystery: auto-send is on, the time has
           passed, and nothing happened. */}
@@ -371,14 +444,24 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
             <>
               <button
                 onClick={sendNow}
-                disabled={busy || needsConfirm}
-                title={needsConfirm ? 'Open the profile and confirm this is the right person first' : undefined}
+                disabled={busy || needsConfirm || !!hold}
+                title={
+                  hold?.kind === 'waiting'
+                    ? 'LinkedIn won’t deliver this until they reply to your InMail'
+                    : hold?.kind === 'replied'
+                      ? 'They replied after this was written: read it, then edit or choose Still send it'
+                      : needsConfirm
+                        ? 'Open the profile and confirm this is the right person first'
+                        : undefined
+                }
                 className="rounded-md bg-blue-500/15 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/30 transition-colors hover:bg-blue-500/25 disabled:opacity-40 dark:text-blue-300"
               >
                 {busy ? 'Sending…' : msg.status === 'failed' ? 'Retry send' : 'Send now'}
               </button>
               {/* Also offered on a plain draft: a draft with no time is the
-                  most likely thing to want one, and the picker already exists. */}
+                  most likely thing to want one, and the picker already exists.
+                  Not while held: auto-send would only skip it. */}
+              {!hold && (
               <button
                 onClick={() => setRescheduling(true)}
                 className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge hover:text-fg-strong"
@@ -389,6 +472,7 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
                 </svg>
                 {msg.status === 'scheduled' ? 'Reschedule' : 'Schedule'}
               </button>
+              )}
               <button onClick={beginEdit} className="rounded-md px-2 py-1 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge hover:text-fg-strong">
                 Edit
               </button>

@@ -269,7 +269,7 @@
   },
   {
     "name": "list_drafts",
-    "description": "Read the user's Outbox: the drafts and scheduled messages waiting for them to send, plus recently sent and failed ones. Use it to confirm a draft you created actually landed, to check whether an InMail draft still needs the user to confirm the recipient before it can send, and to avoid drafting a second message to someone who already has one waiting. Nothing here has been sent unless its status says so.",
+    "description": "Read the user's Outbox: the drafts and scheduled messages waiting for them to send, plus recently sent and failed ones. Use it to confirm a draft you created actually landed, to check whether an InMail draft still needs the user to confirm the recipient before it can send, and to avoid drafting a second message to someone who already has one waiting. A draft may also be held: \"waiting_for_inmail_reply\" means the person hasn't answered an earlier InMail, so LinkedIn won't deliver anything more until they do; \"recipient_replied_since\" means they wrote after the draft was written, so the user must look at it again before it can send. Nothing here has been sent unless its status says so.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -316,7 +316,7 @@
   },
   {
     "name": "create_draft",
-    "description": "Create a draft message and put it in the user's Outbox for them to review and send — this NEVER sends. Optionally schedule it for a time (still surfaced for the user to send with one click; never auto-sent). Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it.",
+    "description": "Create a draft message and put it in the user's Outbox for them to review and send — this NEVER sends. Optionally schedule it for a time (still surfaced for the user to send with one click; never auto-sent). Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it. LinkedIn allows only one unanswered InMail per person: if they haven't replied to an earlier one, no draft is created and the error says when that InMail went out. Don't retry with another subject; tell the user, and wait for a reply.",
     "inputSchema": {
       "type": "object",
       "properties": {

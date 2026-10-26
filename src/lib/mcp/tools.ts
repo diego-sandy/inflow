@@ -15,6 +15,7 @@ import { db } from '@/db/database';
 import { computeInsights, parseCompany } from '@/lib/connection-insights';
 import { sendBridgeMessage } from '@/lib/bridge';
 import { getConfirmRecipient } from '@/lib/send-settings';
+import { queueHolds, unansweredInMail } from '@/lib/queue-holds';
 import { isValidProfileUrn } from '@/lib/voyager-normalizer';
 import type { Connection } from '@/types/connection';
 import type { Conversation } from '@/types/conversation';
@@ -582,7 +583,7 @@ export const MCP_TOOLS: McpTool[] = [
   {
     name: 'list_drafts',
     description:
-      "Read the user's Outbox: the drafts and scheduled messages waiting for them to send, plus recently sent and failed ones. Use it to confirm a draft you created actually landed, to check whether an InMail draft still needs the user to confirm the recipient before it can send, and to avoid drafting a second message to someone who already has one waiting. Nothing here has been sent unless its status says so.",
+      "Read the user's Outbox: the drafts and scheduled messages waiting for them to send, plus recently sent and failed ones. Use it to confirm a draft you created actually landed, to check whether an InMail draft still needs the user to confirm the recipient before it can send, and to avoid drafting a second message to someone who already has one waiting. A draft may also be held: \"waiting_for_inmail_reply\" means the person hasn't answered an earlier InMail, so LinkedIn won't deliver anything more until they do; \"recipient_replied_since\" means they wrote after the draft was written, so the user must look at it again before it can send. Nothing here has been sent unless its status says so.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -605,6 +606,7 @@ export const MCP_TOOLS: McpTool[] = [
         want === 'all' ? true : want === 'pending' ? m.status !== 'sent' && m.status !== 'sending' : m.status === want;
 
       const rows = all.filter(keep).sort((a, b) => b.createdAt - a.createdAt);
+      const holds = await queueHolds(db, rows.slice(0, lim));
       return {
         total: rows.length,
         results: rows.slice(0, lim).map((m) => ({
@@ -624,6 +626,14 @@ export const MCP_TOOLS: McpTool[] = [
           ...(m.source === 'mcp' && m.inMailSubject !== undefined
             ? { awaitingRecipientConfirmation: !m.recipientConfirmedAt }
             : {}),
+          // Why it can't go out yet, when the recipient's side says so.
+          ...(() => {
+            const h = holds.get(m.id);
+            if (!h) return {};
+            return h.kind === 'waiting'
+              ? { held: 'waiting_for_inmail_reply', unansweredInMail: { subject: h.subject, sentAt: iso(h.since) } }
+              : { held: 'recipient_replied_since', theyRepliedAt: iso(h.at) };
+          })(),
         })),
       };
     },
@@ -693,7 +703,7 @@ export const MCP_TOOLS: McpTool[] = [
   {
     name: 'create_draft',
     description:
-      "Create a draft message and put it in the user's Outbox for them to review and send — this NEVER sends. Optionally schedule it for a time (still surfaced for the user to send with one click; never auto-sent). Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it.",
+      "Create a draft message and put it in the user's Outbox for them to review and send — this NEVER sends. Optionally schedule it for a time (still surfaced for the user to send with one click; never auto-sent). Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it. LinkedIn allows only one unanswered InMail per person: if they haven't replied to an earlier one, no draft is created and the error says when that InMail went out. Don't retry with another subject; tell the user, and wait for a reply.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -786,6 +796,17 @@ export const MCP_TOOLS: McpTool[] = [
           );
         }
         if (subject.length > 200) throw new Error('inMailSubject is longer than 200 characters');
+        // LinkedIn refuses a second InMail until the first is answered, and
+        // only says so at send time. Better that no draft exists than one the
+        // user approves and watches fail.
+        const pendingInMail = await unansweredInMail(db, profileUrn);
+        if (pendingInMail) {
+          const who = String(recipientName || '').trim() || 'This person';
+          throw new Error(
+            `${who} hasn't replied to the user's InMail of ${new Date(pendingInMail.since).toISOString().slice(0, 10)} ("${pendingInMail.subject}"). ` +
+              'LinkedIn will not deliver another message until they do, so no draft was created. Tell the user rather than trying another subject.',
+          );
+        }
         urn = profileUrn;
         name = String(recipientName || '').trim() || 'Unknown';
       }

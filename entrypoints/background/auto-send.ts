@@ -2,6 +2,7 @@ import { db } from '@/db/database';
 import { debugLog } from '@/lib/debug-log';
 import { getAutoSendScheduled, getConfirmRecipient } from '@/lib/send-settings';
 import { awaitsRecipientConfirmation, dueMessages, isTooLateToAutoSend } from '@/lib/scheduled-messages';
+import { queueHolds } from '@/lib/queue-holds';
 import { createConversation, sendMessage } from './api/messages';
 
 const ALARM_NAME = 'auto-send-scheduled';
@@ -25,6 +26,9 @@ const CHECK_INTERVAL_MINUTES = 1;
  *  - it refuses anything still awaiting a recipient confirmation, using the
  *    same rule the Outbox uses to disable Send, so the background can never
  *    fire past a gate the UI is still showing;
+ *  - it skips anything the Outbox shows as held (lib/queue-holds): an InMail
+ *    the recipient hasn't answered, which LinkedIn would refuse, or a message
+ *    they have replied to since it was written, which needs the user's eyes;
  *  - it claims each row as 'sending' before dispatching, so a tick that
  *    overlaps the user clicking Send cannot send the same message twice.
  */
@@ -34,8 +38,14 @@ export async function runAutoSendTick(now = Date.now()): Promise<void> {
 
   const confirmRecipient = await getConfirmRecipient();
   const due = dueMessages(await db.scheduledMessages.toArray(), now);
+  const holds = due.length ? await queueHolds(db, due) : new Map();
 
   for (const msg of due) {
+    const hold = holds.get(msg.id);
+    if (hold) {
+      debugLog('info', `[AUTO-SEND] holding ${msg.id.slice(0, 8)} — ${hold.kind === 'waiting' ? 'InMail not answered yet' : 'they replied since it was written'}`);
+      continue;
+    }
     if (awaitsRecipientConfirmation(msg, confirmRecipient)) {
       debugLog('info', `[AUTO-SEND] holding ${msg.id.slice(0, 8)} — recipient not confirmed`);
       continue;

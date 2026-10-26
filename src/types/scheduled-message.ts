@@ -43,6 +43,12 @@ export interface ScheduledMessage {
   /** Epoch ms the user confirmed the recipient by opening their profile. */
   recipientConfirmedAt?: number;
   /**
+   * Epoch ms the user last looked this message over and kept it: an edit, or
+   * "Still send it". A reply from the recipient after this (and after it was
+   * written) holds the message for another look; see lib/queue-holds.ts.
+   */
+  reviewedAt?: number;
+  /**
    * Set when Claude created this draft over MCP, rather than the user writing
    * it in the composer. That distinction is the whole basis of the recipient
    * check: in the composer the user picked the person from a list showing

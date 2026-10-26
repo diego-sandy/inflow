@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/database';
 import { useDbGeneration } from '@/hooks/useDbGeneration';
 import { dueMessages } from '@/lib/scheduled-messages';
+import { queueHolds, type QueueHold } from '@/lib/queue-holds';
 import type { ScheduledMessage } from '@/types/scheduled-message';
 
 export interface OutboxGroups {
@@ -18,7 +19,15 @@ export interface OutboxGroups {
   sent: ScheduledMessage[];
   /** Count that needs the user's attention now (ready + failed). */
   attention: number;
+  /**
+   * Why a pending message should not go out yet, by id: an InMail the
+   * recipient hasn't answered, or a reply from them since it was written.
+   * Held messages stay in their status groups above; this only annotates them.
+   */
+  holds: Map<string, QueueHold>;
 }
+
+const NO_HOLDS = new Map<string, QueueHold>();
 
 /**
  * Groups the local outbound queue for the Outbox section. "Scheduled" messages
@@ -27,10 +36,15 @@ export interface OutboxGroups {
  */
 export function useOutbox(): OutboxGroups {
   const dbGen = useDbGeneration();
-  const rows = useLiveQuery(async () => {
-    if (!db) return [] as ScheduledMessage[];
-    return db.scheduledMessages.toArray();
-  }, [dbGen]) ?? [];
+  // Holds are read in the same live query, so they refresh when a message
+  // arrives from the recipient (messages table) as well as when the queue changes.
+  const live = useLiveQuery(async () => {
+    if (!db) return { rows: [] as ScheduledMessage[], holds: NO_HOLDS };
+    const rows = await db.scheduledMessages.toArray();
+    return { rows, holds: await queueHolds(db, rows) };
+  }, [dbGen]);
+  const rows = live?.rows ?? [];
+  const holds = live?.holds ?? NO_HOLDS;
 
   // Re-evaluate "ready" as time passes, even without a DB change.
   const [now, setNow] = useState(() => Date.now());
@@ -75,5 +89,5 @@ export function useOutbox(): OutboxGroups {
   failed.sort(by((m) => m.updatedAt ?? 0, true));
   sent.sort(by((m) => m.sentAt ?? m.updatedAt ?? 0, true));
 
-  return { ready, scheduled, drafts, failed, sent, attention: ready.length + failed.length };
+  return { ready, scheduled, drafts, failed, sent, attention: ready.length + failed.length, holds };
 }

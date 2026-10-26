@@ -57,7 +57,7 @@ it('lists a draft under Drafts and sends it now from the reading pane', async ()
   await listed('Ada Lovelace');
   expect(within(queue()).getByRole('group', { name: 'Drafts' })).toBeInTheDocument();
 
-  fireEvent.click(within(pane()).getByRole('button', { name: /send now/i }));
+  fireEvent.click(await within(pane()).findByRole('button', { name: /send now/i }));
   await waitFor(() =>
     expect(sendBridgeMessage).toHaveBeenCalledWith({
       type: 'CREATE_CONVERSATION',
@@ -75,7 +75,7 @@ it('sends a scheduled reply into its thread via SEND_MESSAGE (not CREATE_CONVERS
   render(<OutboxView />);
   await listed('Ada Lovelace');
 
-  fireEvent.click(within(pane()).getByRole('button', { name: /send now/i }));
+  fireEvent.click(await within(pane()).findByRole('button', { name: /send now/i }));
   await waitFor(() =>
     expect(sendBridgeMessage).toHaveBeenCalledWith({
       type: 'SEND_MESSAGE',
@@ -95,7 +95,7 @@ it('Edit on a scheduled reply stays in the Outbox and leaves the thread alone', 
   render(<OutboxView />);
   await listed('Ada Lovelace');
 
-  fireEvent.click(within(pane()).getByRole('button', { name: /^Edit$/i }));
+  fireEvent.click(await within(pane()).findByRole('button', { name: /^Edit$/i }));
 
   expect(await db!.scheduledMessages.get('r2')).toBeTruthy();
   expect(useUIStore.getState().selectedConversationId).not.toBe('urn:li:msg_conversation:T2');
@@ -120,7 +120,7 @@ it('deletes a draft, once the discard question is answered', async () => {
   await listed('Ada Lovelace');
 
   // Delete asks first by default — it sits beside Send and cannot be undone.
-  fireEvent.click(within(pane()).getByRole('button', { name: /^Delete$/i }));
+  fireEvent.click(await within(pane()).findByRole('button', { name: /^Delete$/i }));
   expect(await db!.scheduledMessages.get('d2')).toBeTruthy();
 
   fireEvent.click(await within(pane()).findByRole('button', { name: /^Delete$/i }));
@@ -134,7 +134,7 @@ it('Edit keeps the draft in the Outbox instead of minting an inbox conversation'
   render(<OutboxView />);
   await listed('Zack Allen');
 
-  fireEvent.click(within(pane()).getByRole('button', { name: /^Edit$/i }));
+  fireEvent.click(await within(pane()).findByRole('button', { name: /^Edit$/i }));
 
   expect(await db!.scheduledMessages.get('d3')).toBeTruthy();
   expect(await db!.conversations.get('draft-Z')).toBeUndefined();
@@ -264,7 +264,7 @@ describe('split view', () => {
     const middle = screen.getAllByRole('option')[1];
     fireEvent.click(middle);
     const middleName = order[1]!;
-    fireEvent.click(within(pane()).getByRole('button', { name: /send now/i }));
+    fireEvent.click(await within(pane()).findByRole('button', { name: /send now/i }));
 
     // It leaves the queue, and the one that was below it opens.
     await waitFor(() => expect(names().some((n) => n === middleName)).toBe(false));
@@ -341,5 +341,88 @@ describe('filtering', () => {
     render(<OutboxView />);
     await screen.findByText(/No drafts or scheduled sends yet/i);
     expect(screen.queryByLabelText(/Filter the queue/i)).toBeNull();
+  });
+});
+
+describe('held messages (lib/queue-holds)', () => {
+  const DANA = 'urn:li:fsd_profile:DANA';
+  const OCT13 = Date.UTC(2026, 9, 13, 15, 11);
+
+  async function danaThread(replyAt?: number) {
+    await db!.conversations.put({
+      id: 'conv-dana', participantUrns: [DANA], participantNames: ['Dana Whitfield'], participantPictures: [''],
+      lastMessage: '', lastActivityAt: OCT13, read: 1, archived: 0, category: 'PRIMARY_INBOX',
+    } as any);
+    await db!.messages.put({
+      id: 'inmail-1', conversationId: 'conv-dana', isFromMe: true, createdAt: OCT13, subject: 'Coding at Harbor Lane',
+      senderUrn: 'me', senderName: 'Me', senderPicture: '', body: 'Ms. Whitfield…',
+    } as any);
+    if (replyAt) {
+      await db!.messages.put({
+        id: 'reply-1', conversationId: 'conv-dana', isFromMe: false, createdAt: replyAt,
+        senderUrn: DANA, senderName: 'Dana', senderPicture: '', body: 'Tell me more',
+      } as any);
+    }
+  }
+  const followUp = (over: Partial<ScheduledMessage> = {}) =>
+    row({
+      id: 'f', recipientUrns: [DANA], recipientName: 'Dana Whitfield', inMailSubject: 'Re: Coding at Harbor Lane',
+      status: 'failed', error: 'You may not send another message until the recipient responds to your InMail.',
+      createdAt: OCT13 + 86400_000, updatedAt: OCT13 + 86400_000, ...over,
+    });
+
+  it('files an unanswered-InMail follow-up under Waiting for their reply, explains it, and keeps Send off', async () => {
+    await danaThread();
+    await db!.scheduledMessages.add(followUp());
+    render(<OutboxView />);
+    await listed('Dana Whitfield');
+
+    expect(within(queue()).getByRole('group', { name: 'Waiting for their reply' })).toBeInTheDocument();
+    const note = await within(pane()).findByRole('note');
+    expect(note).toHaveTextContent(/hasn’t replied to your InMail of Oct 13/);
+    expect(note).toHaveTextContent(/never goes out on its own/);
+    // LinkedIn's raw refusal gives way to the plain explanation.
+    expect(within(pane()).queryByText(/You may not send another message/)).toBeNull();
+    expect(within(pane()).getByRole('button', { name: /send/i, hidden: false })).toBeDisabled();
+    expect(within(pane()).queryByRole('button', { name: /^Schedule$/ })).toBeNull();
+  });
+
+  it('after they reply it asks for a look, and sends only once the user says it still stands', async () => {
+    await danaThread(Date.now() - 60_000);
+    await db!.scheduledMessages.add(followUp({ status: 'draft', error: undefined }));
+    render(<OutboxView />);
+    await listed('Dana Whitfield');
+
+    expect(within(queue()).getByRole('group', { name: 'They replied' })).toBeInTheDocument();
+    expect(await within(pane()).findByRole('note')).toHaveTextContent(/replied on .*after this was written/);
+    expect(within(pane()).getByRole('button', { name: /send now/i })).toBeDisabled();
+
+    fireEvent.click(within(pane()).getByRole('button', { name: 'Still send it' }));
+    await waitFor(async () => expect((await db!.scheduledMessages.get('f'))!.reviewedAt).toBeGreaterThan(0));
+    await waitFor(() => expect(within(pane()).getByRole('button', { name: /send now/i })).toBeEnabled());
+    expect(within(queue()).getByRole('group', { name: 'Drafts' })).toBeInTheDocument();
+  });
+
+  it('opens the conversation with the reply', async () => {
+    await danaThread(Date.now() - 60_000);
+    await db!.scheduledMessages.add(followUp({ status: 'draft', error: undefined }));
+    render(<OutboxView />);
+    await listed('Dana Whitfield');
+
+    fireEvent.click(await within(pane()).findByRole('button', { name: 'Open the conversation' }));
+    expect(useUIStore.getState().activeSection).toBe('inbox');
+    expect(useUIStore.getState().selectedConversationId).toBe('conv-dana');
+  });
+
+  it('saving an edit counts as looking it over', async () => {
+    await danaThread(Date.now() - 60_000);
+    await db!.scheduledMessages.add(followUp({ status: 'draft', error: undefined }));
+    render(<OutboxView />);
+    await listed('Dana Whitfield');
+
+    fireEvent.click(await within(pane()).findByRole('button', { name: /^Edit$/i }));
+    fireEvent.change(screen.getByLabelText(/Message body/i), { target: { value: 'Thanks for your reply…' } });
+    fireEvent.click(within(pane()).getByRole('button', { name: /^Save$/ }));
+    await waitFor(() => expect(within(pane()).queryByRole('note')).toBeNull());
   });
 });

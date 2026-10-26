@@ -653,9 +653,19 @@ export function useOptimisticAction() {
 
   async function starConversation(conversation: Conversation) {
     if (isLocalDraft(conversation)) return;
-    if (conversation.starred) {
+    // Branch on the STORED row, not the render snapshot — and make the
+    // read-modify-write atomic: two rapid presses both see the pre-toggle
+    // snapshot (and two concurrent ones both read before either writes), so
+    // both would take the star branch and never unstar. Like reactToMessage,
+    // the transaction serializes them.
+    let isStarred = false;
+    await db.transaction('rw', db.conversations, async () => {
+      const stored = await db.conversations.get(conversation.id);
+      isStarred = (stored ?? conversation).starred === 1;
+      await db.conversations.update(conversation.id, { starred: isStarred ? 0 : 1 });
+    });
+    if (isStarred) {
       // Unstar
-      await db.conversations.update(conversation.id, { starred: 0 });
       showToast({ message: 'Star removed' });
 
       const bridgeMsg = { type: 'UNSTAR' as const, conversationId: conversation.id };
@@ -697,7 +707,6 @@ export function useOptimisticAction() {
         });
     } else {
       // Star
-      await db.conversations.update(conversation.id, { starred: 1 });
       showToast({ message: 'Conversation starred' });
 
       const bridgeMsg = { type: 'STAR' as const, conversationId: conversation.id };

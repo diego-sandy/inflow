@@ -590,6 +590,10 @@ export function useOptimisticAction() {
       return;
     }
 
+    // Snapshot the STORED row for rollback — the caller's object is the
+    // display-merged copy from useConversations (mergedIds plus read/starred
+    // overlaid at query time) and must never be persisted back.
+    const storedConv = (await db.conversations.get(conversation.id)) ?? conversation;
     // Save messages + syncQueue row for rollback before deleting
     const savedMessages = await db.messages.where('conversationId').equals(conversation.id).toArray();
     const savedQueueItem = await db.syncQueue.get(conversation.id).catch(() => undefined);
@@ -609,7 +613,7 @@ export function useOptimisticAction() {
       await createQueuedAction({
         type: 'delete',
         conversationId: conversation.id,
-        rollbackData: { conversation, messages: savedMessages },
+        rollbackData: { conversation: storedConv, messages: savedMessages },
         bridgeMessage: bridgeMsg,
       });
       return;
@@ -618,12 +622,12 @@ export function useOptimisticAction() {
     const actionId = await createPendingAction({
       type: 'delete',
       conversationId: conversation.id,
-      rollbackData: { conversation, messages: savedMessages },
+      rollbackData: { conversation: storedConv, messages: savedMessages },
       bridgeMessage: bridgeMsg,
     });
     const restoreDeleted = async () => {
       await db.tombstones.delete(conversation.id).catch(() => {});
-      await db.conversations.put(conversation);
+      await db.conversations.put(storedConv);
       if (savedMessages.length > 0) await db.messages.bulkPut(savedMessages);
       if (savedQueueItem) await db.syncQueue.put(savedQueueItem).catch(() => {});
       await db.pendingActions.update(actionId, { status: 'failed' });

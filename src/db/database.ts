@@ -45,6 +45,19 @@ export interface SyncState {
   discoveryCompletedAt: number;
   lastSyncStartedAt: number;
   lastSyncCompletedAt: number;
+  /**
+   * When a walk last paginated this category to its END. Unset if one never has.
+   *
+   * Re-discovery runs every 15 minutes, but a full walk of a large category is
+   * hundreds of requests that enqueue nothing — everything but the top of the
+   * list is already known, because anything that changes sorts back to the
+   * top. Shallow rounds cover that; this timestamp decides when to pay for a
+   * deep one (the only kind that can prove a server-side deletion, so it is
+   * what the sweep hangs off).
+   */
+  fullDiscoveryCompletedAt?: number;
+  /** Whether the round now in flight may walk past the shallow page cap. */
+  discoveryDepth?: 'shallow' | 'deep';
 }
 
 export interface DraftAttachment {

@@ -226,9 +226,12 @@ export function normalizeConversations(raw: VoyagerResponse, myMemberUrn?: strin
           : conv.unreadCount !== undefined
             ? (conv.unreadCount === 0 ? 1 : 0)
             : undefined,
-      archived: conv.categories ? (conv.categories.includes('ARCHIVE') ? 1 : 0) : undefined,
-      category: conv.categories ? pickInboxCategory(conv.categories) : undefined,
-      starred: conv.categories ? (conv.categories.includes('STARRED') ? 1 : 0) : undefined,
+      // `?.length` not truthiness: an EMPTY categories array carries no
+      // information either — deriving archived:0 / PRIMARY_INBOX from it
+      // would let merge pop an archived thread back into Focused.
+      archived: conv.categories?.length ? (conv.categories.includes('ARCHIVE') ? 1 : 0) : undefined,
+      category: conv.categories?.length ? pickInboxCategory(conv.categories) : undefined,
+      starred: conv.categories?.length ? (conv.categories.includes('STARRED') ? 1 : 0) : undefined,
     };
   });
 

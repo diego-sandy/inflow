@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-// The Outbox is a pure status view: groups drafts/scheduled/sent, resurfaces due
-// messages as "Ready to send" (never auto-sends), one-click send, delete, and
-// reopens a draft in the composer.
+// The MCP connector's queue: a split view, the queue on the left and the
+// selected message in full on the right. Groups drafts/scheduled/failed,
+// resurfaces due messages as "Ready to send" (never auto-sends), one-click
+// send, edit in place, delete.
 import '../dom-setup';
 import Dexie from 'dexie';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { switchDatabase, db } from '@/db/database';
 import { OutboxView } from '@/components/outbox/OutboxView';
 import { useUIStore } from '@/store/ui-store';
@@ -38,19 +39,25 @@ afterEach(async () => {
   await Dexie.delete('InflowDB_MEMBER_OB').catch(() => {});
 });
 
+const queue = () => screen.getByRole('listbox', { name: 'Queue' });
+const pane = () => screen.getByRole('region', { name: 'Selected message' });
+/** Wait for a name to be listed in the queue. */
+const listed = async (name: string) => within(await screen.findByRole('listbox', { name: 'Queue' })).findByText(name);
+const item = (name: string) => within(queue()).getByText(name).closest('[role="option"]') as HTMLElement;
+
 it('shows an empty state when the outbox is empty', async () => {
   render(<OutboxView />);
   expect(await screen.findByText(/No drafts or scheduled sends yet/i)).toBeInTheDocument();
 });
 
-it('lists a draft under Drafts and sends it now', async () => {
+it('lists a draft under Drafts and sends it now from the reading pane', async () => {
   await db!.scheduledMessages.add(row({ id: 'd1', body: 'Hey Ada!' }));
   render(<OutboxView />);
 
-  expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
-  expect(screen.getByText('Drafts')).toBeInTheDocument();
+  await listed('Ada Lovelace');
+  expect(within(queue()).getByRole('group', { name: 'Drafts' })).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: /send now/i }));
+  fireEvent.click(within(pane()).getByRole('button', { name: /send now/i }));
   await waitFor(() =>
     expect(sendBridgeMessage).toHaveBeenCalledWith({
       type: 'CREATE_CONVERSATION',
@@ -66,9 +73,9 @@ it('sends a scheduled reply into its thread via SEND_MESSAGE (not CREATE_CONVERS
     row({ id: 'r1', conversationId: 'urn:li:msg_conversation:THREAD', body: 'Following up!' }),
   );
   render(<OutboxView />);
-  await screen.findByText('Ada Lovelace');
+  await listed('Ada Lovelace');
 
-  fireEvent.click(screen.getByRole('button', { name: /send now/i }));
+  fireEvent.click(within(pane()).getByRole('button', { name: /send now/i }));
   await waitFor(() =>
     expect(sendBridgeMessage).toHaveBeenCalledWith({
       type: 'SEND_MESSAGE',
@@ -86,9 +93,9 @@ it('Edit on a scheduled reply stays in the Outbox and leaves the thread alone', 
     row({ id: 'r2', conversationId: 'urn:li:msg_conversation:T2', body: 'Reopen reply' }),
   );
   render(<OutboxView />);
-  await screen.findByText('Ada Lovelace');
+  await listed('Ada Lovelace');
 
-  fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }));
+  fireEvent.click(within(pane()).getByRole('button', { name: /^Edit$/i }));
 
   expect(await db!.scheduledMessages.get('r2')).toBeTruthy();
   expect(useUIStore.getState().selectedConversationId).not.toBe('urn:li:msg_conversation:T2');
@@ -100,7 +107,9 @@ it('resurfaces a past-due scheduled message as Ready to send (does not auto-send
   await db!.scheduledMessages.add(row({ id: 's1', status: 'scheduled', scheduledAt: Date.now() - 60_000 }));
   render(<OutboxView />);
 
-  expect((await screen.findAllByText('Ready to send')).length).toBeGreaterThan(0);
+  await listed('Ada Lovelace');
+  expect(within(queue()).getByRole('group', { name: 'Ready to send' })).toBeInTheDocument();
+  expect(within(pane()).getByText('Ready to send')).toBeInTheDocument();
   expect(sendBridgeMessage).not.toHaveBeenCalled();
   expect((await db!.scheduledMessages.get('s1'))!.status).toBe('scheduled');
 });
@@ -108,13 +117,13 @@ it('resurfaces a past-due scheduled message as Ready to send (does not auto-send
 it('deletes a draft, once the discard question is answered', async () => {
   await db!.scheduledMessages.add(row({ id: 'd2' }));
   render(<OutboxView />);
-  await screen.findByText('Ada Lovelace');
+  await listed('Ada Lovelace');
 
   // Delete asks first by default — it sits beside Send and cannot be undone.
-  fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }));
+  fireEvent.click(within(pane()).getByRole('button', { name: /^Delete$/i }));
   expect(await db!.scheduledMessages.get('d2')).toBeTruthy();
 
-  fireEvent.click(await screen.findByRole('button', { name: /^Delete$/i }));
+  fireEvent.click(await within(pane()).findByRole('button', { name: /^Delete$/i }));
   await waitFor(async () => expect(await db!.scheduledMessages.get('d2')).toBeUndefined());
 });
 
@@ -123,9 +132,9 @@ it('Edit keeps the draft in the Outbox instead of minting an inbox conversation'
   // queue row, so the draft appeared to vanish and landed among real threads.
   await db!.scheduledMessages.add(row({ id: 'd3', body: 'Reopen me', recipientUrns: ['urn:li:fsd_profile:Z'], recipientName: 'Zack Allen' }));
   render(<OutboxView />);
-  await screen.findByText('Zack Allen');
+  await listed('Zack Allen');
 
-  fireEvent.click(screen.getByRole('button', { name: /^Edit$/i }));
+  fireEvent.click(within(pane()).getByRole('button', { name: /^Edit$/i }));
 
   expect(await db!.scheduledMessages.get('d3')).toBeTruthy();
   expect(await db!.conversations.get('draft-Z')).toBeUndefined();
@@ -155,51 +164,140 @@ it('says nothing of the sort about a message that is only a little late', async 
   );
   render(<OutboxView />);
 
-  await screen.findByText('Ada Lovelace');
+  await listed('Ada Lovelace');
   expect(screen.queryByText(/Too far past its time/i)).toBeNull();
 });
 
-it('clamps a long message so one card cannot stretch its whole row', async () => {
-  // The grid aligns each row to its tallest card, so an unclamped long
-  // message left the shorter cards beside it trailing white space.
-  const long = Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n');
-  await db!.scheduledMessages.add(row({ id: 'long1', body: long }));
-  render(<OutboxView />);
+describe('split view', () => {
+  it('lists each message as one line, and shows only the selected one in full with buttons', async () => {
+    const long = Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n');
+    await db!.scheduledMessages.bulkAdd([
+      row({ id: 'a', recipientName: 'Ada Lovelace', body: long, updatedAt: 3 }),
+      row({ id: 'b', recipientName: 'Grace Hopper', body: 'Short note', updatedAt: 2 }),
+    ]);
+    render(<OutboxView />);
+    await listed('Grace Hopper');
 
-  const body = await screen.findByText(/line 0/);
-  expect(body.className).toMatch(/line-clamp/);
+    // The queue holds names and one-line previews, and no actions.
+    expect(within(queue()).queryByRole('button', { name: /send now/i })).toBeNull();
+    const preview = within(item('Ada Lovelace')).getByText(/line 0 line 1/);
+    expect(preview.className).toMatch(/truncate/);
 
-  // The whole message stays reachable.
-  fireEvent.click(screen.getByRole('button', { name: /Show more/i }));
-  expect(screen.getByText(/line 0/).className).not.toMatch(/line-clamp/);
-  fireEvent.click(screen.getByRole('button', { name: /Show less/i }));
-  expect(screen.getByText(/line 0/).className).toMatch(/line-clamp/);
+    // Exactly one message is open, with one set of actions.
+    await waitFor(() => expect(within(pane()).getAllByRole('button', { name: /send now/i })).toHaveLength(1));
+  });
+
+  it('shows the selected message in full, never clamped', async () => {
+    const long = Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n');
+    await db!.scheduledMessages.add(row({ id: 'long1', body: long }));
+    render(<OutboxView />);
+    await listed('Ada Lovelace');
+
+    const body = await within(pane()).findByText(/line 29/);
+    expect(body.className).not.toMatch(/line-clamp/);
+    expect(within(pane()).queryByRole('button', { name: /Show more/i })).toBeNull();
+  });
+
+  it('selects the first message, and clicking a row opens it', async () => {
+    await db!.scheduledMessages.bulkAdd([
+      row({ id: 'r', recipientName: 'Ready Rita', status: 'scheduled', scheduledAt: Date.now() - 60_000, body: 'ready body' }),
+      row({ id: 'd', recipientName: 'Draft Dan', body: 'draft body' }),
+    ]);
+    render(<OutboxView />);
+    await listed('Draft Dan');
+
+    // Ready to send comes first, so it is what opens.
+    await waitFor(() => expect(item('Ready Rita').getAttribute('aria-selected')).toBe('true'));
+    expect(within(pane()).getByText('ready body')).toBeInTheDocument();
+
+    fireEvent.click(item('Draft Dan'));
+    expect(item('Draft Dan').getAttribute('aria-selected')).toBe('true');
+    expect(within(pane()).getByText('draft body')).toBeInTheDocument();
+    expect(within(pane()).queryByText('ready body')).toBeNull();
+  });
+
+  it('j and k move through the queue, across groups', async () => {
+    await db!.scheduledMessages.bulkAdd([
+      row({ id: 'r', recipientName: 'Ready Rita', status: 'scheduled', scheduledAt: Date.now() - 60_000 }),
+      row({ id: 'd', recipientName: 'Draft Dan' }),
+      row({ id: 'f', recipientName: 'Failed Fay', status: 'failed', error: 'nope' }),
+    ]);
+    render(<OutboxView />);
+    await listed('Failed Fay');
+    await waitFor(() => expect(item('Ready Rita').getAttribute('aria-selected')).toBe('true'));
+
+    fireEvent.keyDown(window, { key: 'j' });
+    expect(item('Draft Dan').getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(item('Failed Fay').getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(window, { key: 'j' }); // stops at the end
+    expect(item('Failed Fay').getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(window, { key: 'k' });
+    expect(item('Draft Dan').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('j and k do nothing while typing in the filter or an edit', async () => {
+    await db!.scheduledMessages.bulkAdd([
+      row({ id: 'a', recipientName: 'Ada Lovelace', updatedAt: 2 }),
+      row({ id: 'b', recipientName: 'Grace Hopper', updatedAt: 1 }),
+    ]);
+    render(<OutboxView />);
+    await listed('Grace Hopper');
+    const first = screen.getAllByRole('option').find((o) => o.getAttribute('aria-selected') === 'true')!;
+
+    fireEvent.keyDown(screen.getByLabelText(/Filter the queue/i), { key: 'j' });
+    expect(first.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('after sending, the next message opens rather than jumping back to the top', async () => {
+    await db!.scheduledMessages.bulkAdd([
+      row({ id: 'a', recipientName: 'Anna One', body: 'first', createdAt: 1, updatedAt: 1 }),
+      row({ id: 'b', recipientName: 'Ben Two', body: 'second', createdAt: 2, updatedAt: 2 }),
+      row({ id: 'c', recipientName: 'Cleo Three', body: 'third', createdAt: 3, updatedAt: 3 }),
+    ]);
+    render(<OutboxView />);
+    await listed('Cleo Three');
+    const names = () => screen.getAllByRole('option').map((o) => o.textContent);
+    const order = names();
+
+    // Open the middle one and send it.
+    const middle = screen.getAllByRole('option')[1];
+    fireEvent.click(middle);
+    const middleName = order[1]!;
+    fireEvent.click(within(pane()).getByRole('button', { name: /send now/i }));
+
+    // It leaves the queue, and the one that was below it opens.
+    await waitFor(() => expect(names().some((n) => n === middleName)).toBe(false));
+    await waitFor(() => {
+      const sel = screen.getAllByRole('option').find((o) => o.getAttribute('aria-selected') === 'true');
+      expect(sel?.textContent).toBe(order[2]);
+    });
+  });
+
+  it('says who drafted it', async () => {
+    await db!.scheduledMessages.add(row({ id: 'm', source: 'mcp' }));
+    render(<OutboxView />);
+    await listed('Ada Lovelace');
+    expect(within(pane()).getByText(/Drafted by Claude/)).toBeInTheDocument();
+  });
 });
 
-it('offers no toggle on a message that already fits', async () => {
-  await db!.scheduledMessages.add(row({ id: 'short1', body: 'Two lines\nonly' }));
-  render(<OutboxView />);
-
-  await screen.findByText(/Two lines/);
-  expect(screen.queryByRole('button', { name: /Show more/i })).toBeNull();
-});
-
-describe('layout and filtering', () => {
-  beforeEach(() => useUIStore.setState({ outboxView: 'grid' }));
-
-  it('filters across every section at once, not within one bucket', async () => {
+describe('filtering', () => {
+  it('filters across every group at once, not within one bucket', async () => {
     // What you remember is who it is to, not which status it sits under.
     await db!.scheduledMessages.bulkAdd([
       row({ id: 'f1', recipientName: 'Dana Whitfield', status: 'draft' }),
       row({ id: 'f2', recipientName: 'Owen Pratt', status: 'scheduled', scheduledAt: Date.now() + 9e6 }),
     ]);
     render(<OutboxView />);
-    await screen.findByText('Dana Whitfield');
+    await listed('Dana Whitfield');
 
     fireEvent.change(screen.getByLabelText(/Filter the queue/i), { target: { value: 'pratt' } });
 
-    expect(screen.queryByText('Dana Whitfield')).toBeNull();
-    expect(screen.getByText('Owen Pratt')).toBeTruthy();
+    expect(within(queue()).queryByText('Dana Whitfield')).toBeNull();
+    expect(within(queue()).getByText('Owen Pratt')).toBeTruthy();
+    // And what is open follows the filter.
+    await waitFor(() => expect(item('Owen Pratt').getAttribute('aria-selected')).toBe('true'));
   });
 
   it('matches on the message text and the InMail subject too', async () => {
@@ -207,36 +305,22 @@ describe('layout and filtering', () => {
       row({ id: 'f3', recipientName: 'Someone', body: 'about revenue cycle', inMailSubject: 'Built for billing teams' }),
     );
     render(<OutboxView />);
-    await screen.findByText('Someone');
+    await listed('Someone');
     const box = screen.getByLabelText(/Filter the queue/i);
 
     fireEvent.change(box, { target: { value: 'revenue' } });
-    expect(screen.getByText('Someone')).toBeTruthy();
+    expect(within(queue()).getByText('Someone')).toBeTruthy();
 
     fireEvent.change(box, { target: { value: 'billing teams' } });
-    expect(screen.getByText('Someone')).toBeTruthy();
+    expect(within(queue()).getByText('Someone')).toBeTruthy();
 
     fireEvent.change(box, { target: { value: 'zzz nothing' } });
     expect(screen.getByText(/Nothing in the queue matches/i)).toBeTruthy();
   });
 
-  it('switches to a list and remembers the choice', async () => {
-    await db!.scheduledMessages.add(row({ id: 'f4' }));
-    render(<OutboxView />);
-    await screen.findByText('Ada Lovelace');
-
-    fireEvent.click(screen.getByRole('button', { name: /List view/i }));
-    expect(useUIStore.getState().outboxView).toBe('list');
-    expect(screen.getByRole('button', { name: /List view/i }).getAttribute('aria-pressed')).toBe('true');
-
-    fireEvent.click(screen.getByRole('button', { name: /Grid view/i }));
-    expect(useUIStore.getState().outboxView).toBe('grid');
-  });
-
-  it('hides the controls while there is nothing queued', async () => {
+  it('hides the filter while there is nothing queued', async () => {
     render(<OutboxView />);
     await screen.findByText(/No drafts or scheduled sends yet/i);
     expect(screen.queryByLabelText(/Filter the queue/i)).toBeNull();
-    expect(screen.queryByRole('button', { name: /List view/i })).toBeNull();
   });
 });

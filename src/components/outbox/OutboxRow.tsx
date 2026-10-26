@@ -30,8 +30,12 @@ function badgeClass(status: ScheduledMessage['status'], ready: boolean): string 
 
 
 /** One draft / scheduled / sent item, with inline actions. Shared by the MCP
- *  connector section and the Inbox Drafts/Scheduled views. */
-export function OutboxRow({ msg, ready, dense }: { msg: ScheduledMessage; ready?: boolean; dense?: boolean }) {
+ *  connector section (as the reading pane of its split view) and the Inbox
+ *  Drafts/Scheduled views.
+ *
+ *  `expanded` is the reading pane: the whole message, never clamped, and the
+ *  card sized to its content rather than stretched to its neighbours. */
+export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessage; ready?: boolean; dense?: boolean; expanded?: boolean }) {
   const showToast = useUIStore((s) => s.showToast);
   const [busy, setBusy] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
@@ -43,7 +47,7 @@ export function OutboxRow({ msg, ready, dense }: { msg: ScheduledMessage; ready?
   const confirmDelete = useUIStore((s) => s.confirmDelete);
   // Cheap heuristic rather than measuring: the toggle only has to appear when
   // the clamp plausibly bites, and a wrong guess costs a redundant link.
-  const longBody = dense || msg.body.split('\n').length > 9 || msg.body.length > 420;
+  const longBody = !expanded && (dense || msg.body.split('\n').length > 9 || msg.body.length > 420);
   const autoSendScheduled = useUIStore((s) => s.autoSendScheduled);
   const [when, setWhen] = useState('');
   const pending = msg.status === 'draft' || msg.status === 'scheduled' || msg.status === 'failed';
@@ -136,7 +140,11 @@ export function OutboxRow({ msg, ready, dense }: { msg: ScheduledMessage; ready?
   return (
     // h-full + flex so every card in a row is the same height and their
     // buttons line up, instead of each ending wherever its text happened to.
-    <div className={`flex h-full flex-col rounded-lg border px-3 py-2.5 ${ready ? 'border-amber-500/30 bg-amber-500/5' : 'border-edge'}`}>
+    <div
+      className={`flex flex-col rounded-lg border ${expanded ? 'px-4 py-3.5' : 'h-full px-3 py-2.5'} ${
+        ready ? 'border-amber-500/30 bg-amber-500/5' : 'border-edge'
+      }`}
+    >
       <div className="mb-1 flex items-center gap-2">
         <GroupAvatar names={[msg.recipientName || 'Unknown']} pictures={['']} size={24} />
         <span className="truncate text-sm font-semibold text-fg-strong">{msg.recipientName || 'Unknown'}</span>
@@ -194,9 +202,9 @@ export function OutboxRow({ msg, ready, dense }: { msg: ScheduledMessage; ready?
               white space. The full text is a click away, and always present
               under Edit. */}
           <p
-            className={`whitespace-pre-wrap text-sm text-fg-secondary ${
-              showFull ? '' : dense ? 'line-clamp-2' : 'line-clamp-[9]'
-            }`}
+            className={`whitespace-pre-wrap text-sm ${
+              expanded ? 'mt-1 leading-relaxed text-fg' : 'text-fg-secondary'
+            } ${showFull || expanded ? '' : dense ? 'line-clamp-2' : 'line-clamp-[9]'}`}
           >
             {msg.body}
           </p>
@@ -269,7 +277,7 @@ export function OutboxRow({ msg, ready, dense }: { msg: ScheduledMessage; ready?
       )}
 
       {pending && (
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
+        <div className={`flex flex-wrap items-center gap-2 ${expanded ? 'mt-3 pt-1' : 'mt-auto pt-2'}`}>
           {editing ? (
             <>
               <button

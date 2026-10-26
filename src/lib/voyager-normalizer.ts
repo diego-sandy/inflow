@@ -96,7 +96,7 @@ export function extractParticipantsFromIncluded(
  * ARCHIVE is also surfaced via the `archived` flag; INMAIL/OTHER aren't tab
  * categories, so they fold into the Other tab to avoid vanishing from the UI.
  */
-function pickInboxCategory(categories?: string[]): string {
+export function pickInboxCategory(categories?: string[]): string {
   if (!categories) return 'PRIMARY_INBOX';
   if (categories.includes('ARCHIVE')) return 'ARCHIVE';
   if (categories.includes('SPAM')) return 'SPAM';
@@ -373,6 +373,31 @@ export function extractSentMessage(
     };
   }
   return null;
+}
+
+/**
+ * Preview text for a NORMALIZED message: its body, else a description of its
+ * first attachment (mirroring lastMessageFallback's strings for raw entities),
+ * else the given fallback. Used by the SSE paths, which hold normalized
+ * Message objects rather than raw entities.
+ */
+export function messagePreviewText(
+  msg: Pick<Message, 'body' | 'attachments'>,
+  fallback = 'New message',
+): string {
+  if (msg.body) return msg.body;
+  const att = msg.attachments?.[0];
+  if (!att) return fallback;
+  switch (att.type) {
+    case 'image': return 'Sent an image';
+    case 'gif': return 'Sent a GIF';
+    case 'file': return `Sent a file: ${att.fileName || 'File'}`;
+    case 'video': return 'Sent a video';
+    case 'audio': return 'Sent a voice message';
+    case 'sharedPost': return 'Shared a post';
+    case 'externalMedia': return att.fallbackText || 'Shared a link';
+    default: return att.fallbackText || fallback;
+  }
 }
 
 /**

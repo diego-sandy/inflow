@@ -274,6 +274,25 @@ describe('split view', () => {
     });
   });
 
+  it('opens like an email: the subject as the title, and no box around it', async () => {
+    await db!.scheduledMessages.add(row({ id: 'm', inMailSubject: 'Revenue cycle at Northwind', body: 'Mr. Brandt,' }));
+    render(<OutboxView />);
+    await listed('Ada Lovelace');
+
+    expect(within(pane()).getByRole('heading', { name: 'Revenue cycle at Northwind' })).toBeInTheDocument();
+    // Not repeated above the body.
+    expect(within(pane()).getAllByText('Revenue cycle at Northwind')).toHaveLength(1);
+    // The message is not wrapped in a bordered card.
+    expect(pane().querySelector('.rounded-lg.border')).toBeNull();
+  });
+
+  it('titles a message with no subject by who it is to', async () => {
+    await db!.scheduledMessages.add(row({ id: 'n' }));
+    render(<OutboxView />);
+    await listed('Ada Lovelace');
+    expect(within(pane()).getByRole('heading', { name: 'New message to Ada Lovelace' })).toBeInTheDocument();
+  });
+
   it('says who drafted it', async () => {
     await db!.scheduledMessages.add(row({ id: 'm', source: 'mcp' }));
     render(<OutboxView />);

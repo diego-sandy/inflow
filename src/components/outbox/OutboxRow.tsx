@@ -137,14 +137,73 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
     if (db) await db.scheduledMessages.delete(msg.id);
   };
 
+  const name = msg.recipientName || 'Unknown';
+  const statusChip = (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${badgeClass(msg.status, !!ready)}`}>
+      {ready ? 'Ready to send' : statusLabel(msg.status)}
+    </span>
+  );
+  const inMailChip = msg.inMailSubject !== undefined && (
+    <span
+      title="Sends as a Premium InMail and uses one credit"
+      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-500/30 dark:text-amber-300"
+    >
+      InMail
+    </span>
+  );
+  // The time worth naming in the reading pane's header.
+  const headerTime =
+    msg.status === 'sent' && msg.sentAt
+      ? `Sent ${format(new Date(msg.sentAt), 'MMM d, h:mm a')}`
+      : (msg.status === 'scheduled' || ready) && msg.scheduledAt
+        ? `${ready ? 'Was due' : 'Sends'} ${format(new Date(msg.scheduledAt), 'MMM d, h:mm a')}`
+        : msg.updatedAt > 1000
+          ? `Last edited ${format(new Date(msg.updatedAt), 'MMM d, h:mm a')}`
+          : '';
+
   return (
-    // h-full + flex so every card in a row is the same height and their
+    // Card: h-full + flex so every card in a row is the same height and their
     // buttons line up, instead of each ending wherever its text happened to.
+    // Reading pane (expanded): no box at all. It fills the pane like an open
+    // email, with the subject as its title and the person beneath it.
     <div
-      className={`flex flex-col rounded-lg border ${expanded ? 'px-4 py-3.5' : 'h-full px-3 py-2.5'} ${
-        ready ? 'border-amber-500/30 bg-amber-500/5' : 'border-edge'
+      className={`flex flex-col ${
+        expanded
+          ? ''
+          : `h-full rounded-lg border px-3 py-2.5 ${ready ? 'border-amber-500/30 bg-amber-500/5' : 'border-edge'}`
       }`}
     >
+      {expanded && (
+        <>
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <h2 className="min-w-0 text-xl font-semibold text-fg-strong">
+              {msg.inMailSubject || (msg.conversationId ? `Reply to ${name}` : `New message to ${name}`)}
+            </h2>
+            {statusChip}
+            {inMailChip}
+          </div>
+          <div className="mb-4 flex items-start gap-3">
+            <GroupAvatar names={[name]} pictures={['']} size={40} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-3">
+                <span className="truncate text-sm font-semibold text-fg-strong">{name}</span>
+                <span className="flex-1" />
+                {headerTime && <span className="shrink-0 text-xs text-fg-faint">{headerTime}</span>}
+              </div>
+              <p className="text-xs text-fg-muted">
+                {msg.source === 'mcp' ? 'Drafted by Claude' : 'Saved from the composer'}
+                {msg.createdAt > 1000 && ` · ${format(new Date(msg.createdAt), 'MMM d, h:mm a')}`}
+                {msg.conversationId ? ' · reply in an existing thread' : ''}
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* In the reading pane everything below lines up under the name, as in
+          Gmail; on a card it simply flows. */}
+      <div className={expanded ? 'pl-[52px]' : 'contents'}>
+      {!expanded && (
       <div className="mb-1 flex items-center gap-2">
         <GroupAvatar names={[msg.recipientName || 'Unknown']} pictures={['']} size={24} />
         <span className="truncate text-sm font-semibold text-fg-strong">{msg.recipientName || 'Unknown'}</span>
@@ -166,6 +225,7 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
           <span className="shrink-0 text-[11px] text-fg-faint">{format(new Date(msg.sentAt), 'MMM d, h:mm a')}</span>
         )}
       </div>
+      )}
 
       {/* Editing happens here rather than in the composer: reopening there
           moved the draft into Primary as a fake conversation, dropped its
@@ -193,8 +253,9 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
         </div>
       ) : (
         <>
-          {/* An InMail's subject is part of what gets sent, so show it with the body. */}
-          {!!msg.inMailSubject && (
+          {/* An InMail's subject is part of what gets sent, so show it with the
+              body. (The reading pane already has it as its title.) */}
+          {!!msg.inMailSubject && !expanded && (
             <p className="truncate text-sm font-semibold text-fg-strong">{msg.inMailSubject}</p>
           )}
           {/* Clamped by default: these sit in a grid, where one long message
@@ -203,7 +264,7 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
               under Edit. */}
           <p
             className={`whitespace-pre-wrap text-sm ${
-              expanded ? 'mt-1 leading-relaxed text-fg' : 'text-fg-secondary'
+              expanded ? 'leading-relaxed text-fg' : 'text-fg-secondary'
             } ${showFull || expanded ? '' : dense ? 'line-clamp-2' : 'line-clamp-[9]'}`}
           >
             {msg.body}
@@ -359,6 +420,7 @@ export function OutboxRow({ msg, ready, dense, expanded }: { msg: ScheduledMessa
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

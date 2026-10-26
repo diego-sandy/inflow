@@ -288,19 +288,14 @@ export function OutboxView() {
           </div>
 
           {/* Right: the selected message in full, with its actions. */}
-          <section aria-label="Selected message" className="h-full min-w-0 flex-1 overflow-y-auto px-6 py-4">
+          <section aria-label="Selected message" className="h-full min-w-0 flex-1 overflow-y-auto px-8 py-6">
             {selected ? (
-              <div className="mx-auto max-w-2xl">
-                <p className="mb-2 text-[11px] text-fg-faint">
-                  {selected.msg.source === 'mcp' ? 'Drafted by Claude' : 'Saved from the composer'}
-                  {selected.msg.createdAt > 1000 && ` · ${format(new Date(selected.msg.createdAt), 'MMM d, h:mm a')}`}
-                  {selected.msg.conversationId ? ' · reply in an existing thread' : ''}
-                </p>
+              <>
                 {/* Keyed so per-message state (Edit, Reschedule, the delete
                     question) never carries over to the next message. */}
                 <OutboxRow key={selected.msg.id} msg={selected.msg} ready={selected.group === 'ready'} expanded />
-                <p className="mt-3 text-[11px] text-fg-faint">j / k to move through the queue</p>
-              </div>
+                <p className="mt-6 pl-[52px] text-[11px] text-fg-faint">j / k to move through the queue</p>
+              </>
             ) : (
               <p className="pt-8 text-center text-xs text-fg-faint">Select a message to read it.</p>
             )}

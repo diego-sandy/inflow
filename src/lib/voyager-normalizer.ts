@@ -432,13 +432,29 @@ function extractAttachments(renderContent: any[] | undefined, included?: any[]):
         attachments.push({ type: 'gif', fallbackText: 'GIF' });
       }
     } else if (item.vectorImage) {
-      // Inline image
+      // Inline image. LinkedIn ships several shapes: a complete rootUrl, an
+      // artifact fileUrl, an empty root with the full URL in the artifact's
+      // path segment, or a directory root + per-size segment. Artifact rows
+      // are often partially populated, so fall back to any sibling with a
+      // usable fileUrl rather than trusting only one — and never append a
+      // relative segment onto a rootUrl that isn't a directory prefix.
       const img = item.vectorImage;
-      let imageUrl = img.rootUrl || '';
-      // If rootUrl has artifacts, build full URL (but LinkedIn usually gives complete rootUrl for messaging images)
-      if (!imageUrl && img.artifacts?.length) {
-        const artifact = img.artifacts[0];
-        if (artifact?.fileUrl) imageUrl = artifact.fileUrl;
+      const artifacts: any[] = Array.isArray(img.artifacts) ? img.artifacts : [];
+      const preferred = artifacts.length ? pickArtifact(artifacts, 800) ?? artifacts[0] : undefined;
+      let imageUrl: string = preferred?.fileUrl || artifacts.find((a) => a?.fileUrl)?.fileUrl || '';
+      if (!imageUrl) {
+        const segment: string =
+          preferred?.fileIdentifyingUrlPathSegment ||
+          artifacts.find((a) => a?.fileIdentifyingUrlPathSegment)?.fileIdentifyingUrlPathSegment ||
+          '';
+        const root: string = img.rootUrl || '';
+        if (segment && /^https?:\/\//i.test(segment)) {
+          imageUrl = segment;
+        } else if (segment && root.endsWith('/')) {
+          imageUrl = `${root}${segment}`;
+        } else {
+          imageUrl = root;
+        }
       }
       if (imageUrl) {
         attachments.push({ type: 'image', imageUrl });

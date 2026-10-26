@@ -15,6 +15,7 @@ import { getMemberUrn } from '../auth/session';
 import { fetchMessages } from '../api/messages';
 import { normalizeMessages, extractProfileId, getParticipantPicture, extractReactions, messagePreviewText, needsParticipantRepair, extractAudioAttachment, extractParticipantsFromIncluded, isValidProfileUrn, type ExtractedParticipants } from '@/lib/voyager-normalizer';
 import { withoutRecalled, preserveSseFields } from '@/lib/message-dedup';
+import { stashUnmatchedReceipt, applyPendingReceipts, consumePendingReceipts } from './pending-receipts';
 import { repairConversationParticipants } from '../sync/repair-participants';
 import { reconcileRecalledMessages } from '../sync/reconcile-messages';
 import { debugLog } from '@/lib/debug-log';
@@ -97,6 +98,7 @@ function findNewOutboundMessages(ctx: RealtimeContext, convId: string, msgs: Mes
  * (e.g. a SeenReceipt) can't land in between and get clobbered.
  */
 async function writeSseMessages(ctx: RealtimeContext, messages: Message[]): Promise<void> {
+  let appliedReceipts: string[] = [];
   await ctx.database.transaction('rw', ctx.database.messages, async () => {
     if (isStaleContext(ctx)) return;
     const existing = await ctx.database.messages.bulkGet(messages.map((m) => m.id));
@@ -109,8 +111,13 @@ async function writeSseMessages(ctx: RealtimeContext, messages: Message[]): Prom
       if (prev.repliedMessage && !m.repliedMessage) m.repliedMessage = prev.repliedMessage;
       if (prev.attachments?.length && !m.attachments?.length) m.attachments = prev.attachments;
     }
+    // A receipt may have arrived before its row existed — apply it AFTER the
+    // stored-field carry-over (so a newer stored seenAt wins the max) and
+    // consume only once the write commits (see applyPendingReceipts).
+    appliedReceipts = applyPendingReceipts(messages);
     await ctx.database.messages.bulkPut(messages);
   });
+  consumePendingReceipts(appliedReceipts);
 }
 
 /**
@@ -1156,12 +1163,16 @@ async function _doFetchLatest(
   // backfill paths apply; without it every echo-triggered refetch wiped them.
   // Read + put in one transaction so a concurrent SSE write can't land in
   // between and get overwritten with stale preserved values.
+  let appliedReceipts: string[] = [];
   await ctx.database.transaction('rw', ctx.database.messages, async () => {
     if (isStaleContext(ctx)) return;
     const existingRows = await ctx.database.messages.bulkGet(messages.map((m) => m.id));
     preserveSseFields(messages, existingRows);
+    // After preservation, so a newer stored seenAt wins; consume post-commit.
+    appliedReceipts = applyPendingReceipts(messages);
     await ctx.database.messages.bulkPut(messages);
   });
+  consumePendingReceipts(appliedReceipts);
 
   // Remove stored copies of messages this fetch no longer returned live within
   // its time range — messages recalled/unsent on LinkedIn disappear live.
@@ -1603,6 +1614,12 @@ async function handleReadReceipt(ctx: RealtimeContext, data: any): Promise<void>
     if (existing && (!existing.seenAt || seenAt > existing.seenAt)) {
       await ctx.database.messages.update(msgRef, { seenAt });
       debugLog('info', `[RT] Read receipt: ${msgRef} seen at ${seenAt}`);
+    } else if (!existing) {
+      // The row doesn't exist yet (our message is only stored under an
+      // SSE-format id, or the receipt raced the message write). Buffer the
+      // receipt; the write paths consume it when the row is created.
+      stashUnmatchedReceipt(msgRef, seenAt);
+      debugLog('info', `[RT] Read receipt buffered for ${msgRef} (no row yet)`);
     }
   }
 }

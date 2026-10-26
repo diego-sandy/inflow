@@ -14,7 +14,7 @@
 import { getMemberUrn } from '../auth/session';
 import { fetchMessages } from '../api/messages';
 import { normalizeMessages, extractProfileId, getParticipantPicture, extractReactions, needsParticipantRepair, extractAudioAttachment, extractParticipantsFromIncluded, isValidProfileUrn, type ExtractedParticipants } from '@/lib/voyager-normalizer';
-import { withoutRecalled } from '@/lib/message-dedup';
+import { withoutRecalled, preserveSseFields } from '@/lib/message-dedup';
 import { repairConversationParticipants } from '../sync/repair-participants';
 import { reconcileRecalledMessages } from '../sync/reconcile-messages';
 import { debugLog } from '@/lib/debug-log';
@@ -83,6 +83,34 @@ function findNewInboundMessages(ctx: RealtimeContext, convId: string, msgs: Mess
 /** Genuinely new outbound (own) messages of a batch — see findNewMessages. */
 function findNewOutboundMessages(ctx: RealtimeContext, convId: string, msgs: Message[]): Promise<Message[]> {
   return findNewMessages(ctx, convId, msgs, true);
+}
+
+/**
+ * Write an SSE message batch, carrying stored-row fields onto re-deliveries.
+ * LinkedIn re-delivers the full Message entity for edits and reactions, but
+ * those echoes never carry seenAt (receipts arrive as separate SeenReceipt
+ * events) and often omit renderContent (reply quotes, attachments) — a raw
+ * put would replace the stored row and silently wipe them. Reactions are NOT
+ * preserved: the echo's reactionSummaries (or their absence) IS the payload
+ * of a reaction change, and carrying stale ones over would break cross-client
+ * reaction removal. Read + put run in one transaction so a concurrent write
+ * (e.g. a SeenReceipt) can't land in between and get clobbered.
+ */
+async function writeSseMessages(ctx: RealtimeContext, messages: Message[]): Promise<void> {
+  await ctx.database.transaction('rw', ctx.database.messages, async () => {
+    if (isStaleContext(ctx)) return;
+    const existing = await ctx.database.messages.bulkGet(messages.map((m) => m.id));
+    for (let i = 0; i < messages.length; i++) {
+      const prev = existing[i];
+      if (!prev) continue;
+      const m = messages[i];
+      if (prev.seenAt && !m.seenAt) m.seenAt = prev.seenAt;
+      if (prev.editedAt && !m.editedAt) m.editedAt = prev.editedAt;
+      if (prev.repliedMessage && !m.repliedMessage) m.repliedMessage = prev.repliedMessage;
+      if (prev.attachments?.length && !m.attachments?.length) m.attachments = prev.attachments;
+    }
+    await ctx.database.messages.bulkPut(messages);
+  });
 }
 
 /**
@@ -744,7 +772,7 @@ async function handleVoyagerEvent(
   }
 
   if (isStaleContext(ctx)) return;
-  await ctx.database.messages.bulkPut(messages);
+  await writeSseMessages(ctx, messages);
   await cleanupOptimisticMessages(ctx, messages);
 
   // Update parent conversations
@@ -1123,7 +1151,17 @@ async function _doFetchLatest(
   const newInbound = await findNewInboundMessages(ctx, conversationId, messages);
   if (isStaleContext(ctx)) return;
 
-  await ctx.database.messages.bulkPut(messages);
+  // Preserve SSE-written fields the pagination API doesn't return
+  // (seenAt/reactions/editedAt) — same carry-over the FETCH_MESSAGES and
+  // backfill paths apply; without it every echo-triggered refetch wiped them.
+  // Read + put in one transaction so a concurrent SSE write can't land in
+  // between and get overwritten with stale preserved values.
+  await ctx.database.transaction('rw', ctx.database.messages, async () => {
+    if (isStaleContext(ctx)) return;
+    const existingRows = await ctx.database.messages.bulkGet(messages.map((m) => m.id));
+    preserveSseFields(messages, existingRows);
+    await ctx.database.messages.bulkPut(messages);
+  });
 
   // Remove stored copies of messages this fetch no longer returned live within
   // its time range — messages recalled/unsent on LinkedIn disappear live.
@@ -1347,7 +1385,7 @@ async function handleIncludedMessage(
 
   // Write messages to DB
   if (isStaleContext(ctx)) return;
-  await ctx.database.messages.bulkPut(messages);
+  await writeSseMessages(ctx, messages);
   await cleanupOptimisticMessages(ctx, messages);
 
   // The event's MessagingParticipant entities include the other party even when
@@ -1458,7 +1496,7 @@ async function handleSingleMessageEntity(
     ? await findNewOutboundMessages(ctx, conversationId, [message])
     : [];
   if (isStaleContext(ctx)) return;
-  await ctx.database.messages.put(message);
+  await writeSseMessages(ctx, [message]);
   await cleanupOptimisticMessages(ctx, [message]);
   await applyInboundMessageToConversation(
     ctx,

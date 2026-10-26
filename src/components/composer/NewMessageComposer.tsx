@@ -5,6 +5,10 @@ import { db } from '@/db/database';
 import { useCachedImage } from '@/hooks/useCachedImage';
 import { makeDraftConversationId } from '@/lib/draft-conversation';
 import type { Conversation } from '@/types/conversation';
+import type { Profile } from '@/types/profile';
+
+/** How long the recipient search reuses its snapshot of the local tables. */
+const SEARCH_SNAPSHOT_TTL_MS = 10_000;
 
 interface TypeaheadResult {
   name: string;
@@ -67,6 +71,12 @@ export function NewMessageComposer({ draftConversation, composeRef }: NewMessage
     }).catch(() => {});
   }, []);
 
+  // Snapshot of the two tables the local search scans. Loading both from
+  // IndexedDB on EVERY debounced keystroke materialized thousands of rows per
+  // typing pause on a mature inbox; a few seconds of staleness is invisible
+  // while typing a recipient name.
+  const searchSnapshotRef = useRef<{ at: number; profiles: Profile[]; conversations: Conversation[] } | null>(null);
+
   const doSearch = useCallback(async (q: string) => {
     const trimmed = q.trim().toLowerCase();
     latestQueryRef.current = trimmed;
@@ -78,10 +88,16 @@ export function NewMessageComposer({ draftConversation, composeRef }: NewMessage
     setSearching(true);
     try {
       // Search local profiles and conversations for matching names
-      const [profiles, conversations] = await Promise.all([
-        db.profiles.toArray(),
-        db.conversations.toArray(),
-      ]);
+      let snapshot = searchSnapshotRef.current;
+      if (!snapshot || Date.now() - snapshot.at > SEARCH_SNAPSHOT_TTL_MS) {
+        const [profiles, conversations] = await Promise.all([
+          db.profiles.toArray(),
+          db.conversations.toArray(),
+        ]);
+        snapshot = { at: Date.now(), profiles, conversations };
+        searchSnapshotRef.current = snapshot;
+      }
+      const { profiles, conversations } = snapshot;
 
       const seen = new Set<string>();
       if (selfUrnRef.current) seen.add(selfUrnRef.current);

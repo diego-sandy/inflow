@@ -36,6 +36,8 @@ import { useResizableSidebar } from '@/hooks/useResizableSidebar';
 import { useCollapsedSidebar, RAIL_WIDTH } from '@/hooks/useCollapsedSidebar';
 import { useSendObjectUrlReaper } from '@/hooks/useSendObjectUrlReaper';
 import { useUIStore, hydrateSendSettings } from '@/store/ui-store';
+import { belongsToTab } from '@/lib/inbox-filters';
+import { db } from '@/db/database';
 
 export function App() {
   const composeRef = useRef<HTMLTextAreaElement>(null);
@@ -186,17 +188,42 @@ export function App() {
       if (idx !== -1) {
         store.setSelectedIndex(idx);
       } else {
-        // Selected conversation was removed (archived/deleted/spam/etc.)
-        // Select the conversation at the same position, or the last one
-        const fallbackIdx = Math.min(store.selectedIndex, conversations.length - 1);
-        const fallback = conversations[fallbackIdx];
-        if (fallback && fallback.draft !== 1) {
-          store.openThread(fallback.id, fallbackIdx);
-        } else {
-          // Fallback was a draft — find next non-draft
-          const first = firstNonDraft();
-          if (first) store.openThread(first.conv.id, first.idx);
-        }
+        // Absent from the list means one of two things, and they need opposite
+        // responses: the conversation was removed (archived, deleted, marked
+        // spam) and we should move on — or it was written a beat ago and the
+        // live query has not reported it yet (or a tab switch is still showing
+        // that tab's cached rows), in which case it is about to appear and
+        // recovering would open whoever sits at this position instead, with
+        // the composer focused. Check the database before giving up on it.
+        //
+        // A 1:1 thread folded into a newer one with the same person is still
+        // in the database and still "belongs" here, but it will never be
+        // listed on its own — don't wait on that.
+        const sel = selectedConversationId;
+        const mergedAway = conversations.some((c) => c.mergedIds?.includes(sel));
+        let cancelled = false;
+        void (async () => {
+          const row = db && !mergedAway ? await db.conversations.get(sel) : undefined;
+          if (cancelled) return;
+          const current = useUIStore.getState();
+          // Still there and headed for this tab — wait for the list. With a
+          // search active the list is narrower than the tab, so a row can be
+          // legitimately excluded and waiting would strand the selection;
+          // recover as before.
+          if (row && !current.searchQuery && belongsToTab(row, current.inboxTab)) return;
+          if (current.selectedConversationId !== sel) return;
+          // Select the conversation at the same position, or the last one
+          const fallbackIdx = Math.min(current.selectedIndex, conversations.length - 1);
+          const fallback = conversations[fallbackIdx];
+          if (fallback && fallback.draft !== 1) {
+            current.openThread(fallback.id, fallbackIdx);
+          } else {
+            // Fallback was a draft — find next non-draft
+            const first = firstNonDraft();
+            if (first) current.openThread(first.conv.id, first.idx);
+          }
+        })();
+        return () => { cancelled = true; };
       }
     }
   }, [conversations, selectedConversationId, activeSection]);

@@ -276,6 +276,12 @@ export function useConversations() {
         results = results.filter((c) => c.lastActivityAt < ts);
       }
 
+      // Token strips above leave doubled internal spaces ("project is:unread
+      // update" → "project  update"); collapse them like stripFilterTokens
+      // does, or a mid-query token makes the free-text match nothing while
+      // the highlighter (which uses stripFilterTokens) highlights it anyway.
+      q = q.replace(/\s+/g, ' ').trim();
+
       if (q) {
         const lower = q.toLowerCase();
         results = results.filter(
@@ -309,6 +315,14 @@ export function useConversations() {
       lastSeenRef.current = { tab: inboxTab, value: conversations };
       if (conversations !== undefined) lastResultsRef.current.set(inboxTab, conversations);
     }
+  } else {
+    // Keep the identity tracker current while searching too — but never store
+    // search results as a tab's own content. setInboxTab clears the query and
+    // switches the tab in ONE update; with a tracker frozen at the pre-search
+    // value, the first post-switch render compared the still-pending SEARCH
+    // results against it, read "not stale", and showed the old tab's search
+    // leftovers as the new tab's content.
+    lastSeenRef.current = { tab: inboxTab, value: conversations };
   }
 
   return {

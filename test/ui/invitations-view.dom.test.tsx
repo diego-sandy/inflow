@@ -80,3 +80,20 @@ it('ignores the selected invitation', async () => {
     expect(sendBridgeMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'RESPOND_INVITATION', action: 'ignore' })),
   );
 });
+
+it('the Sent button runs the sent-invitations check and shows its answer', async () => {
+  const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  sendBridgeMessage.mockImplementation(async (msg: any) =>
+    msg.type === 'PROBE_SENT_INVITATIONS'
+      ? { success: true, data: { status: 404, ok: false } }
+      : { success: true, data: { count: 0 } },
+  );
+  render(<InvitationsView />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Sent' }));
+
+  await waitFor(() => expect(alert).toHaveBeenCalled());
+  expect(sendBridgeMessage).toHaveBeenCalledWith({ type: 'PROBE_SENT_INVITATIONS' });
+  expect(alert.mock.calls[0][0]).toMatch(/HTTP 404\nLinkedIn no longer serves this address/);
+  alert.mockRestore();
+});

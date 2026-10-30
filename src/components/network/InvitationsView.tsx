@@ -5,6 +5,7 @@ import { useInvitations } from '@/hooks/useInvitations';
 import { useResizablePane } from '@/hooks/useResizablePane';
 import { useUIStore } from '@/store/ui-store';
 import { connectionProfileUrl } from '@/components/connections/connection-format';
+import { runSentInvitationsCheck } from '@/lib/sent-invitations-check';
 import type { Invitation } from '@/types/network';
 
 function mutualLine(inv: Invitation): string | null {
@@ -128,6 +129,16 @@ export function InvitationsView() {
           )}
           {syncing && <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" title="Refreshing" />}
           <span className="flex-1" />
+          {/* For now this runs the one-off check of whether LinkedIn's API can
+              list sent invitations (lib/sent-invitations-check). What it finds
+              decides what a real Sent view is built on. */}
+          <button
+            onClick={() => void runSentInvitationsCheck()}
+            title="Check whether inflow can list your sent invitations"
+            className="rounded-md px-2 py-0.5 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:bg-surface-hover hover:text-fg-strong"
+          >
+            Sent
+          </button>
           <button
             onClick={() => void refresh()}
             disabled={syncing}

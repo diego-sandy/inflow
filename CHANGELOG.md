@@ -4,6 +4,83 @@ All notable changes to inflow are documented here. This project follows
 [semantic versioning](https://semver.org/) and the format of
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **MCP connector** — Claude Desktop (or any MCP client) can read your
+  network and inbox and draft messages into a review queue, through a small
+  companion installed from `inflow.mcpb`. Claude never sends; you do. Tools
+  cover connections, network stats, conversations, threads, message search,
+  people to reconnect with, finding someone outside your network, and
+  creating, editing and deleting drafts.
+- **Review queue** — drafts and scheduled messages in a split view: the queue
+  on the left, the selected message in full on the right. j/k to move through
+  it. Edit in place, schedule, or send; scheduled messages can send
+  themselves (on by default, never long after their time).
+- **Premium InMail** — write to people outside your network, with a subject.
+  Drafts Claude makes for them must be confirmed against the person's profile
+  before they can send.
+- **Held drafts** — an InMail follow-up to someone who hasn't answered your
+  last InMail is held ("Waiting for their reply") instead of failing at send,
+  and Claude can't create one. When someone replies after a draft to them was
+  written, it waits for you to look again ("They replied"); it is never
+  released on its own.
+- **Invitations** — pending connection requests under Connections, with
+  Accept / Ignore and the note beside them.
+- **Inbox** — renamable tabs, an InMail view, unread badges, mark as unread,
+  Drafts and Scheduled from the tab row, and scheduled replies.
+- **AI Compose** — describe a message, review the AI's draft, then send.
+- **AI Chat** — streamed answers, searches the relevant part of your network
+  first, editable starter questions and instructions. With Claude and the
+  connector, it can look things up for itself.
+- **AI providers per task** — pick Claude or Gemini, and the model, for fast
+  and for quality work separately. Keys can live in the connector instead of
+  the browser.
+- **Setup wizard** — a first-run walkthrough (LinkedIn, pinning, AI keys,
+  the MCP connector), reopenable from Settings › Setup.
+- **Connections sync** — incremental and paced: a visit checks for new
+  connections, large networks fill in gradually, and it backs off when
+  LinkedIn throttles.
+- **AI keys** — replace a saved key in place, see where the full key lives,
+  and confirm before removing one.
+- **New inflow mark** across the toolbar, the app and the connector.
+- **Themes** from the nav rail, and `g` + letter to reach every section.
+
+### Changed
+- **AI models** — Claude Haiku 5.5 / Sonnet 5.5 / Opus 5.5 and Gemini
+  3.5 Flash-Lite / 3.8 Flash; a saved older choice moves to its successor.
+- **Composer** — one field with a slim toolbar, round send button and a soft
+  character counter.
+- **Connector pairing** — both sides now prove they hold the pairing code
+  without ever sending it, and inflow answers nothing until the connector
+  has proved itself. Reinstall `inflow.mcpb` once after updating.
+- **Releases** check that the AI models inflow offers are still current.
+
+### Fixed
+- **Composer drafts** — moving past a conversation before its draft loaded
+  deleted it; a slow load could overwrite what you'd typed; changing a new
+  message's recipients wiped it.
+- **AI errors** — a failed AI call says why (including a rejected key, and
+  how to fix it) instead of "The AI returned nothing".
+- **Live updates** — reactions and edits no longer wipe a message's "seen"
+  mark or attachments; a receipt that arrives before its message is kept;
+  photos arriving live show in the preview; replying from another device
+  marks the thread read; messages in Other no longer raise a desktop
+  notification or jump to Primary.
+- **Actions** — archive, star, move and delete now apply to both halves of a
+  conversation LinkedIn split in two; a failed action no longer undoes a
+  later one or makes a thread vanish; a thread in Other can move back to
+  Focused.
+- **Sync** — videos you receive are visible; a network stall no longer shows
+  the login screen; a stuck upload no longer blocks later sends; caches no
+  longer grow without limit; folders are no longer re-read end to end every
+  15 minutes.
+- **Inbox** — a search no longer leaves the list blank or shows another tab's
+  results; filters mid-search work; the selection no longer jumps to someone
+  else when a thread is still saving.
+- Many of these fixes are ported from the upstream project, each checked
+  against this codebase with a test first.
+
 ## [0.5.0] - 2026-08-09
 
 ### Added

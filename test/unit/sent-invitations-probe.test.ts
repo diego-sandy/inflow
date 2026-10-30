@@ -49,7 +49,7 @@ it('reports the shape of a working answer, with no names in it', async () => {
     included: [{ firstName: 'Dana', lastName: 'Whitfield' }, { firstName: 'Owen', lastName: 'Pratt' }],
   }));
   const probe = await probeSentInvitations();
-  expect(probe).toEqual({ status: 200, ok: true, rows: 2, total: 37, included: 2, fields: ['invitation', 'sentTime', 'toMember'] });
+  expect(probe).toMatchObject({ status: 200, ok: true, rows: 2, total: 37, included: 2, fields: ['invitation', 'sentTime', 'toMember'] });
   const text = describeSentProbe(probe);
   expect(text).toMatch(/It works: 2 sent invitations on the first page \(of 37\)/);
   expect(text).not.toMatch(/Dana|Whitfield|Owen|Pratt/);
@@ -64,4 +64,24 @@ it('says plainly when the address is gone, or the query was refused', () => {
 it('does not call an empty or unrecognised answer a success', () => {
   expect(describeSentProbe(summarizeSentProbe(200, true, { elements: [] }))).toMatch(/empty list/);
   expect(describeSentProbe(summarizeSentProbe(200, true, { something: 'else' }))).toMatch(/not with a list inflow recognises/);
+});
+
+it('reads the normalized format: references in *elements, records by kind in included, names never shown', () => {
+  const probe = summarizeSentProbe(200, true, {
+    data: { '*elements': ['urn:li:fsd_invitationView:1', 'urn:li:fsd_invitationView:2'], paging: { total: 0 } },
+    included: [
+      { $type: 'com.linkedin.voyager.relationships.invitation.SentInvitationView', entityUrn: 'urn:1', sentTime: 1, '*invitation': 'urn:x' },
+      { $type: 'com.linkedin.voyager.relationships.invitation.SentInvitationView', entityUrn: 'urn:2', sentTime: 2, '*invitation': 'urn:y' },
+      { $type: 'com.linkedin.voyager.identity.shared.MiniProfile', firstName: 'Dana', lastName: 'Whitfield', publicIdentifier: 'dana-w' },
+    ],
+  });
+  expect(probe.rows).toBe(2);
+  expect(probe.kinds).toEqual([
+    { type: 'SentInvitationView', count: 2, fields: ['$type', '*invitation', 'entityUrn', 'sentTime'] },
+    { type: 'MiniProfile', count: 1, fields: ['$type', 'firstName', 'lastName', 'publicIdentifier'] },
+  ]);
+  const text = describeSentProbe(probe);
+  expect(text).toMatch(/It works: 2 sent invitations/);
+  expect(text).toMatch(/SentInvitationView × 2: \$type, \*invitation, entityUrn, sentTime/);
+  expect(text).not.toMatch(/Dana|Whitfield|dana-w/);
 });

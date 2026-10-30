@@ -67,6 +67,11 @@ export interface SentInvitationsProbe {
   included?: number;
   /** Field names of the first row, sorted. Structure only. */
   fields?: string[];
+  /**
+   * The linked records by kind: the short $type name, how many, and the field
+   * names one of them carries. Field NAMES only, never values.
+   */
+  kinds?: { type: string; count: number; fields: string[] }[];
 }
 
 /** Reduce a probe response to its shape. Pure, so it can be tested. */
@@ -75,15 +80,33 @@ export function summarizeSentProbe(status: number, ok: boolean, body: unknown): 
   if (!body || typeof body !== 'object') return out;
   const b = body as any;
   const data = b.data && typeof b.data === 'object' ? b.data : b; // normalized JSON wraps in `data`
+  // The normalized format (what voyagerFetch asks for) lists the rows as URN
+  // references in `*elements` and puts the records themselves in `included`,
+  // as the connections endpoint does.
+  const refs = Array.isArray(data['*elements']) ? data['*elements'] : undefined;
   const elements = Array.isArray(data.elements) ? data.elements : Array.isArray(b.elements) ? b.elements : undefined;
-  if (elements) {
+  if (refs) {
+    out.rows = refs.length;
+  } else if (elements) {
     out.rows = elements.length;
     const first = elements[0];
     if (first && typeof first === 'object') out.fields = Object.keys(first).sort();
   }
   const paging = data.paging ?? b.paging;
   if (paging && typeof paging.total === 'number') out.total = paging.total;
-  if (Array.isArray(b.included)) out.included = b.included.length;
+  if (Array.isArray(b.included)) {
+    out.included = b.included.length;
+    const kinds = new Map<string, { type: string; count: number; fields: Set<string> }>();
+    for (const e of b.included) {
+      if (!e || typeof e !== 'object') continue;
+      const type = String(e.$type || 'unknown').split('.').pop()!;
+      const k = kinds.get(type) ?? { type, count: 0, fields: new Set<string>() };
+      k.count++;
+      for (const f of Object.keys(e)) k.fields.add(f);
+      kinds.set(type, k);
+    }
+    out.kinds = [...kinds.values()].map((k) => ({ type: k.type, count: k.count, fields: [...k.fields].sort() }));
+  }
   return out;
 }
 

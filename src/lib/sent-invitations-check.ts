@@ -29,6 +29,7 @@ export function describeSentProbe(p: SentInvitationsProbe): string {
   }
   if (p.included !== undefined) lines.push(`Linked records: ${p.included}.`);
   if (p.fields?.length) lines.push(`Fields: ${p.fields.join(', ')}.`);
+  for (const k of p.kinds ?? []) lines.push(`\n${k.type} × ${k.count}: ${k.fields.join(', ')}`);
   return lines.join('\n');
 }
 

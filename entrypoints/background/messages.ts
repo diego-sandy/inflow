@@ -16,7 +16,7 @@ import { fetchMessages, fetchAllMessages, sendMessage, editMessage, createConver
 import { enqueueSend } from './send-queue';
 import { searchTypeahead } from './api/typeahead';
 import { syncConnections } from './sync/connections-sync';
-import { fetchInvitationsRaw, respondToInvitation } from './api/relationships';
+import { fetchInvitationsRaw, probeSentInvitations, respondToInvitation } from './api/relationships';
 import { normalizeInvitations, invitationPaging } from '@/lib/invitation-normalizer';
 import type { Invitation } from '@/types/network';
 import type { Profile } from '@/types/profile';
@@ -390,6 +390,9 @@ export async function handleMessage(msg: BridgeMessage): Promise<BridgeResponse>
       clearDebugLogs();
       await syncConversations();
       return { success: true };
+    }
+    case 'PROBE_SENT_INVITATIONS': {
+      return { success: true, data: await probeSentInvitations() };
     }
     case 'DIAGNOSTIC_SYNC': {
       const report = await runDiagnosticSync();

@@ -8,6 +8,7 @@ import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { getAISuggestionsEnabled, setAISuggestionsEnabled } from '@/lib/ai-settings';
 import { buildCommands } from './commands';
 import { checkForUpdateAndToast } from '@/lib/check-update';
+import { runSentInvitationsCheck } from '@/lib/sent-invitations-check';
 import type { Conversation } from '@/types/conversation';
 
 interface CommandPaletteProps {
@@ -196,6 +197,7 @@ export function CommandPalette({ conversations, composeRef }: CommandPaletteProp
       useUIStore.getState().setActiveSection('inbox');
     },
     checkForUpdate: () => checkForUpdateAndToast(useUIStore.getState().showToast),
+    checkSentInvitations: () => void runSentInvitationsCheck(),
   });
 
   if (!paletteOpen) return null;

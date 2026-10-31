@@ -7,6 +7,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { switchDatabase, db } from '@/db/database';
 import { InvitationsView } from '@/components/network/InvitationsView';
 import { useUIStore } from '@/store/ui-store';
+import { resetSentInvitationsCache } from '@/hooks/useSentInvitations';
 import type { Invitation } from '@/types/network';
 
 const sendBridgeMessage = vi.fn();
@@ -81,19 +82,81 @@ it('ignores the selected invitation', async () => {
   );
 });
 
-it('the Sent button runs the sent-invitations check and shows its answer', async () => {
-  const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
-  sendBridgeMessage.mockImplementation(async (msg: any) =>
-    msg.type === 'PROBE_SENT_INVITATIONS'
-      ? { success: true, data: { status: 404, ok: false } }
-      : { success: true, data: { count: 0 } },
-  );
-  render(<InvitationsView />);
+describe('Sent', () => {
+  const NOW = Date.now();
+  const sentRows = [
+    { id: 's1', toUrn: 'urn:li:fsd_profile:DANA', name: 'Dana Whitfield', headline: 'Billing lead', pictureUrl: '', publicId: 'dana-w', message: 'Hi Dana, great meeting you.', sentAt: NOW - 2 * 86400_000 },
+    { id: 's2', toUrn: 'urn:li:fsd_profile:OWEN', name: 'Owen Pratt', headline: 'Founder', pictureUrl: '', publicId: 'owen-p', message: '', sentAt: NOW - 5 * 86400_000 },
+  ];
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Sent' }));
+  beforeEach(() => {
+    resetSentInvitationsCache();
+    sendBridgeMessage.mockImplementation(async (msg: any) =>
+      msg.type === 'FETCH_SENT_INVITATIONS'
+        ? { success: true, data: { invitations: sentRows, complete: true } }
+        : { success: true, data: { count: 0 } },
+    );
+  });
+  const sentCalls = () => sendBridgeMessage.mock.calls.filter((c) => c[0].type === 'FETCH_SENT_INVITATIONS').length;
 
-  await waitFor(() => expect(alert).toHaveBeenCalled());
-  expect(sendBridgeMessage).toHaveBeenCalledWith({ type: 'PROBE_SENT_INVITATIONS' });
-  expect(alert.mock.calls[0][0]).toMatch(/HTTP 404\nLinkedIn no longer serves this address/);
-  alert.mockRestore();
+  it('loads only when opened, and lists who you invited with when, and no Accept or Ignore', async () => {
+    render(<InvitationsView />);
+    await screen.findByRole('tab', { name: /Received/ });
+    expect(sentCalls()).toBe(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Sent/ }));
+    expect(await screen.findByText('Dana Whitfield')).toBeInTheDocument();
+    expect(screen.getByText('Owen Pratt')).toBeInTheDocument();
+    expect(screen.getByText('Sent 2 days ago')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ignore' })).toBeNull();
+    expect(screen.getByRole('tab', { name: /Sent/ })).toHaveTextContent('2');
+    expect(sentCalls()).toBe(1);
+  });
+
+  it('shows your note on the right, and says when there was none', async () => {
+    render(<InvitationsView />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+    expect(await screen.findByText('Your note to Dana Whitfield')).toBeInTheDocument();
+    expect(screen.getByText('Hi Dana, great meeting you.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Owen Pratt'));
+    expect(screen.getByText('You sent this request without a note.')).toBeInTheDocument();
+  });
+
+  it('switching back and forth reuses the list; refresh fetches it again', async () => {
+    render(<InvitationsView />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+    await screen.findByText('Dana Whitfield');
+    fireEvent.click(screen.getByRole('tab', { name: /Received/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Sent/ }));
+    await screen.findByText('Dana Whitfield');
+    expect(sentCalls()).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh sent invitations' }));
+    await waitFor(() => expect(sentCalls()).toBe(2));
+  });
+
+  it('says so when LinkedIn stopped answering part-way', async () => {
+    sendBridgeMessage.mockImplementation(async (msg: any) =>
+      msg.type === 'FETCH_SENT_INVITATIONS'
+        ? { success: true, data: { invitations: sentRows, complete: false } }
+        : { success: true, data: { count: 0 } },
+    );
+    render(<InvitationsView />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+    expect(await screen.findByText(/may be missing some/)).toBeInTheDocument();
+  });
+
+  it('shows an error rather than an empty list when the fetch fails', async () => {
+    sendBridgeMessage.mockImplementation(async (msg: any) =>
+      msg.type === 'FETCH_SENT_INVITATIONS'
+        ? { success: false, error: 'fetchSentInvitations failed: 429' }
+        : { success: true, data: { count: 0 } },
+    );
+    render(<InvitationsView />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+    expect(await screen.findByText(/fetchSentInvitations failed: 429/)).toBeInTheDocument();
+    expect(screen.queryByText('No pending sent invitations.')).toBeNull();
+  });
 });

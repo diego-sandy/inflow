@@ -16,7 +16,8 @@ import { fetchMessages, fetchAllMessages, sendMessage, editMessage, createConver
 import { enqueueSend } from './send-queue';
 import { searchTypeahead } from './api/typeahead';
 import { syncConnections } from './sync/connections-sync';
-import { fetchInvitationsRaw, probeSentInvitations, respondToInvitation } from './api/relationships';
+import { fetchInvitationsRaw, fetchSentInvitationsRaw, respondToInvitation } from './api/relationships';
+import { walkSentInvitations } from './sync/sent-invitations';
 import { normalizeInvitations, invitationPaging } from '@/lib/invitation-normalizer';
 import type { Invitation } from '@/types/network';
 import type { Profile } from '@/types/profile';
@@ -391,8 +392,10 @@ export async function handleMessage(msg: BridgeMessage): Promise<BridgeResponse>
       await syncConversations();
       return { success: true };
     }
-    case 'PROBE_SENT_INVITATIONS': {
-      return { success: true, data: await probeSentInvitations() };
+    case 'FETCH_SENT_INVITATIONS': {
+      // Read-only: the user's pending sent requests, fetched on demand and not
+      // stored (nothing else in inflow needs them yet).
+      return { success: true, data: await walkSentInvitations(fetchSentInvitationsRaw) };
     }
     case 'DIAGNOSTIC_SYNC': {
       const report = await runDiagnosticSync();

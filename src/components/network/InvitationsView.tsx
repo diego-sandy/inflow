@@ -5,8 +5,8 @@ import { useInvitations } from '@/hooks/useInvitations';
 import { useResizablePane } from '@/hooks/useResizablePane';
 import { useUIStore } from '@/store/ui-store';
 import { connectionProfileUrl } from '@/components/connections/connection-format';
-import { runSentInvitationsCheck } from '@/lib/sent-invitations-check';
-import type { Invitation } from '@/types/network';
+import { useSentInvitations } from '@/hooks/useSentInvitations';
+import type { Invitation, SentInvitation } from '@/types/network';
 
 function mutualLine(inv: Invitation): string | null {
   if (!inv.mutualCount) return null;
@@ -87,10 +87,55 @@ function ProfileRow({ inv, selected, onSelect }: { inv: Invitation; selected: bo
   );
 }
 
-/** Invitations — a list of profiles with inline actions and a resizable note pane. */
+/** A request the user sent: who, their headline, when. Read-only, no actions. */
+function SentRow({ inv, selected, onSelect }: { inv: SentInvitation; selected: boolean; onSelect: () => void }) {
+  const name = inv.name || 'LinkedIn Member';
+  const openProfile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(connectionProfileUrl(inv.publicId, name), '_blank', 'noopener,noreferrer');
+  };
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+      className={`flex cursor-pointer items-start gap-3 border-b border-edge px-3 py-2.5 transition-colors ${selected ? 'bg-surface-active' : 'hover:bg-surface-hover'}`}
+    >
+      <button onClick={openProfile} className="mt-0.5 shrink-0" title="Open LinkedIn profile">
+        <GroupAvatar names={[name]} pictures={[inv.pictureUrl]} size={40} />
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-semibold text-fg-strong">{name}</span>
+          {inv.message && (
+            <svg className="h-3.5 w-3.5 shrink-0 text-fg-faint" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="Has a note">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          )}
+        </div>
+        {inv.headline && <div className="truncate text-xs text-fg-secondary">{inv.headline}</div>}
+      </div>
+      {inv.sentAt > 0 && (
+        <span className="shrink-0 text-[10px] text-fg-faint">Sent {formatDistanceToNowStrict(new Date(inv.sentAt))} ago</span>
+      )}
+    </div>
+  );
+}
+
+type Mode = 'received' | 'sent';
+
+/**
+ * Invitations — Received (with Accept / Ignore) or Sent (read-only), as a list
+ * of profiles beside a resizable pane with the selected request's note.
+ */
 export function InvitationsView() {
-  const { invitations, syncing, error, refresh } = useInvitations();
+  const [mode, setMode] = useState<Mode>('received');
+  const received = useInvitations();
+  const sent = useSentInvitations(mode === 'sent');
+  const { invitations, syncing: receivedSyncing, error: receivedError, refresh: refreshReceived } = received;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSentId, setSelectedSentId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // The list is the resizable pane (docked left); the note fills the remainder.
   const { width: listWidth, isDragging, onDividerMouseDown, onDividerDoubleClick } = useResizablePane({
@@ -102,7 +147,7 @@ export function InvitationsView() {
   });
 
   useEffect(() => {
-    void refresh();
+    void refreshReceived();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -116,7 +161,34 @@ export function InvitationsView() {
     }
   }, [invitations, selectedId]);
 
+  useEffect(() => {
+    const list = sent.invitations;
+    if (list.length === 0) {
+      if (selectedSentId !== null) setSelectedSentId(null);
+      return;
+    }
+    if (!selectedSentId || !list.some((i) => i.id === selectedSentId)) setSelectedSentId(list[0].id);
+  }, [sent.invitations, selectedSentId]);
+
   const selected = invitations.find((i) => i.id === selectedId) ?? null;
+  const selectedSent = sent.invitations.find((i) => i.id === selectedSentId) ?? null;
+  const isSent = mode === 'sent';
+  const syncing = isSent ? sent.syncing : receivedSyncing;
+  const error = isSent ? sent.error : receivedError;
+  const refresh = isSent ? sent.refresh : refreshReceived;
+  const tab = (m: Mode, label: string, count: number | null) => (
+    <button
+      role="tab"
+      aria-selected={mode === m}
+      onClick={() => setMode(m)}
+      className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+        mode === m ? 'bg-surface-active text-fg-strong' : 'text-fg-muted hover:text-fg-secondary'
+      }`}
+    >
+      {label}
+      {count !== null && count > 0 && <span className="tabular-nums text-fg-faint">{count}</span>}
+    </button>
+  );
 
   return (
     <div ref={containerRef} className="flex h-full min-w-0 flex-1">
@@ -124,25 +196,16 @@ export function InvitationsView() {
       <div style={{ width: listWidth }} className="flex h-full shrink-0 flex-col">
         <div className="flex items-center gap-2 border-b border-edge px-4 py-2.5">
           <h2 className="text-sm font-semibold text-fg-strong">Invitations</h2>
-          {invitations.length > 0 && (
-            <span className="rounded-full bg-surface-input px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">{invitations.length}</span>
-          )}
+          <div role="tablist" aria-label="Invitations" className="flex items-center gap-0.5">
+            {tab('received', 'Received', invitations.length)}
+            {tab('sent', 'Sent', sent.loaded ? sent.invitations.length : null)}
+          </div>
           {syncing && <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" title="Refreshing" />}
           <span className="flex-1" />
-          {/* For now this runs the one-off check of whether LinkedIn's API can
-              list sent invitations (lib/sent-invitations-check). What it finds
-              decides what a real Sent view is built on. */}
-          <button
-            onClick={() => void runSentInvitationsCheck()}
-            title="Check whether inflow can list your sent invitations"
-            className="rounded-md px-2 py-0.5 text-xs font-medium text-fg-secondary ring-1 ring-inset ring-edge transition-colors hover:bg-surface-hover hover:text-fg-strong"
-          >
-            Sent
-          </button>
           <button
             onClick={() => void refresh()}
             disabled={syncing}
-            aria-label="Refresh invitations"
+            aria-label={isSent ? 'Refresh sent invitations' : 'Refresh invitations'}
             className="rounded-md p-1 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg-secondary disabled:opacity-40"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -152,14 +215,30 @@ export function InvitationsView() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {error && <div className="px-4 py-8 text-center text-sm text-red-500 dark:text-red-400">{error}</div>}
-          {!error && invitations.length === 0 && (
+          {!isSent && !error && invitations.length === 0 && (
             <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
               <p className="text-sm text-fg-muted">{syncing ? 'Loading invitations…' : 'No pending invitations.'}</p>
               {!syncing && <p className="max-w-xs text-xs text-fg-faint">New connection requests will show up here to accept or ignore.</p>}
             </div>
           )}
-          {invitations.map((inv) => (
+          {!isSent && invitations.map((inv) => (
             <ProfileRow key={inv.id} inv={inv} selected={inv.id === selectedId} onSelect={() => setSelectedId(inv.id)} />
+          ))}
+          {isSent && !error && sent.invitations.length === 0 && (
+            <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
+              <p className="text-sm text-fg-muted">{syncing || !sent.loaded ? 'Loading sent invitations…' : 'No pending sent invitations.'}</p>
+              {!syncing && sent.loaded && (
+                <p className="max-w-xs text-xs text-fg-faint">Connection requests you send show up here until they’re accepted.</p>
+              )}
+            </div>
+          )}
+          {isSent && !sent.complete && sent.invitations.length > 0 && (
+            <p className="border-b border-edge px-4 py-2 text-[11px] text-fg-muted">
+              LinkedIn stopped answering part-way, so this list may be missing some. Refresh in a while.
+            </p>
+          )}
+          {isSent && sent.invitations.map((inv) => (
+            <SentRow key={inv.id} inv={inv} selected={inv.id === selectedSentId} onSelect={() => setSelectedSentId(inv.id)} />
           ))}
         </div>
       </div>
@@ -175,6 +254,30 @@ export function InvitationsView() {
       </div>
 
       {/* Right: the selected request's note — fills whatever's left of the list */}
+      {isSent ? (
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        <div className="flex items-center border-b border-edge px-5 py-2.5">
+          <h3 className="truncate text-sm font-semibold text-fg-strong">
+            {selectedSent ? `Your note to ${selectedSent.name || 'LinkedIn Member'}` : 'Note'}
+          </h3>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {selectedSent?.message ? (
+            // Your own message, as the inbox shows it: on the right, in blue.
+            <div className="flex flex-col items-end">
+              <p className="mb-1 text-xs font-medium text-fg-secondary">You</p>
+              <div className="w-fit max-w-full whitespace-pre-wrap rounded-2xl bg-blue-500/15 px-3.5 py-2.5 text-sm leading-relaxed text-fg ring-1 ring-inset ring-blue-500/25">
+                {selectedSent.message}
+              </div>
+            </div>
+          ) : (
+            <p className="pt-8 text-center text-xs text-fg-faint">
+              {selectedSent ? 'You sent this request without a note.' : 'Select an invitation to read its note.'}
+            </p>
+          )}
+        </div>
+      </div>
+      ) : (
       <div className="flex h-full min-w-0 flex-1 flex-col">
         <div className="flex items-center border-b border-edge px-5 py-2.5">
           <h3 className="truncate text-sm font-semibold text-fg-strong">
@@ -202,6 +305,7 @@ export function InvitationsView() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

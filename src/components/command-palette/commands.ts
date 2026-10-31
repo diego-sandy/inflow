@@ -38,8 +38,6 @@ export function buildCommands(actions: {
   openSettings: () => void;
   openWhatsNew: () => void;
   openAISetup: () => void;
-  /** One-off diagnostic (lib/sent-invitations-check). */
-  checkSentInvitations?: () => void;
   runSetup: () => void;
   toggleDemoMode: () => void;
   isDemoActive: boolean;
@@ -95,9 +93,6 @@ export function buildCommands(actions: {
       action: actions.toggleAISuggestions,
     },
     { id: 'report-bug', label: 'Report a bug', shortcut: '', action: actions.reportBug },
-    ...(actions.checkSentInvitations
-      ? [{ id: 'check-sent-invitations', label: 'Check: can LinkedIn’s API list sent invitations?', shortcut: '', action: actions.checkSentInvitations }]
-      : []),
     { id: 'join-whatsapp', label: 'Join WhatsApp Group', shortcut: '', action: actions.joinWhatsApp },
     {
       id: 'demo-mode',

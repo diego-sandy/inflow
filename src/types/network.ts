@@ -30,3 +30,21 @@ export interface Invitation extends InvitationInsight {
   sentAt: number;
   status: 'pending' | 'accepted' | 'ignored';
 }
+
+/**
+ * A connection request the user sent that is still pending, from Voyager's
+ * relationships/sentInvitationViewsV2. Read-only: withdrawing is not wired up.
+ */
+export interface SentInvitation {
+  /** Numeric invitation id (tail of urn:li:fs_relInvitation:...). */
+  id: string;
+  /** Recipient, normalized to urn:li:fsd_profile:<memberId>. */
+  toUrn: string;
+  name: string;
+  headline: string;
+  pictureUrl: string;
+  publicId: string;
+  /** The note sent with the request ('' if none). */
+  message: string;
+  sentAt: number;
+}

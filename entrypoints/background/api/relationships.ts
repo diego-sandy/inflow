@@ -43,82 +43,20 @@ export async function respondToInvitation(
 }
 
 /**
- * One-off check: does Voyager still serve SENT invitations?
- *
- * Upstream concluded it doesn't and built its Sent tab by reading LinkedIn's
- * web page instead, but only tried `sentInvitationViews` (404) and a few other
- * REST routes. Reverse-engineered clients use `sentInvitationViewsV2`, which
- * nobody here had tried. This makes that single read-only GET, the same way
- * fetchInvitationsRaw reads received ones, and reports only its shape: the
- * status, how many rows came back, and field names. No names or other values
- * leave this function.
+ * One page of the user's pending SENT invitations. Upstream concluded Voyager
+ * no longer serves these and read LinkedIn's web page instead, but only tried
+ * `sentInvitationViews` (404); the V2 view answers, in the same normalized
+ * format as the other relationship endpoints. Verified live on 2026-10-30.
  */
-export const SENT_INVITATIONS_PROBE_PATH =
-  '/relationships/sentInvitationViewsV2?q=invitationType&invitationType=CONNECTION&start=0&count=10';
-
-export interface SentInvitationsProbe {
-  status: number;
-  ok: boolean;
-  /** Rows on the first page (`elements`), when the body parsed. */
-  rows?: number;
-  /** `paging.total`, when present (LinkedIn sometimes reports 0 regardless). */
-  total?: number;
-  /** Entities in `included` (normalized responses put profiles there). */
-  included?: number;
-  /** Field names of the first row, sorted. Structure only. */
-  fields?: string[];
-  /**
-   * The linked records by kind: the short $type name, how many, and the field
-   * names one of them carries. Field NAMES only, never values.
-   */
-  kinds?: { type: string; count: number; fields: string[] }[];
-}
-
-/** Reduce a probe response to its shape. Pure, so it can be tested. */
-export function summarizeSentProbe(status: number, ok: boolean, body: unknown): SentInvitationsProbe {
-  const out: SentInvitationsProbe = { status, ok };
-  if (!body || typeof body !== 'object') return out;
-  const b = body as any;
-  const data = b.data && typeof b.data === 'object' ? b.data : b; // normalized JSON wraps in `data`
-  // The normalized format (what voyagerFetch asks for) lists the rows as URN
-  // references in `*elements` and puts the records themselves in `included`,
-  // as the connections endpoint does.
-  const refs = Array.isArray(data['*elements']) ? data['*elements'] : undefined;
-  const elements = Array.isArray(data.elements) ? data.elements : Array.isArray(b.elements) ? b.elements : undefined;
-  if (refs) {
-    out.rows = refs.length;
-  } else if (elements) {
-    out.rows = elements.length;
-    const first = elements[0];
-    if (first && typeof first === 'object') out.fields = Object.keys(first).sort();
+export async function fetchSentInvitationsRaw(start = 0, count = 10): Promise<any> {
+  const res = await voyagerFetch(
+    `/relationships/sentInvitationViewsV2?q=invitationType&invitationType=CONNECTION&start=${start}&count=${count}`,
+  );
+  if (!res.ok) {
+    debugLog('error', `fetchSentInvitationsRaw failed: ${res.status}`);
+    const err = new Error(`fetchSentInvitations failed: ${res.status}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
-  const paging = data.paging ?? b.paging;
-  if (paging && typeof paging.total === 'number') out.total = paging.total;
-  if (Array.isArray(b.included)) {
-    out.included = b.included.length;
-    const kinds = new Map<string, { type: string; count: number; fields: Set<string> }>();
-    for (const e of b.included) {
-      if (!e || typeof e !== 'object') continue;
-      const type = String(e.$type || 'unknown').split('.').pop()!;
-      const k = kinds.get(type) ?? { type, count: 0, fields: new Set<string>() };
-      k.count++;
-      for (const f of Object.keys(e)) k.fields.add(f);
-      kinds.set(type, k);
-    }
-    out.kinds = [...kinds.values()].map((k) => ({ type: k.type, count: k.count, fields: [...k.fields].sort() }));
-  }
-  return out;
-}
-
-export async function probeSentInvitations(): Promise<SentInvitationsProbe> {
-  const res = await voyagerFetch(SENT_INVITATIONS_PROBE_PATH, { skipJitter: true });
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    /* an HTML or empty error page: the status says enough */
-  }
-  const summary = summarizeSentProbe(res.status, res.ok, body);
-  debugLog(res.ok ? 'info' : 'error', `probeSentInvitations: ${JSON.stringify(summary)}`);
-  return summary;
+  return res.json();
 }

@@ -3,7 +3,7 @@
 // self-contained. Defensive by design — these endpoints are undocumented and
 // their shapes drift.
 import { pickArtifact } from '@/lib/voyager-image';
-import type { Invitation, InvitationInsight } from '@/types/network';
+import type { Invitation, InvitationInsight, SentInvitation } from '@/types/network';
 import type { Profile } from '@/types/profile';
 
 function included(raw: any): any[] {
@@ -182,4 +182,46 @@ export function invitationPaging(raw: any): { total: number } | null {
   const p = raw?.data?.paging ?? raw?.paging;
   const total = Number(p?.total ?? NaN);
   return Number.isFinite(total) && total >= 0 ? { total } : null;
+}
+
+export interface NormalizedSentInvitations {
+  invitations: SentInvitation[];
+  /** Rows the page listed (`*elements`), before any were dropped: drives paging. */
+  rawCount: number;
+}
+
+/**
+ * Sent invitations, from relationships/sentInvitationViewsV2. The page lists
+ * SentInvitationViewV2 references in `*elements`; each view points at an
+ * Invitation (`*invitation`), which points at the recipient's MiniProfile
+ * (`*toMember`). The sender's own MiniProfile is in `included` too and is
+ * simply never reached. Follows the page's order.
+ */
+export function normalizeSentInvitations(raw: any): NormalizedSentInvitations {
+  const byUrn = indexByUrn(included(raw));
+  const resolve: Resolve = (urn) => byUrn.get(String(urn));
+  const order: unknown[] = Array.isArray(raw?.data?.['*elements']) ? raw.data['*elements'] : [];
+
+  const invitations: SentInvitation[] = [];
+  for (const viewRef of order) {
+    const view = typeof viewRef === 'string' ? resolve(viewRef) : viewRef;
+    const inv = resolve(ref(view, 'invitation'));
+    if (!inv) continue;
+    const id = String(inv.entityUrn || '').split(':').pop() || '';
+    if (!id) continue;
+    const toRef = ref(inv, 'toMember') || ref(inv, 'invitee');
+    const p = resolve(toRef);
+    const msg = inv.message;
+    invitations.push({
+      id,
+      toUrn: toFsdProfileUrn(String(p?.dashEntityUrn || toRef)),
+      name: displayName(p) || 'LinkedIn Member',
+      headline: String(p?.occupation || p?.headline || ''),
+      pictureUrl: profilePictureUrl(p, 100, resolve),
+      publicId: String(p?.publicIdentifier || ''),
+      message: typeof msg === 'string' ? msg : String(msg?.text || ''),
+      sentAt: Number(inv.sentTime || inv.sentAt || 0),
+    });
+  }
+  return { invitations, rawCount: order.length };
 }

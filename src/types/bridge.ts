@@ -43,8 +43,8 @@ export type BridgeMessage =
   | { type: 'RECALL_MESSAGE'; conversationId: string; messageId: string }
   | { type: 'FETCH_CONNECTIONS'; force?: boolean }
   | { type: 'FETCH_INVITATIONS' }
-  // One-off diagnostic: does Voyager still serve sent invitations? Read-only.
-  | { type: 'PROBE_SENT_INVITATIONS' }
+  // The user's pending sent connection requests. Read-only.
+  | { type: 'FETCH_SENT_INVITATIONS' }
   | { type: 'RESPOND_INVITATION'; invitationId: string; sharedSecret: string; action: 'accept' | 'ignore' }
   | { type: 'CHECK_FOR_UPDATE' };
 

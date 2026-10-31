@@ -304,6 +304,12 @@ export function useKeyboard(conversations: Conversation[], composeRef: React.Ref
         return;
       }
 
+      // Drafts and Scheduled list the outbound queue, not conversations; their
+      // list moves its own selection (components/outbox/queue.tsx).
+      if ((store.inboxTab === 'drafts' || store.inboxTab === 'scheduled') && ['j', 'k', 'ArrowDown', 'ArrowUp'].includes(e.key) && !e.metaKey && !e.ctrlKey) {
+        return;
+      }
+
       // J/K/ArrowDown/ArrowUp — navigate conversations and auto-open thread
       if ((e.key === 'j' || e.key === 'ArrowDown') && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();

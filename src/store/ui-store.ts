@@ -125,6 +125,9 @@ interface UIState {
   /** Pending sent invitations, once loaded (the list is fetched on demand). */
   sentInvitationsCount: number | null;
   setSentInvitationsCount: (n: number | null) => void;
+  /** The queued message open in Messages › Drafts / Scheduled. */
+  selectedQueueId: string | null;
+  setSelectedQueueId: (id: string | null) => void;
   /** A key a provider rejected the last time it was used, by provider, until a
    *  call with it succeeds. Shown in Settings › AI so a bad key is visible
    *  there, not only when a draft fails. */
@@ -326,6 +329,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   mcpActivity: [],
   mcpKeys: { anthropic: false, gemini: false },
   sentInvitationsCount: null,
+  selectedQueueId: null,
   aiKeyIssues: {},
   tabMemory: {},
   _pendingRestore: null,
@@ -463,6 +467,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     }),
   setMcpKeys: (keys) => set({ mcpKeys: keys }),
   setSentInvitationsCount: (n) => set({ sentInvitationsCount: n }),
+  setSelectedQueueId: (id) => set({ selectedQueueId: id }),
   setAIKeyIssue: (provider, issue) =>
     set((s) => {
       const next = { ...s.aiKeyIssues };

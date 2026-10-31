@@ -314,7 +314,7 @@ export function ConversationList({ conversations, isLoading, isDiscovering, cate
         <ConversationListHeader conversationCount={conversations.length} />
       )}
       {inboxTab === 'drafts' || inboxTab === 'scheduled' ? (
-        <InboxQueue kind={inboxTab} />
+        <InboxQueue kind={inboxTab} compact={compact} />
       ) : (
       <div
         ref={scrollContainerRef}

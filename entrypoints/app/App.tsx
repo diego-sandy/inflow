@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { AuthGate } from '@/components/common/AuthGate';
 import { ConversationList } from '@/components/conversations/ConversationList';
 import { ThreadView } from '@/components/thread/ThreadView';
+import { QueueReadingPane } from '@/components/conversations/InboxQueue';
 import { CommandPalette } from '@/components/command-palette/CommandPalette';
 import { ShortcutOverlay, SHORTCUT_PANEL_PADDING } from '@/components/common/ShortcutOverlay';
 import { ImageLightbox } from '@/components/common/ImageLightbox';
@@ -46,6 +47,7 @@ export function App() {
   const { remoteResults, isSearching, hasMore, loadMore } = useRemoteSearch();
   const selectedConversationId = useUIStore((s) => s.selectedConversationId);
   const composeNewActive = useUIStore((s) => s.composeNewActive);
+  const inboxTab = useUIStore((s) => s.inboxTab);
   const activeSection = useUIStore((s) => s.activeSection);
   const { connections } = useConnections();
   const { attention: outboxAttention, drafts, scheduled, ready } = useOutbox();
@@ -338,6 +340,10 @@ export function App() {
                   draftConversation={selectedConversation?.draft === 1 ? selectedConversation : undefined}
                   composeRef={composeRef}
                 />
+              ) : inboxTab === 'drafts' || inboxTab === 'scheduled' ? (
+                // These tabs list the outbound queue, so the reading pane shows
+                // the selected queued message rather than a conversation.
+                <QueueReadingPane />
               ) : selectedConversation ? (
                 <ThreadView conversation={selectedConversation} composeRef={composeRef} />
               ) : null}

@@ -99,24 +99,31 @@ describe('Sent', () => {
   });
   const sentCalls = () => sendBridgeMessage.mock.calls.filter((c) => c[0].type === 'FETCH_SENT_INVITATIONS').length;
 
-  it('loads only when opened, and lists who you invited with when, and no Accept or Ignore', async () => {
-    render(<InvitationsView />);
-    await screen.findByRole('tab', { name: /Received/ });
+  it('the Received page never loads Sent, and vice versa', async () => {
+    const { unmount } = render(<InvitationsView mode="received" />);
+    await waitFor(() => expect(sendBridgeMessage).toHaveBeenCalledWith({ type: 'FETCH_INVITATIONS' }));
     expect(sentCalls()).toBe(0);
+    unmount();
+    sendBridgeMessage.mockClear();
+    render(<InvitationsView mode="sent" />);
+    await screen.findByText('Dana Whitfield');
+    expect(sendBridgeMessage).not.toHaveBeenCalledWith({ type: 'FETCH_INVITATIONS' });
+  });
 
-    fireEvent.click(screen.getByRole('tab', { name: /Sent/ }));
+  it('lists who you invited with when, titled Sent invitations, and no Accept or Ignore', async () => {
+    render(<InvitationsView mode="sent" />);
     expect(await screen.findByText('Dana Whitfield')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sent invitations' })).toBeInTheDocument();
+    expect(useUIStore.getState().sentInvitationsCount).toBe(2);
     expect(screen.getByText('Owen Pratt')).toBeInTheDocument();
     expect(screen.getByText('Sent 2 days ago')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ignore' })).toBeNull();
-    expect(screen.getByRole('tab', { name: /Sent/ })).toHaveTextContent('2');
     expect(sentCalls()).toBe(1);
   });
 
   it('shows your note on the right, and says when there was none', async () => {
-    render(<InvitationsView />);
-    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+    render(<InvitationsView mode="sent" />);
     expect(await screen.findByText('Your note to Dana Whitfield')).toBeInTheDocument();
     expect(screen.getByText('Hi Dana, great meeting you.')).toBeInTheDocument();
 
@@ -124,12 +131,11 @@ describe('Sent', () => {
     expect(screen.getByText('You sent this request without a note.')).toBeInTheDocument();
   });
 
-  it('switching back and forth reuses the list; refresh fetches it again', async () => {
-    render(<InvitationsView />);
-    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+  it('leaving and coming back reuses the list; refresh fetches it again', async () => {
+    const { unmount } = render(<InvitationsView mode="sent" />);
     await screen.findByText('Dana Whitfield');
-    fireEvent.click(screen.getByRole('tab', { name: /Received/ }));
-    fireEvent.click(screen.getByRole('tab', { name: /Sent/ }));
+    unmount();
+    render(<InvitationsView mode="sent" />);
     await screen.findByText('Dana Whitfield');
     expect(sentCalls()).toBe(1);
 
@@ -143,8 +149,7 @@ describe('Sent', () => {
         ? { success: true, data: { invitations: sentRows, complete: false } }
         : { success: true, data: { count: 0 } },
     );
-    render(<InvitationsView />);
-    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+    render(<InvitationsView mode="sent" />);
     expect(await screen.findByText(/may be missing some/)).toBeInTheDocument();
   });
 
@@ -154,8 +159,7 @@ describe('Sent', () => {
         ? { success: false, error: 'fetchSentInvitations failed: 429' }
         : { success: true, data: { count: 0 } },
     );
-    render(<InvitationsView />);
-    fireEvent.click(await screen.findByRole('tab', { name: /Sent/ }));
+    render(<InvitationsView mode="sent" />);
     expect(await screen.findByText(/fetchSentInvitations failed: 429/)).toBeInTheDocument();
     expect(screen.queryByText('No pending sent invitations.')).toBeNull();
   });

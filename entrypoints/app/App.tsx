@@ -299,8 +299,9 @@ export function App() {
           <ChatView />
         ) : activeSection === 'outbox' ? (
           <OutboxView />
-        ) : activeSection === 'invitations' ? (
-          <InvitationsView />
+        ) : activeSection === 'invitations' || activeSection === 'sentInvitations' ? (
+          // Keyed so each list keeps its own selection and width state apart.
+          <InvitationsView key={activeSection} mode={activeSection === 'sentInvitations' ? 'sent' : 'received'} />
         ) : activeSection === 'insights' ? (
           <div className="flex h-full min-w-0 flex-1 flex-col">
             <InsightsView />

@@ -8,7 +8,7 @@ import { type InboxLabels, DEFAULT_INBOX_LABELS, normalizeInboxLabels, DEFAULT_I
 export type ViewMode = 'list' | 'thread';
 export type Theme = 'light' | 'dark' | 'system' | 'purple';
 export type InboxTab = 'focused' | 'other' | 'inmail' | 'archived' | 'spam' | 'drafts' | 'scheduled';
-export type AppSection = 'inbox' | 'connections' | 'invitations' | 'insights' | 'chat' | 'outbox';
+export type AppSection = 'inbox' | 'connections' | 'invitations' | 'sentInvitations' | 'insights' | 'chat' | 'outbox';
 import {
   getConfirmRecipient,
   setConfirmRecipient as persistConfirmRecipient,
@@ -122,6 +122,9 @@ interface UIState {
   /** Which provider keys the connected companion holds (advertised on connect).
    * Lets Settings show a key as "active in the companion" vs. in the browser. */
   mcpKeys: { anthropic: boolean; gemini: boolean };
+  /** Pending sent invitations, once loaded (the list is fetched on demand). */
+  sentInvitationsCount: number | null;
+  setSentInvitationsCount: (n: number | null) => void;
   /** A key a provider rejected the last time it was used, by provider, until a
    *  call with it succeeds. Shown in Settings › AI so a bad key is visible
    *  there, not only when a draft fails. */
@@ -322,6 +325,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   mcpError: null,
   mcpActivity: [],
   mcpKeys: { anthropic: false, gemini: false },
+  sentInvitationsCount: null,
   aiKeyIssues: {},
   tabMemory: {},
   _pendingRestore: null,
@@ -458,6 +462,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       ...(status === 'connected' ? {} : { mcpKeys: { anthropic: false, gemini: false } }),
     }),
   setMcpKeys: (keys) => set({ mcpKeys: keys }),
+  setSentInvitationsCount: (n) => set({ sentInvitationsCount: n }),
   setAIKeyIssue: (provider, issue) =>
     set((s) => {
       const next = { ...s.aiKeyIssues };

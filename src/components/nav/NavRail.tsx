@@ -52,6 +52,16 @@ function InsightsIcon({ className }: { className?: string }) {
   );
 }
 
+function SentIcon({ className }: { className?: string }) {
+  // Paper plane: a request that went out.
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 2 11 13" />
+      <path d="M22 2 15 22l-4-9-9-4 20-7z" />
+    </svg>
+  );
+}
+
 function InvitationsIcon({ className }: { className?: string }) {
   // Person with a plus — an incoming connection request.
   return (
@@ -231,6 +241,7 @@ function NavItem({
 }
 
 export function NavRail({ connectionsCount, inboxUnread, inboxQueue, outboxAttention, invitationsCount }: NavRailProps) {
+  const sentInvitationsCount = useUIStore((s) => s.sentInvitationsCount);
   const activeSection = useUIStore((s) => s.activeSection);
   const setActiveSection = useUIStore((s) => s.setActiveSection);
   const inboxTab = useUIStore((s) => s.inboxTab);
@@ -292,7 +303,8 @@ export function NavRail({ connectionsCount, inboxUnread, inboxQueue, outboxAtten
       Icon: PeopleIcon,
       count: connectionsCount,
       children: [
-        { key: 'invitations', section: 'invitations', label: 'Invitations', desc: 'Pending connection requests — accept or ignore.', Icon: InvitationsIcon, count: invitationsCount },
+        { key: 'invitations', section: 'invitations', label: 'Received', desc: 'Connection requests sent to you — accept or ignore.', Icon: InvitationsIcon, count: invitationsCount },
+        { key: 'sentInvitations', section: 'sentInvitations', label: 'Sent', desc: 'Connection requests you sent that are still pending.', Icon: SentIcon, count: sentInvitationsCount ?? undefined },
       ],
     },
     { key: 'outbox', section: 'outbox', label: 'MCP connector', desc: 'Connect Claude (MCP) to source people and draft outreach — you always send.', Icon: ConnectorIcon, count: outboxAttention },

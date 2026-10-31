@@ -43,20 +43,29 @@ it('shows the MCP connector section with an attention badge', () => {
   expect(within(btn).getByText('2')).toBeInTheDocument();
 });
 
-it('shows Invitations as an expandable branch under Connections', () => {
+it('lists Received and Sent invitations straight under Connections', () => {
+  act(() => useUIStore.setState({ sentInvitationsCount: null }));
   render(<NavRail connectionsCount={3} invitationsCount={40} />);
-  // Branch is expanded by default → the child is visible with its count.
-  const inv = screen.getByRole('button', { name: 'Invitations' });
-  expect(inv).toBeInTheDocument();
-  expect(within(inv).getByText('40')).toBeInTheDocument();
+  // Branch is expanded by default → both children are visible.
+  const received = screen.getByRole('button', { name: 'Received' });
+  expect(within(received).getByText('40')).toBeInTheDocument();
+  const sent = screen.getByRole('button', { name: 'Sent' });
+  // No count until the Sent list has loaded once…
+  expect(sent.textContent).toBe('Sent');
 
-  // Selecting the child switches to the invitations section.
-  fireEvent.click(inv);
+  fireEvent.click(received);
   expect(useUIStore.getState().activeSection).toBe('invitations');
+  fireEvent.click(sent);
+  expect(useUIStore.getState().activeSection).toBe('sentInvitations');
 
-  // The chevron collapses the branch, hiding the child.
+  // …then it shows it.
+  act(() => useUIStore.setState({ sentInvitationsCount: 9 }));
+  expect(within(screen.getByRole('button', { name: 'Sent' })).getByText('9')).toBeInTheDocument();
+
+  // The chevron collapses the branch, hiding both.
   fireEvent.click(screen.getByLabelText(/Collapse Connections/i));
-  expect(screen.queryByRole('button', { name: 'Invitations' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Received' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Sent' })).not.toBeInTheDocument();
 });
 
 it('highlights the Inbox parent and the active tab together (option B)', () => {

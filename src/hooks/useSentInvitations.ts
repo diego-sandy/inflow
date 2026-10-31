@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { sendBridgeMessage } from '@/lib/bridge';
+import { useUIStore } from '@/store/ui-store';
 import type { SentInvitation } from '@/types/network';
 
 interface SentState {
@@ -36,6 +37,8 @@ export function useSentInvitations(active: boolean) {
         const list = [...(res.data.invitations as SentInvitation[])].sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
         cache = { invitations: list, complete: res.data.complete !== false, loaded: true };
         setState(cache);
+        // The side panel shows the count once there is one.
+        useUIStore.getState().setSentInvitationsCount(list.length);
       } else {
         setError(res.error || 'Failed to load sent invitations');
       }

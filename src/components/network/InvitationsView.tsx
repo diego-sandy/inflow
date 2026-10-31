@@ -127,10 +127,10 @@ type Mode = 'received' | 'sent';
 
 /**
  * Invitations — Received (with Accept / Ignore) or Sent (read-only), as a list
- * of profiles beside a resizable pane with the selected request's note.
+ * of profiles beside a resizable pane with the selected request's note. Which
+ * one is chosen in the side panel (Connections › Received / Sent).
  */
-export function InvitationsView() {
-  const [mode, setMode] = useState<Mode>('received');
+export function InvitationsView({ mode = 'received' }: { mode?: Mode }) {
   const received = useInvitations();
   const sent = useSentInvitations(mode === 'sent');
   const { invitations, syncing: receivedSyncing, error: receivedError, refresh: refreshReceived } = received;
@@ -146,8 +146,9 @@ export function InvitationsView() {
     originRef: containerRef,
   });
 
+  // Each page loads its own list: Received here, Sent inside useSentInvitations.
   useEffect(() => {
-    void refreshReceived();
+    if (mode === 'received') void refreshReceived();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -176,30 +177,17 @@ export function InvitationsView() {
   const syncing = isSent ? sent.syncing : receivedSyncing;
   const error = isSent ? sent.error : receivedError;
   const refresh = isSent ? sent.refresh : refreshReceived;
-  const tab = (m: Mode, label: string, count: number | null) => (
-    <button
-      role="tab"
-      aria-selected={mode === m}
-      onClick={() => setMode(m)}
-      className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
-        mode === m ? 'bg-surface-active text-fg-strong' : 'text-fg-muted hover:text-fg-secondary'
-      }`}
-    >
-      {label}
-      {count !== null && count > 0 && <span className="tabular-nums text-fg-faint">{count}</span>}
-    </button>
-  );
+  const count = isSent ? (sent.loaded ? sent.invitations.length : 0) : invitations.length;
 
   return (
     <div ref={containerRef} className="flex h-full min-w-0 flex-1">
       {/* Left: profiles list — a left-docked, resizable column */}
       <div style={{ width: listWidth }} className="flex h-full shrink-0 flex-col">
         <div className="flex items-center gap-2 border-b border-edge px-4 py-2.5">
-          <h2 className="text-sm font-semibold text-fg-strong">Invitations</h2>
-          <div role="tablist" aria-label="Invitations" className="flex items-center gap-0.5">
-            {tab('received', 'Received', invitations.length)}
-            {tab('sent', 'Sent', sent.loaded ? sent.invitations.length : null)}
-          </div>
+          <h2 className="text-sm font-semibold text-fg-strong">{isSent ? 'Sent invitations' : 'Received invitations'}</h2>
+          {count > 0 && (
+            <span className="rounded-full bg-surface-input px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">{count}</span>
+          )}
           {syncing && <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" title="Refreshing" />}
           <span className="flex-1" />
           <button

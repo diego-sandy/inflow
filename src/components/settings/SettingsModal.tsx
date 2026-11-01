@@ -29,6 +29,7 @@ import { isDemoMode, enableDemoMode, disableDemoMode } from '@/lib/demo-mode';
 import { checkForUpdateAndToast } from '@/lib/check-update';
 import { AIKeySettings } from './AIKeySettings';
 import { BackupSettings } from './BackupSettings';
+import { ClaudePermissionsSettings } from './ClaudePermissionsSettings';
 import { ConnectionsSettings } from './ConnectionsSettings';
 import { SetupSettings } from './SetupSettings';
 import { Toggle } from '@/components/common/Toggle';
@@ -117,7 +118,7 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   { id: 'setup', label: 'Setup' },
-  { id: 'ai', label: 'AI', children: [{ id: 'chat', label: 'Chat' }, { id: 'sending', label: 'Drafts' }] },
+  { id: 'ai', label: 'AI', children: [{ id: 'chat', label: 'Chat' }, { id: 'sending', label: 'Drafts' }, { id: 'claude', label: 'Claude' }] },
   { id: 'connections', label: 'Connections' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'backup', label: 'Backup' },
@@ -629,6 +630,7 @@ export function SettingsModal() {
             {section === 'ai' && <AIKeySettings />}
             {section === 'chat' && <ChatSettings />}
             {section === 'sending' && <SendingSettings />}
+            {section === 'claude' && <ClaudePermissionsSettings />}
             {section === 'connections' && <ConnectionsSettings />}
             {section === 'appearance' && <AppearanceSettings />}
             {section === 'backup' && <BackupSettings />}

@@ -316,7 +316,7 @@
   },
   {
     "name": "create_draft",
-    "description": "Create a draft message and put it in the user's Outbox for them to review and send — this NEVER sends. Optionally schedule it for a time (still surfaced for the user to send with one click; never auto-sent). Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it. LinkedIn allows only one unanswered InMail per person: if they haven't replied to an earlier one, no draft is created and the error says when that InMail went out. Don't retry with another subject; tell the user, and wait for a reply.",
+    "description": "Create a draft message and put it in the user's Outbox for them to review and send — this tool never sends (send_draft does, if the user allows it). Optionally schedule it for a time; scheduled messages may send themselves at that time if the user has automatic sending on. Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it. LinkedIn allows only one unanswered InMail per person: if they haven't replied to an earlier one, no draft is created and the error says when that InMail went out. Don't retry with another subject; tell the user, and wait for a reply.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -334,7 +334,7 @@
         },
         "scheduleAt": {
           "type": "string",
-          "description": "Optional ISO 8601 time to schedule for. The user still sends it — nothing auto-sends."
+          "description": "Optional ISO 8601 time to schedule for. It sends itself then only if the user has automatic sending on; otherwise it waits for them."
         },
         "inMailSubject": {
           "type": "string",
@@ -351,6 +351,264 @@
       },
       "required": [
         "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "archive_conversations",
+    "description": "Archive conversations on LinkedIn. Applies to each conversation and any duplicate thread LinkedIn keeps with the same person in the same folder, as inflow's inbox does. Waits for LinkedIn and reports each conversation's outcome. Needs the user's \"Tidy the inbox\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "Conversation ids from list_conversations or search_messages (1–50)."
+        }
+      },
+      "required": [
+        "conversationIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "unarchive_conversations",
+    "description": "Bring archived conversations back to Focused on LinkedIn. Applies to each conversation and any duplicate thread LinkedIn keeps with the same person in the same folder, as inflow's inbox does. Waits for LinkedIn and reports each conversation's outcome. Needs the user's \"Tidy the inbox\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "Conversation ids from list_conversations or search_messages (1–50)."
+        }
+      },
+      "required": [
+        "conversationIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "mark_conversations_read",
+    "description": "Mark conversations read on LinkedIn. Applies to each conversation and any duplicate thread LinkedIn keeps with the same person in the same folder, as inflow's inbox does. Waits for LinkedIn and reports each conversation's outcome. Needs the user's \"Tidy the inbox\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "Conversation ids from list_conversations or search_messages (1–50)."
+        }
+      },
+      "required": [
+        "conversationIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "mark_conversations_unread",
+    "description": "Mark conversations unread on LinkedIn. Applies to each conversation and any duplicate thread LinkedIn keeps with the same person in the same folder, as inflow's inbox does. Waits for LinkedIn and reports each conversation's outcome. Needs the user's \"Tidy the inbox\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "Conversation ids from list_conversations or search_messages (1–50)."
+        }
+      },
+      "required": [
+        "conversationIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "move_conversations",
+    "description": "Move conversations between the Focused and Other inboxes on LinkedIn (this also takes them out of the archive). Applies to duplicate threads with the same person in the same folder too. Needs the user's \"Tidy the inbox\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "Conversation ids from list_conversations or search_messages (1–50)."
+        },
+        "to": {
+          "type": "string",
+          "enum": [
+            "focused",
+            "other"
+          ],
+          "description": "Where to move them."
+        }
+      },
+      "required": [
+        "conversationIds",
+        "to"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "star_conversations",
+    "description": "Star conversations on LinkedIn. Applies to each conversation and any duplicate thread LinkedIn keeps with the same person in the same folder, as inflow's inbox does. Waits for LinkedIn and reports each conversation's outcome. Needs the user's \"Tidy the inbox\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "Conversation ids from list_conversations or search_messages (1–50)."
+        }
+      },
+      "required": [
+        "conversationIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "unstar_conversations",
+    "description": "Remove the star from conversations on LinkedIn. Applies to each conversation and any duplicate thread LinkedIn keeps with the same person in the same folder, as inflow's inbox does. Waits for LinkedIn and reports each conversation's outcome. Needs the user's \"Tidy the inbox\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "Conversation ids from list_conversations or search_messages (1–50)."
+        }
+      },
+      "required": [
+        "conversationIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_invitations",
+    "description": "List the connection requests the user has received and not yet answered: who, their headline, any note, when, and mutual connections. Pass refresh: true to check LinkedIn first (otherwise this reads what inflow last fetched). Use the id with respond_to_invitation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "refresh": {
+          "type": "boolean",
+          "description": "Fetch the current list from LinkedIn first. Default false."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "respond_to_invitation",
+    "description": "Accept or ignore a connection request the user received, by its id from list_invitations. Accepting makes them a first-degree connection; ignoring removes the request without telling them. Needs the user's \"Answer invitations\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "invitationId": {
+          "type": "string",
+          "description": "Invitation id from list_invitations."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "ignore"
+          ]
+        }
+      },
+      "required": [
+        "invitationId",
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "send_message",
+    "description": "Send a message now in an existing conversation, as the user. This really sends: there is no review step and no undo, so only send what the user asked for or approved, and prefer create_draft when in doubt. Refused if the other person hasn't answered the user's InMail (LinkedIn would not deliver it). At most 15 sends an hour across send_message and send_draft. Needs the user's \"Send messages\" permission. To write to someone with no conversation yet, create_draft then send_draft.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "description": "Conversation id from list_conversations or search_messages."
+        },
+        "body": {
+          "type": "string",
+          "description": "The message text."
+        }
+      },
+      "required": [
+        "conversationId",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "send_draft",
+    "description": "Send a draft or scheduled message from the user's Outbox now, by its id from list_drafts. This really sends, and an InMail spends a credit. It keeps the Outbox's rules: refused while the draft is held (the person hasn't answered an earlier InMail, or replied after it was written) or while a Claude InMail still awaits the user's recipient confirmation. At most 15 sends an hour across send_message and send_draft. Needs the user's \"Send messages\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Draft id from list_drafts."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "delete_conversation",
+    "description": "Delete a conversation from the user's LinkedIn inbox, with any duplicate thread with the same person in the same folder. Permanent: LinkedIn cannot restore it. Only do this when the user asked for that conversation to be deleted; archive_conversations is the reversible way to clear the inbox. Needs the user's \"Delete conversations\" permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "description": "Conversation id from list_conversations."
+        }
+      },
+      "required": [
+        "conversationId"
       ],
       "additionalProperties": false
     }

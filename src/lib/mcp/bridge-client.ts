@@ -8,7 +8,7 @@
  * accepted trade for keeping everything local and keyless.
  */
 import { createBridgeSession, type BridgeStatus, type CompanionKeys } from './bridge-protocol';
-import { toolDescriptors, callTool } from './tools';
+import { toolDescriptors, callConnectorTool } from './tools';
 import { DEFAULT_MCP_URL } from './pairing';
 import { useUIStore } from '@/store/ui-store';
 
@@ -152,7 +152,7 @@ function open() {
   const session = createBridgeSession({
     token: activeToken,
     tools: toolDescriptors(),
-    callTool,
+    callTool: callConnectorTool,
     send: (msg) => {
       try {
         ws?.send(JSON.stringify(msg));

@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+import {
+  DEFAULT_MCP_PERMISSIONS,
+  getMcpPermissions,
+  setMcpPermission as persistMcpPermission,
+  type McpPermission,
+  type McpPermissions,
+} from '@/lib/mcp/permissions';
 import type { Message } from '@/types/message';
 import type { ConnectionRole } from '@/types/connection';
 import type { SetupStep } from '@/lib/setup-state';
@@ -25,7 +32,7 @@ export interface AIKeyIssue {
   at: number;
 }
 
-export type SettingsSection = 'setup' | 'ai' | 'chat' | 'sending' | 'connections' | 'appearance' | 'backup' | 'advanced' | 'about';
+export type SettingsSection = 'setup' | 'ai' | 'chat' | 'sending' | 'claude' | 'connections' | 'appearance' | 'backup' | 'advanced' | 'about';
 
 /**
  * Active filter over the connections list (shared so Insights can drive it).
@@ -109,6 +116,9 @@ interface UIState {
   /** Ask before discarding a draft from the Outbox. */
   confirmDelete: boolean;
   setConfirmDelete: (on: boolean) => void;
+  /** What Claude may do through the connector, one switch per kind (lib/mcp/permissions). */
+  mcpPermissions: McpPermissions;
+  setMcpPermission: (key: McpPermission, on: boolean) => void;
   selectedConnectionUrn: string | null;
   connectionsFilter: ConnectionFilter;
   connectionsSearch: string;
@@ -321,6 +331,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   confirmRecipient: true,
   autoSendScheduled: true,
   confirmDelete: true,
+  mcpPermissions: DEFAULT_MCP_PERMISSIONS,
   selectedConnectionUrn: null,
   connectionsFilter: { roles: [], interests: [] },
   connectionsSearch: '',
@@ -457,6 +468,10 @@ export const useUIStore = create<UIState>((set, get) => ({
     void persistConfirmDelete(on);
     set({ confirmDelete: on });
   },
+  setMcpPermission: (key, on) => {
+    void persistMcpPermission(key, on);
+    set({ mcpPermissions: { ...get().mcpPermissions, [key]: on } });
+  },
   setSelectedConnectionUrn: (urn) => set({ selectedConnectionUrn: urn }),
   setMcpStatus: (status, error = null) =>
     set({
@@ -566,10 +581,11 @@ export const useUIStore = create<UIState>((set, get) => ({
  * render, so the store keeps a synchronous mirror. Called once at app start.
  */
 export async function hydrateSendSettings(): Promise<void> {
-  const [confirmRecipient, autoSendScheduled, confirmDelete] = await Promise.all([
+  const [confirmRecipient, autoSendScheduled, confirmDelete, mcpPermissions] = await Promise.all([
     getConfirmRecipient(),
     getAutoSendScheduled(),
     getConfirmDelete(),
+    getMcpPermissions(),
   ]);
-  useUIStore.setState({ confirmRecipient, autoSendScheduled, confirmDelete });
+  useUIStore.setState({ confirmRecipient, autoSendScheduled, confirmDelete, mcpPermissions });
 }

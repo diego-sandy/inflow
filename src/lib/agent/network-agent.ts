@@ -21,9 +21,14 @@ export const AGENT_SYSTEM_PROMPT =
   'for them to review and send — you never send anything yourself. Always tell the user when ' +
   'you\'ve created a draft.';
 
-/** Anthropic tool definitions from inflow's MCP toolbox. */
+/**
+ * Anthropic tool definitions from inflow's MCP toolbox — reading and drafting
+ * only. The actions the connector can be allowed (tidy, send, delete) are not
+ * offered here: AI Chat answers questions, and its prompt promises it never
+ * sends.
+ */
 export function agentTools(): AgentTool[] {
-  return toolDescriptors().map((t) => ({
+  return toolDescriptors(['read']).map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.inputSchema as Record<string, unknown>,
@@ -62,7 +67,7 @@ export async function answerWithClaudeAgent(opts: AnswerWithAgentOptions): Promi
     question: opts.question,
     tools,
     callModel,
-    runTool: callTool,
+    runTool: (name, args) => callTool(name, args, ['read']),
     onStep: opts.onStep,
     maxTokens: opts.maxTokens ?? 8192,
   });

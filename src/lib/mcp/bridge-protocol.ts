@@ -122,6 +122,35 @@ export function activityLabel(name: string, args: Record<string, any> = {}): str
       return 'Claude looked for people to reconnect with';
     case 'create_draft':
       return 'Claude drafted a message → Outbox';
+    case 'archive_conversations':
+    case 'unarchive_conversations':
+    case 'mark_conversations_read':
+    case 'mark_conversations_unread':
+    case 'move_conversations':
+    case 'star_conversations':
+    case 'unstar_conversations': {
+      const n = Array.isArray(args.conversationIds) ? args.conversationIds.length : 1;
+      const verb: Record<string, string> = {
+        archive_conversations: 'archive',
+        unarchive_conversations: 'unarchive',
+        mark_conversations_read: 'mark read',
+        mark_conversations_unread: 'mark unread',
+        move_conversations: `move to ${args.to === 'other' ? 'Other' : 'Focused'}`,
+        star_conversations: 'star',
+        unstar_conversations: 'unstar',
+      };
+      return `Claude asked to ${verb[name]} ${n} conversation${n === 1 ? '' : 's'}`;
+    }
+    case 'list_invitations':
+      return 'Claude read your invitations';
+    case 'respond_to_invitation':
+      return `Claude asked to ${args.action === 'ignore' ? 'ignore' : 'accept'} an invitation`;
+    case 'send_message':
+      return 'Claude asked to send a message';
+    case 'send_draft':
+      return 'Claude asked to send a draft';
+    case 'delete_conversation':
+      return 'Claude asked to delete a conversation';
     default:
       return `Claude used ${name}`;
   }

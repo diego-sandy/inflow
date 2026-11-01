@@ -1,15 +1,17 @@
 /**
- * MCP read tools — the "toolbox" inflow exposes to an external agent (Claude).
+ * MCP tools — the "toolbox" inflow exposes to an external agent (Claude).
  *
  * These are transport-agnostic: pure async functions over the local database.
  * The bridge advertises {@link toolDescriptors} to the companion and routes
- * incoming calls through {@link callTool}. Tools are read-only except for one
- * write tool, `create_draft`, which only adds a draft to the local Outbox for
- * the user to review — nothing here ever sends a message or touches the account.
+ * incoming calls through {@link callConnectorTool}, which checks the user's
+ * switches first (./permissions).
  *
- * Coverage: the network (list/search/get connection, network stats), the inbox
+ * The tools here read, and draft into the local Outbox for the user to send:
+ * the network (list/search/get connection, network stats), the inbox
  * (list_conversations, get_thread, search_messages, get_conversation_summary),
- * relationship upkeep (find_stale_connections), and drafting (create_draft).
+ * relationship upkeep (find_stale_connections), and drafting (create_draft and
+ * friends). The ones that act on the LinkedIn account — tidying, invitations,
+ * sending, deleting — live in ./action-tools, each off until the user allows it.
  */
 import { db } from '@/db/database';
 import { computeInsights, parseCompany } from '@/lib/connection-insights';
@@ -17,6 +19,9 @@ import { sendBridgeMessage } from '@/lib/bridge';
 import { getConfirmRecipient } from '@/lib/send-settings';
 import { queueHolds, unansweredInMail } from '@/lib/queue-holds';
 import { isValidProfileUrn } from '@/lib/voyager-normalizer';
+import { useUIStore } from '@/store/ui-store';
+import { getMcpPermissions, permissionLabel, permissionRefusal, type McpPermission } from './permissions';
+import { ACTION_TOOLS } from './action-tools';
 import type { Connection } from '@/types/connection';
 import type { Conversation } from '@/types/conversation';
 import type { ScheduledMessage } from '@/types/scheduled-message';
@@ -38,6 +43,8 @@ export interface McpToolDescriptor {
 }
 
 export interface McpTool extends McpToolDescriptor {
+  /** Which of the user's switches (Settings › AI › Claude) allows it. */
+  permission: McpPermission;
   handler: (args: Record<string, any>) => Promise<unknown>;
 }
 
@@ -112,6 +119,7 @@ async function lastMessageFromMe(conversationId: string): Promise<boolean | unde
 export const MCP_TOOLS: McpTool[] = [
   {
     name: 'list_connections',
+    permission: 'read',
     description:
       "List the user's LinkedIn connections, optionally filtered by role category or interest tag. Returns compact records; use get_connection for full detail.",
     inputSchema: {
@@ -136,6 +144,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'search_connections',
+    permission: 'read',
     description: "Search the user's connections by name or headline (case-insensitive substring).",
     inputSchema: {
       type: 'object',
@@ -158,6 +167,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'get_connection',
+    permission: 'read',
     description:
       'Get full detail for one connection by profileUrn or publicId, including the AI summary and any conversation recap.',
     inputSchema: {
@@ -185,6 +195,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'get_network_stats',
+    permission: 'read',
     description:
       "Summary statistics about the user's network: totals, breakdown by role, top firms, and interest-tag counts.",
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -202,6 +213,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'get_conversation_summary',
+    permission: 'read',
     description:
       'Get the AI recap of the message history with one connection (by profileUrn). Returns the summary text, not raw messages.',
     inputSchema: {
@@ -224,6 +236,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'search_messages',
+    permission: 'read',
     description:
       "Full-text search across the user's message history (case-insensitive substring over message bodies). Use this to recall what was discussed, with whom, and when — e.g. 'where did I talk about pricing'. Returns a snippet per match plus the conversation it belongs to; follow up with get_thread to read the surrounding conversation.",
     inputSchema: {
@@ -290,6 +303,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'list_conversations',
+    permission: 'read',
     description:
       "List the user's conversations (inbox state): who it's with, the last message, when, unread/archived status, and whether the last message came from the other person (i.e. it's awaiting the user's reply). Use for triage; read one with get_thread.",
     inputSchema: {
@@ -355,6 +369,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'get_thread',
+    permission: 'read',
     description:
       'Read the full message history of one conversation, oldest to newest. Identify it by conversationId (from list_conversations or search_messages) or by the profileUrn of the person. Returns the actual messages, unlike get_conversation_summary which returns an AI recap.',
     inputSchema: {
@@ -407,6 +422,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'find_stale_connections',
+    permission: 'read',
     description:
       "Find connections the user hasn't exchanged messages with recently — reconnect candidates. Returns each person with when they last spoke (or null if never), sorted by never-messaged first, then longest-silent. Pair with create_draft to queue reconnect notes.",
     inputSchema: {
@@ -463,6 +479,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'update_draft',
+    permission: 'read',
     description:
       "Fix a draft that is still waiting in the user's Outbox: its body, InMail subject, recipient display name, profile URL, or scheduled time. Pass only the fields you are changing. Use this instead of deleting and re-creating, which loses the user's place in the queue. Cannot change who it goes to — create a new draft for that — and cannot touch anything already sent. Editing the body or subject clears any recipient confirmation the user had given, since they confirmed a different message.",
     inputSchema: {
@@ -556,6 +573,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'delete_draft',
+    permission: 'read',
     description:
       "Remove one draft or scheduled message from the user's Outbox. Takes a single id from list_drafts. Refuses anything already sent, so it can only discard something still waiting and never rewrites the user's sent history. Prefer update_draft when the message just needs fixing.",
     inputSchema: {
@@ -582,6 +600,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'list_drafts',
+    permission: 'read',
     description:
       "Read the user's Outbox: the drafts and scheduled messages waiting for them to send, plus recently sent and failed ones. Use it to confirm a draft you created actually landed, to check whether an InMail draft still needs the user to confirm the recipient before it can send, and to avoid drafting a second message to someone who already has one waiting. A draft may also be held: \"waiting_for_inmail_reply\" means the person hasn't answered an earlier InMail, so LinkedIn won't deliver anything more until they do; \"recipient_replied_since\" means they wrote after the draft was written, so the user must look at it again before it can send. Nothing here has been sent unless its status says so.",
     inputSchema: {
@@ -640,6 +659,7 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'find_person',
+    permission: 'read',
     description:
       "Look up someone on LinkedIn by name, INCLUDING people the user is not connected to, and get the profileUrn that create_draft needs to draft an InMail. Names repeat, so check the headline against what you already know about the person before using a result. You may pass a /in/<slug> as publicId, but LinkedIn often omits that field, in which case the filter is skipped and the response says so. Each result says whether that person is already a connection: if they are, messaging them is free and create_draft takes no subject; if they are not, a draft to them is a Premium InMail, and create_draft will also need their profile URL and name, which this tool cannot give you — LinkedIn omits the slug here, so take the URL from the record you found them in or ask the user. This searches LinkedIn live rather than the local database.",
     inputSchema: {
@@ -702,8 +722,9 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'create_draft',
+    permission: 'read',
     description:
-      "Create a draft message and put it in the user's Outbox for them to review and send — this NEVER sends. Optionally schedule it for a time (still surfaced for the user to send with one click; never auto-sent). Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it. LinkedIn allows only one unanswered InMail per person: if they haven't replied to an earlier one, no draft is created and the error says when that InMail went out. Don't retry with another subject; tell the user, and wait for a reply.",
+      "Create a draft message and put it in the user's Outbox for them to review and send — this tool never sends (send_draft does, if the user allows it). Optionally schedule it for a time; scheduled messages may send themselves at that time if the user has automatic sending on. Recipient: for an existing connection pass profileUrn (preferred) or publicId. For someone the user is NOT connected to — a cold lead — pass their full profileUrn plus inMailSubject, recipientName and profileUrl: that draft goes out as a Premium InMail, spends one of the user's InMail credits, and the user confirms the person by opening profileUrl before they can send it. LinkedIn allows only one unanswered InMail per person: if they haven't replied to an earlier one, no draft is created and the error says when that InMail went out. Don't retry with another subject; tell the user, and wait for a reply.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -712,7 +733,7 @@ export const MCP_TOOLS: McpTool[] = [
         body: { type: 'string', description: 'The message text to draft.' },
         scheduleAt: {
           type: 'string',
-          description: 'Optional ISO 8601 time to schedule for. The user still sends it — nothing auto-sends.',
+          description: 'Optional ISO 8601 time to schedule for. It sends itself then only if the user has automatic sending on; otherwise it waits for them.',
         },
         inMailSubject: {
           type: 'string',
@@ -837,18 +858,50 @@ export const MCP_TOOLS: McpTool[] = [
       return { created: true, id, recipient: name, status, inMail: !!subject, profileUrl: link || undefined };
     },
   },
+  ...ACTION_TOOLS,
 ];
 
 const BY_NAME = new Map(MCP_TOOLS.map((t) => [t.name, t]));
 
-/** Tool metadata to advertise to the MCP client (no handlers). */
-export function toolDescriptors(): McpToolDescriptor[] {
-  return MCP_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+/**
+ * Tool metadata to advertise (no handlers), optionally only those under some
+ * permissions. The connector advertises every tool whatever the switches say:
+ * Claude pins the list for a whole session, so a tool hidden at connect time
+ * would stay missing after the user turned it on. The switch is enforced per
+ * call instead, with a refusal that tells Claude where it lives.
+ */
+export function toolDescriptors(only?: McpPermission[]): McpToolDescriptor[] {
+  return MCP_TOOLS.filter((t) => !only || only.includes(t.permission)).map(({ name, description, inputSchema }) => ({
+    name,
+    description,
+    inputSchema,
+  }));
 }
 
-/** Run a tool by name. Throws on an unknown tool. */
-export async function callTool(name: string, args: Record<string, any> = {}): Promise<unknown> {
+/**
+ * Run a tool by name, with no switch check. Throws on an unknown tool, or on
+ * one outside `only` when given — the in-app AI Chat passes ['read'], since
+ * it was never meant to act on the account.
+ */
+export async function callTool(
+  name: string,
+  args: Record<string, any> = {},
+  only?: McpPermission[],
+): Promise<unknown> {
+  const tool = BY_NAME.get(name);
+  if (!tool || (only && !only.includes(tool.permission))) throw new Error(`Unknown tool: ${name}`);
+  return tool.handler(args || {});
+}
+
+/** Run a tool for the MCP connector: only if the user's switch for it is on. */
+export async function callConnectorTool(name: string, args: Record<string, any> = {}): Promise<unknown> {
   const tool = BY_NAME.get(name);
   if (!tool) throw new Error(`Unknown tool: ${name}`);
+  const allowed = await getMcpPermissions();
+  if (!allowed[tool.permission]) {
+    // Said in the activity log too, so the user sees what Claude was stopped from.
+    useUIStore.getState().pushMcpActivity(`Blocked ${name}: ${permissionLabel(tool.permission)} is off in Settings`);
+    throw new Error(permissionRefusal(tool.permission));
+  }
   return tool.handler(args || {});
 }

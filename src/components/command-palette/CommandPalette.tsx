@@ -114,6 +114,9 @@ export function CommandPalette({ conversations, composeRef }: CommandPaletteProp
     openAISetup: () => {
       useUIStore.getState().openSettings('ai');
     },
+    openClaudePermissions: () => {
+      useUIStore.getState().openSettings('claude');
+    },
     openSettings: () => {
       useUIStore.getState().openSettings();
     },

@@ -77,7 +77,7 @@ import { SettingsModal } from '@/components/settings/SettingsModal';
 import { useUIStore } from '@/store/ui-store';
 import * as aiSettings from '@/lib/ai-settings';
 
-async function openSettings(section?: 'ai' | 'appearance' | 'advanced' | 'about') {
+async function openSettings(section?: 'ai' | 'appearance' | 'advanced' | 'about' | 'sending' | 'claude') {
   render(<SettingsModal />);
   await act(async () => {
     useUIStore.getState().openSettings(section);
@@ -182,6 +182,23 @@ it('Drafts section: an on-by-default switch, matching every other setting', asyn
 
   fireEvent.click(toggle);
   expect(useUIStore.getState().confirmRecipient).toBe(true);
+});
+
+it('AI › Claude: one switch per kind of action, reading on and the rest off, saved on click', async () => {
+  useUIStore.setState({ mcpPermissions: { read: true, tidy: false, invitations: false, send: false, delete: false } });
+  await openSettings('claude');
+
+  const read = await screen.findByRole('switch', { name: 'Read and draft' });
+  expect(read.getAttribute('aria-checked')).toBe('true');
+  for (const name of ['Tidy the inbox', 'Answer invitations', 'Send messages', 'Delete conversations']) {
+    expect(screen.getByRole('switch', { name }).getAttribute('aria-checked')).toBe('false');
+  }
+
+  fireEvent.click(screen.getByRole('switch', { name: 'Send messages' }));
+  expect(useUIStore.getState().mcpPermissions.send).toBe(true);
+  await waitFor(async () =>
+    expect((await chrome.storage.local.get('mcpPermissions')).mcpPermissions).toMatchObject({ send: true, tidy: false }),
+  );
 });
 
 it('shows the Demo mode control', async () => {

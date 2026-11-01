@@ -9,10 +9,16 @@ All notable changes to inflow are documented here. This project follows
 ### Added
 - **MCP connector** — Claude Desktop (or any MCP client) can read your
   network and inbox and draft messages into a review queue, through a small
-  companion installed from `inflow.mcpb`. Claude never sends; you do. Tools
-  cover connections, network stats, conversations, threads, message search,
-  people to reconnect with, finding someone outside your network, and
-  creating, editing and deleting drafts.
+  companion installed from `inflow.mcpb`. Tools cover connections, network
+  stats, conversations, threads, message search, people to reconnect with,
+  finding someone outside your network, and creating, editing and deleting
+  drafts.
+- **What Claude can do** — Settings › AI › Claude (or "Claude permissions" in
+  ⌘K) has one switch per kind of action: read and draft (on), tidy the inbox
+  (archive, read/unread, Focused/Other, star), answer invitations, send
+  messages (at most 15 an hour), and delete conversations — all off until you
+  turn them on. Sending keeps the Outbox's rules: held drafts stay held, and a
+  Claude InMail still needs you to confirm the person. AI Chat only reads.
 - **Review queue** — drafts and scheduled messages in a split view: the queue
   on the left, the selected message in full on the right. j/k to move through
   it. Edit in place, schedule, or send; scheduled messages can send

@@ -110,7 +110,7 @@ export function ConnectorGuide({ onBack, onSkip, onFinish }: Props) {
     <>
       <StepTitle title="Set up the MCP connector">
         The MCP connector lets Claude Desktop search your connections, read network stats, and draft messages into
-        your Outbox. Claude never sends; you do. It needs the{' '}
+        your Outbox. It sends nothing unless you allow it in Settings › AI › Claude. It needs the{' '}
         <button onClick={() => openTab('https://claude.ai/download')} className="font-medium text-blue-500 underline hover:text-blue-400">
           Claude Desktop app
         </button>

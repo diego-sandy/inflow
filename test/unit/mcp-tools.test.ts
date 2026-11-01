@@ -68,8 +68,8 @@ afterEach(async () => {
   await Dexie.delete('InflowDB_MEMBER_MCP').catch(() => {});
 });
 
-it('advertises the read tools plus create_draft, and never a send tool', () => {
-  const names = toolDescriptors().map((t) => t.name);
+it('the read-and-draft set has the read tools plus create_draft, and never a send tool', () => {
+  const names = toolDescriptors(['read']).map((t) => t.name);
   expect(names).toEqual(
     expect.arrayContaining([
       'list_connections', 'search_connections', 'get_connection',
@@ -78,7 +78,7 @@ it('advertises the read tools plus create_draft, and never a send tool', () => {
       'find_person', 'list_drafts', 'update_draft', 'delete_draft',
     ]),
   );
-  // The only write is create_draft (Outbox). Nothing may send on the user's behalf.
+  // Writes here only reach the Outbox. Sending lives behind its own switch.
   expect(names.some((n) => /send/i.test(n))).toBe(false);
   for (const t of toolDescriptors()) expect(t.inputSchema).toHaveProperty('type', 'object');
 });

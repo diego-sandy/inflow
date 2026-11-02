@@ -4,11 +4,16 @@ import { sendBridgeMessage } from '@/lib/bridge';
 import { useOutbox } from '@/hooks/useOutbox';
 import { tabLabel } from '@/lib/inbox-labels';
 
-/** The outbound-queue views reachable from the tab row's "More" menu. */
-const QUEUE_TABS: { id: InboxTab }[] = [
-  { id: 'drafts' },
-  { id: 'scheduled' },
+/**
+ * Every folder, in one dropdown. Primary heads it as the default view; the
+ * groups (inbox, the outbound queue, the rarely visited) are divided by a rule.
+ */
+const FOLDER_GROUPS: InboxTab[][] = [
+  ['focused', 'other'],
+  ['drafts', 'scheduled'],
+  ['archived', 'spam'],
 ];
+const FOLDERS = FOLDER_GROUPS.flat();
 
 const FILTER_SUGGESTIONS = [
   { filter: 'is:unread', description: 'Unread conversations' },
@@ -26,13 +31,6 @@ const FILTER_SUGGESTIONS = [
 
 /** Prefixes that accept a user-provided value after the colon */
 const VALUE_PREFIXES = ['from:', 'after:', 'before:', 'newer:', 'older:'];
-
-const TABS: { id: InboxTab; key: string }[] = [
-  { id: 'focused', key: '1' },
-  { id: 'other', key: '2' },
-  { id: 'archived', key: '3' },
-  { id: 'spam', key: '4' },
-];
 
 /** Map UI tab to LinkedIn API category for on-demand sync. */
 export const TAB_CATEGORY: Record<InboxTab, string | null> = {
@@ -58,11 +56,9 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const { drafts, scheduled, ready } = useOutbox();
   const queueCounts: Record<string, number> = { drafts: drafts.length, scheduled: ready.length + scheduled.length };
-  const queueActive = inboxTab === 'drafts' || inboxTab === 'scheduled';
 
   function handleTabSelect(tab: InboxTab) {
     setInboxTab(tab);
@@ -169,128 +165,75 @@ export function ConversationListHeader({ conversationCount }: { conversationCoun
   }
 
   return (
-    // @container enables the width-based visibility below: with the sidebar
-    // now resizable, secondary controls yield space before the row overflows.
-    <div className="@container flex flex-col gap-2 border-b border-edge px-4 py-3">
+    <div className="flex flex-col gap-2 border-b border-edge px-4 py-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-        {/* Folder selector — segmented control when the (resizable) sidebar is
-            wide enough, a compact dropdown when it's narrow. */}
-        <div className="hidden rounded-md bg-surface-input p-0.5 @min-[352px]:flex">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabSelect(tab.id)}
-              className={`cursor-pointer rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
-                inboxTab === tab.id
-                  ? 'bg-surface text-fg-strong shadow-sm'
-                  : 'text-fg-muted hover:text-fg-secondary'
-              }`}
-            >
-              {labelFor(tab.id)}
-            </button>
-          ))}
-        </div>
-
-        {/* Outbound queue (Drafts / Scheduled) — a small menu beside the tabs. */}
-        <div className="relative hidden @min-[352px]:block">
-          <button
-            onClick={() => setMoreOpen((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-              queueActive || moreOpen
-                ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
-                : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'
-            }`}
-          >
-            {queueActive ? labelFor(inboxTab) : 'More'}
-            {!queueActive && (queueCounts.drafts + queueCounts.scheduled) > 0 && (
-              <span className="rounded-full bg-blue-500/20 px-1.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
-                {queueCounts.drafts + queueCounts.scheduled}
-              </span>
-            )}
-            <svg className={`h-3 w-3 transition-transform ${moreOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-          </button>
-          {moreOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-              <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-edge bg-surface-raised py-1 shadow-lg">
-                {QUEUE_TABS.map((t) => {
-                  const active = inboxTab === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      role="menuitemradio"
-                      aria-checked={active}
-                      onClick={() => { handleTabSelect(t.id); setMoreOpen(false); }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
-                    >
-                      <span className="flex-1">{labelFor(t.id)}</span>
-                      {queueCounts[t.id] > 0 && (
-                        <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${active ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-surface-input text-fg-muted'}`}>
-                          {queueCounts[t.id]}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Narrow width: one custom folder dropdown (no native OS popup). */}
-        <div className="relative @min-[352px]:hidden">
+        {/* Folder dropdown — every folder in one custom menu (no native OS popup). */}
+        <div className="relative">
           <button
             onClick={() => setFolderMenuOpen((v) => !v)}
             aria-label="Folder"
             aria-haspopup="menu"
             aria-expanded={folderMenuOpen}
-            className="flex items-center gap-1 rounded-md bg-surface-input px-2 py-1 text-[11px] font-medium text-fg-strong transition-colors hover:bg-surface-hover"
+            className="flex cursor-pointer items-center gap-1 rounded-md bg-surface-input px-2 py-1 text-xs font-medium text-fg-strong transition-colors hover:bg-surface-hover"
           >
-            {[...TABS, ...QUEUE_TABS].some((t) => t.id === inboxTab) ? labelFor(inboxTab) : 'Folder'}
+            {FOLDERS.includes(inboxTab) ? labelFor(inboxTab) : 'Folder'}
             <svg className={`h-3 w-3 text-fg-muted transition-transform ${folderMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
           </button>
           {folderMenuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setFolderMenuOpen(false)} />
               <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-edge bg-surface-raised py-1 shadow-lg">
-                {[...TABS, ...QUEUE_TABS].map((t) => {
-                  const active = inboxTab === t.id;
-                  const count = queueCounts[t.id];
-                  return (
-                    <button
-                      key={t.id}
-                      role="menuitemradio"
-                      aria-checked={active}
-                      onClick={() => { handleTabSelect(t.id); setFolderMenuOpen(false); }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
-                    >
-                      <span className="flex-1">{labelFor(t.id)}</span>
-                      {count > 0 && (
-                        <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${active ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-surface-input text-fg-muted'}`}>{count}</span>
-                      )}
-                    </button>
-                  );
-                })}
+                {FOLDER_GROUPS.map((group, g) => (
+                  <div key={g} role="group" className={g > 0 ? 'mt-1 border-t border-edge pt-1' : ''}>
+                    {group.map((id) => {
+                      const active = inboxTab === id;
+                      const count = queueCounts[id];
+                      return (
+                        <button
+                          key={id}
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => { handleTabSelect(id); setFolderMenuOpen(false); }}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${active ? 'text-blue-700 dark:text-blue-300' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg-strong'}`}
+                        >
+                          <span className="flex-1">{labelFor(id)}</span>
+                          {count > 0 && (
+                            <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${active ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-surface-input text-fg-muted'}`}>{count}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </>
           )}
         </div>
 
-        {/* Unread quick-filter — sets/clears the is:unread search filter */}
+        {/* Unread quick-filter — a switch over the is:unread search filter, so
+            it's plain whether it's on. */}
         <button
+          type="button"
+          role="switch"
+          aria-checked={unreadActive}
           onClick={toggleUnread}
           title="Show only unread"
-          aria-pressed={unreadActive}
-          className={`cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-            unreadActive
-              ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
-              : 'bg-surface-input text-fg-muted hover:text-fg-secondary'
-          }`}
+          className="flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg-strong"
         >
-          Unread
+          <span
+            aria-hidden
+            className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+              unreadActive ? 'bg-blue-600' : 'bg-surface-input ring-1 ring-inset ring-edge'
+            }`}
+          >
+            <span
+              className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                unreadActive ? 'translate-x-3.5' : 'translate-x-0.5'
+              }`}
+            />
+          </span>
+          <span className={unreadActive ? 'text-fg-strong' : ''}>Unread</span>
         </button>
         </div>
 

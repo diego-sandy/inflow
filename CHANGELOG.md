@@ -61,6 +61,10 @@ All notable changes to inflow are documented here. This project follows
   without ever sending it, and inflow answers nothing until the connector
   has proved itself. Reinstall `inflow.mcpb` once after updating.
 - **Releases** check that the AI models inflow offers are still current.
+- **Messages folders** — one dropdown holds every folder: Primary (the
+  default) and Other, then Drafts and Scheduled with their counts, then
+  Archive and Spam. Unread is now a switch, so it's plain when it's on. The
+  1–4 keys still go to Primary, Other, Archive and Spam.
 
 ### Fixed
 - **Open conversation lands on the right tab** — from a contact in

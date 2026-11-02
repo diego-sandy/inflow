@@ -144,23 +144,21 @@ describe('useResizableSidebar', () => {
   });
 });
 
-describe('narrow-sidebar folder dropdown', () => {
+describe('folder dropdown', () => {
   beforeEach(() => {
     useUIStore.setState({ inboxTab: 'focused', searchQuery: '' });
     sendBridgeMessage.mockReset();
     sendBridgeMessage.mockResolvedValue({ success: true });
   });
 
-  it('renders both selector variants, container-gated by sidebar width', () => {
+  it('is the one folder selector at every width, naming the current folder', () => {
     render(<ConversationListHeader />);
-    // Segmented control: visible only when the sidebar is wide enough.
-    const segmented = screen.getByRole('button', { name: 'Primary' }).parentElement!;
-    expect(segmented.className).toContain('hidden');
-    expect(segmented.className).toContain('@min-[352px]:flex');
-    // Narrow-width custom dropdown (a button, not a native select).
+    // A custom dropdown (a button, not a native select), with no width gate.
     const folder = screen.getByRole('button', { name: 'Folder' });
-    expect(folder.parentElement!.className).toContain('@min-[352px]:hidden');
+    expect(folder.parentElement!.className).not.toMatch(/@min-|hidden/);
     expect(folder.textContent).toContain('Primary');
+    // No segmented tabs beside it.
+    expect(screen.queryByRole('button', { name: 'Primary' })).toBeNull();
   });
 
   it('choosing a folder in the dropdown switches folders and triggers the category sync', () => {

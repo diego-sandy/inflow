@@ -410,8 +410,8 @@ describe('held messages (lib/queue-holds)', () => {
     await listed('Dana Whitfield');
 
     fireEvent.click(await within(pane()).findByRole('button', { name: 'Open the conversation' }));
+    await waitFor(() => expect(useUIStore.getState().selectedConversationId).toBe('conv-dana'));
     expect(useUIStore.getState().activeSection).toBe('inbox');
-    expect(useUIStore.getState().selectedConversationId).toBe('conv-dana');
   });
 
   it('saving an edit counts as looking it over', async () => {

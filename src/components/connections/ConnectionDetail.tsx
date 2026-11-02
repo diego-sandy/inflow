@@ -8,6 +8,7 @@ import { useConversationSummary } from '@/hooks/useConversationSummary';
 import { useRefreshConnection } from '@/hooks/useRefreshConnection';
 import { useUIStore } from '@/store/ui-store';
 import { db } from '@/db/database';
+import { navigateToConversation } from '@/lib/navigate-to-conversation';
 import { isConversationSummaryStale } from '@/lib/connection-conversation-summary';
 import { Markdown } from '@/components/common/Markdown';
 import { SparkleIcon } from '@/components/common/SparkleIcon';
@@ -78,8 +79,8 @@ export function ConnectionDetail() {
 
   const openConversation = () => {
     if (!existingConv) return;
-    useUIStore.getState().setActiveSection('inbox');
-    useUIStore.getState().openThread(existingConv.id, 0);
+    // Lands on the tab it lives in (Archive, Other…), not whichever was open last.
+    void navigateToConversation(existingConv.id);
   };
 
   return (

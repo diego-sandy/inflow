@@ -37,7 +37,7 @@ vi.mock('@/hooks/useConversationSummary', () => ({
   }),
 }));
 
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { ConnectionDetail } from '@/components/connections/ConnectionDetail';
 import { useUIStore } from '@/store/ui-store';
 
@@ -115,7 +115,7 @@ it('says you have not messaged them when there is no conversation', () => {
   expect(screen.queryByText(/Open conversation/i)).not.toBeInTheDocument();
 });
 
-it('offers Open conversation and jumps to the thread when one exists', () => {
+it('offers Open conversation and jumps to the thread when one exists', async () => {
   mockConnections = [conn];
   mockConv = { id: 'conv1', participantUrns: ['urn:li:fsd_profile:P1'], lastActivityAt: Date.now() - 86400000 };
   act(() => useUIStore.setState({ selectedConnectionUrn: 'urn:li:fsd_profile:P1' }));
@@ -124,9 +124,8 @@ it('offers Open conversation and jumps to the thread when one exists', () => {
   const open = screen.getByText(/Open conversation/i);
   expect(open).toBeInTheDocument();
   fireEvent.click(open);
-  const s = useUIStore.getState();
-  expect(s.activeSection).toBe('inbox');
-  expect(s.selectedConversationId).toBe('conv1');
+  await waitFor(() => expect(useUIStore.getState().selectedConversationId).toBe('conv1'));
+  expect(useUIStore.getState().activeSection).toBe('inbox');
 });
 
 it('shows Summarize conversation and calls it when AI is available', () => {

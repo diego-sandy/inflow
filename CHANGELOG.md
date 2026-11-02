@@ -63,6 +63,10 @@ All notable changes to inflow are documented here. This project follows
 - **Releases** check that the AI models inflow offers are still current.
 
 ### Fixed
+- **Open conversation lands on the right tab** — from a contact in
+  Connections, or a reply link in the Outbox, it now opens the conversation in
+  the tab it lives in (Primary, Other, Archive…), instead of the top
+  conversation of whichever tab you had open last.
 - **AI Chat follows the conversation with Claude** — follow-up questions now
   reach Claude with the earlier turns of the chat, so "which of them…" knows
   who "them" is. It already worked this way with Gemini.

@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { db } from '@/db/database';
 import { useUIStore } from '@/store/ui-store';
 import { sendBridgeMessage } from '@/lib/bridge';
+import { navigateToConversation } from '@/lib/navigate-to-conversation';
 import { statusLabel, awaitsRecipientConfirmation, isTooLateToAutoSend } from '@/lib/scheduled-messages';
 import { GroupAvatar } from '../common/GroupAvatar';
 import type { ScheduledMessage } from '@/types/scheduled-message';
@@ -175,11 +176,8 @@ export function OutboxRow({
   );
   // "Still send it": the user has looked again and it still stands.
   const keepAfterReply = () => save({ reviewedAt: Date.now() });
-  const openReply = (conversationId: string) => {
-    const store = useUIStore.getState();
-    store.setActiveSection('inbox');
-    store.openThread(conversationId, 0);
-  };
+  // Lands on the tab the thread lives in, not whichever was open last.
+  const openReply = (conversationId: string) => void navigateToConversation(conversationId);
   const inMailChip = msg.inMailSubject !== undefined && (
     <span
       title="Sends as a Premium InMail and uses one credit"

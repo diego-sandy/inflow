@@ -12,15 +12,17 @@ const TABS = ['archived', 'spam', 'other', 'focused'] as const;
  * the rendered (tab-filtered) list — otherwise App's auto-select effect can't
  * find it and lands on an unrelated fallback conversation. A search hides it
  * just as effectively as the wrong tab, so that is cleared too: every caller
- * here is an external jump (a notification click, the incoming-message toast),
- * and being taken to a thread you cannot see is the same bug.
+ * here is an external jump (a notification click, the incoming-message toast,
+ * Open conversation on a contact, a reply link in the Outbox), and being taken
+ * to a thread you cannot see is the same bug. For the same reason it switches
+ * to the inbox section: a jump from Connections or the Outbox starts elsewhere.
  *
  * If the conversation isn't in the local DB yet (e.g. a brand-new thread still
  * syncing), we leave the current tab and let App reconcile once it appears.
  */
 export async function navigateToConversation(conversationId: string): Promise<void> {
-  if (!db) return;
-  const conv = await db.conversations.get(conversationId);
+  const conv = db ? await db.conversations.get(conversationId) : undefined;
+  useUIStore.getState().setActiveSection('inbox');
   if (conv) {
     // Same rule App uses to decide a selected row is still coming, so the two
     // can't disagree about where a conversation lives.

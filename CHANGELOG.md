@@ -63,6 +63,9 @@ All notable changes to inflow are documented here. This project follows
 - **Releases** check that the AI models inflow offers are still current.
 
 ### Fixed
+- **AI Chat follows the conversation with Claude** — follow-up questions now
+  reach Claude with the earlier turns of the chat, so "which of them…" knows
+  who "them" is. It already worked this way with Gemini.
 - **Composer drafts** — moving past a conversation before its draft loaded
   deleted it; a slow load could overwrite what you'd typed; changing a new
   message's recipients wiped it.

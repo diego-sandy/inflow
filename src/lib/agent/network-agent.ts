@@ -1,6 +1,6 @@
 import { toolDescriptors, callTool } from '@/lib/mcp/tools';
 import { requestAnthropicViaCompanion } from '@/lib/mcp/bridge-client';
-import { runToolAgent, type AgentStep, type AgentTool } from './claude-agent';
+import { runToolAgent, type AgentStep, type AgentTool, type PriorTurn } from './claude-agent';
 
 /**
  * The in-app Claude agent for AI Chat (Phase 2). Instead of stuffing the network
@@ -37,6 +37,8 @@ export function agentTools(): AgentTool[] {
 
 export interface AnswerWithAgentOptions {
   question: string;
+  /** The chat so far, so follow-up questions keep their context. */
+  history?: PriorTurn[];
   model: string;
   system?: string;
   onStep?: (step: AgentStep) => void;
@@ -65,6 +67,7 @@ export async function answerWithClaudeAgent(opts: AnswerWithAgentOptions): Promi
   return runToolAgent({
     system,
     question: opts.question,
+    history: opts.history,
     tools,
     callModel,
     runTool: (name, args) => callTool(name, args, ['read']),

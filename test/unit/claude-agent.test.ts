@@ -1,6 +1,6 @@
 // The Claude tool-use loop: drive the model, run requested tools, feed results
 // back, and stop on the final answer or the step budget.
-import { runToolAgent, type CallModel, type RunTool } from '@/lib/agent/claude-agent';
+import { runToolAgent, historyMessages, type CallModel, type RunTool } from '@/lib/agent/claude-agent';
 
 const tools = [{ name: 'search_connections', description: 'search', input_schema: { type: 'object' } }];
 
@@ -66,4 +66,51 @@ it('stops at the step budget', async () => {
   const out = await runToolAgent({ system: 's', question: 'q', tools, callModel, runTool, maxSteps: 3 });
   expect((callModel as any).mock.calls.length).toBe(3);
   expect(out).toMatch(/ran out of steps/i);
+});
+
+describe('conversation history', () => {
+  it('puts earlier turns before the new question', async () => {
+    const callModel: CallModel = vi.fn().mockResolvedValue(textMsg('Sam.'));
+    await runToolAgent({
+      system: 's', question: 'which one is in Boston?', tools, callModel, runTool: vi.fn(),
+      history: [
+        { role: 'user', content: 'who are my investors?' },
+        { role: 'assistant', content: 'Dana and Sam.' },
+      ],
+    });
+    expect((callModel as any).mock.calls[0][0].messages.slice(0, 3)).toEqual([
+      { role: 'user', content: 'who are my investors?' },
+      { role: 'assistant', content: 'Dana and Sam.' },
+      { role: 'user', content: 'which one is in Boston?' },
+    ]);
+  });
+
+  it('keeps the most recent turns that fit the budget', () => {
+    const out = historyMessages(
+      [
+        { role: 'user', content: 'x'.repeat(50) },
+        { role: 'assistant', content: 'y'.repeat(50) },
+        { role: 'user', content: 'recent question' },
+        { role: 'assistant', content: 'recent answer' },
+      ],
+      40,
+    );
+    expect(out).toEqual([
+      { role: 'user', content: 'recent question' },
+      { role: 'assistant', content: 'recent answer' },
+    ]);
+  });
+
+  it('merges same-role neighbours, skips empties, and starts on a user turn', () => {
+    const out = historyMessages([
+      { role: 'assistant', content: 'stray' },
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: '  ' },
+      { role: 'user', content: 'second' },
+    ]);
+    expect(out).toEqual([
+      { role: 'user', content: 'first\n\nsecond' },
+      { role: 'assistant', content: '(no answer)' },
+    ]);
+  });
 });

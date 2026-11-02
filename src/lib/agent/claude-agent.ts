@@ -33,9 +33,20 @@ export type CallModel = (req: {
 
 export type RunTool = (name: string, input: Record<string, any>) => Promise<unknown>;
 
+/** An earlier turn of the same chat, as the transcript saved it. */
+export interface PriorTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/** How much of the earlier conversation goes along with a question, in characters. */
+export const HISTORY_CHAR_BUDGET = 40000;
+
 export interface RunAgentOptions {
   system: string;
   question: string;
+  /** The chat so far, oldest first, so a follow-up can lean on what was said. */
+  history?: PriorTurn[];
   tools: AgentTool[];
   callModel: CallModel;
   runTool: RunTool;
@@ -55,6 +66,38 @@ function textOf(content: any[]): string {
 }
 
 /**
+ * The earlier turns as Messages API turns. Only the text survives from past
+ * turns (the tool calls behind an answer aren't saved), which is enough for
+ * Claude to know who "they" or "the second one" is. Keeps the most recent
+ * turns that fit the budget, merges same-role neighbours (a failed turn leaves
+ * two questions in a row) and starts on a user turn, as the API requires.
+ */
+export function historyMessages(history: PriorTurn[] = [], budget = HISTORY_CHAR_BUDGET): any[] {
+  const kept: PriorTurn[] = [];
+  let used = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i];
+    const text = typeof turn?.content === 'string' ? turn.content.trim() : '';
+    if (!text || (turn.role !== 'user' && turn.role !== 'assistant')) continue;
+    if (used + text.length > budget) break;
+    used += text.length;
+    kept.unshift({ role: turn.role, content: text });
+  }
+  const merged: PriorTurn[] = [];
+  for (const turn of kept) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === turn.role) last.content += `\n\n${turn.content}`;
+    else merged.push({ ...turn });
+  }
+  while (merged.length && merged[0].role !== 'user') merged.shift();
+  // The new question follows as a user turn, so the history must end on Claude's.
+  if (merged.length && merged[merged.length - 1].role === 'user') {
+    merged.push({ role: 'assistant', content: '(no answer)' });
+  }
+  return merged;
+}
+
+/**
  * Run the agent loop and return the final answer text. Throws if the model
  * transport rejects (surfaced to the caller for a friendly error).
  */
@@ -63,7 +106,7 @@ export async function runToolAgent(opts: RunAgentOptions): Promise<string> {
   const maxSteps = opts.maxSteps ?? 6;
   const maxTokens = opts.maxTokens ?? 8192;
 
-  const messages: any[] = [{ role: 'user', content: question }];
+  const messages: any[] = [...historyMessages(opts.history), { role: 'user', content: question }];
   let lastText = '';
 
   for (let step = 0; step < maxSteps; step++) {

@@ -134,6 +134,7 @@ export function useConnectionChat(): ConnectionChatState {
           store.setStatus('Claude is working…');
           finalText = await answerWithClaudeAgent({
             question,
+            history,
             model,
             onStep: (s) => useInsightChatStore.getState().setStatus(activityLabel(s.tool, s.input)),
           });

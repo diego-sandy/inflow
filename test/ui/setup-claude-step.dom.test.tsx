@@ -166,3 +166,26 @@ it('opens straight at this step when asked to (the MCP connector section)', asyn
   act(() => useUIStore.getState().openSetup({ step: 'claude' }));
   await screen.findByRole('heading', { name: 'Set up the MCP connector' });
 });
+
+it('says Always allow also covers the actions allowed in inflow, and how many tools there are', async () => {
+  const { toolDescriptors } = await import('@/lib/mcp/tools');
+  const { SEND_LIMIT_PER_HOUR } = await import('@/lib/mcp/permissions');
+  await openStep();
+  fireEvent.click(header('Set Tool permissions to Always allow'));
+  const row = rowTitled('Set Tool permissions to Always allow');
+  expect(row).toHaveTextContent(/covers the actions you allow in inflow's Settings › AI › Claude/);
+  expect(row).toHaveTextContent(new RegExp(`capped at ${SEND_LIMIT_PER_HOUR} messages an hour`));
+  // The drawing counts the tools Claude really lists, not a number from when there were fewer.
+  expect(row).toHaveTextContent(`Other tools ${toolDescriptors().length}`);
+});
+
+it("draws inflow's page in Claude with the extension's real description", async () => {
+  const { readFileSync } = await import('node:fs');
+  const { resolve } = await import('node:path');
+  const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'mcp-companion', 'manifest.json'), 'utf8'));
+  await openStep();
+  fireEvent.click(header('Open it, and click Install twice'));
+  expect(within(rowTitled('Open it, and click Install twice')).getAllByText(manifest.description).length).toBeGreaterThan(0);
+  // It says Claude can act, and that inflow decides.
+  expect(manifest.description).toMatch(/once you allow it in inflow/);
+});

@@ -61,6 +61,10 @@ All notable changes to inflow are documented here. This project follows
   without ever sending it, and inflow answers nothing until the connector
   has proved itself. Reinstall `inflow.mcpb` once after updating.
 - **Releases** check that the AI models inflow offers are still current.
+- **MCP connector setup** — the Tool permissions step now says that Always
+  allow also covers the actions you turn on in Settings › AI › Claude, and its
+  drawing shows the real number of tools. Claude's description of inflow says
+  it can act once you allow it; reinstall `inflow.mcpb` once to see it.
 - **Messages folders** — one dropdown holds every folder: Primary (the
   default) and Other, then Drafts and Scheduled with their counts, then
   Archive and Spam. Unread is now a switch, so it's plain when it's on. The

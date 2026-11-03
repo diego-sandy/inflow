@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { LogoMark } from '@/components/common/Wordmark';
+import { toolDescriptors } from '@/lib/mcp/tools';
+import companionManifest from '../../../mcp-companion/manifest.json';
 
 /**
  * Animated drawings of the Claude Desktop screens the MCP connector guide
@@ -61,8 +63,11 @@ function Toggle({ className = '' }: { className?: string }) {
   );
 }
 
-const DESCRIPTION =
-  'Let Claude work with your inflow LinkedIn network — search connections, read network stats, and draft messages into your Outbox.';
+/** The extension's description, as Claude shows it (mcp-companion/manifest.json). */
+const DESCRIPTION = companionManifest.description;
+
+/** How many tools Claude lists under inflow, so the drawing can't fall behind. */
+const TOOL_COUNT = toolDescriptors().length;
 
 /** inflow's page in Claude, before and after installing. */
 function ExtensionPage({ installed, installClass = '' }: { installed?: boolean; installClass?: string }) {
@@ -199,7 +204,7 @@ export function PermissionsAnimation() {
       <p className="absolute left-[96px] top-[140px] text-[9px] font-semibold">Tool permissions</p>
       <p className="absolute left-[96px] top-[154px] w-[230px] text-[7px] text-[#a3a19c]">Choose when Claude is allowed to use these tools.</p>
       <p className="absolute left-[96px] top-[176px] text-[8.5px]">
-        ⌄ Other tools <span className="rounded-full bg-[#3d3d3a] px-1.5 text-[7px]">14</span>
+        ⌄ Other tools <span className="rounded-full bg-[#3d3d3a] px-1.5 text-[7px]">{TOOL_COUNT}</span>
       </p>
       <span className="absolute left-[244px] top-[171px] flex h-[19px] w-[86px] items-center justify-center rounded-md bg-[#3a3a37] text-[8px]">
         <span className="setup-perm-before absolute inset-0 flex items-center justify-center gap-1 text-[#a3a19c]">

@@ -4,6 +4,7 @@ import { getOrCreatePairingCode, getMcpEnabled, setMcpEnabled } from '@/lib/mcp/
 import { startMcpBridge } from '@/lib/mcp/bridge-client';
 import { CheckBadge, StepFooter, StepTitle, Waiting, openTab } from './SetupSteps';
 import { ConfigureAnimation, EnabledIllustration, InstallAnimation, PermissionsAnimation } from './ClaudeIllustrations';
+import { SEND_LIMIT_PER_HOUR } from '@/lib/mcp/permissions';
 
 /**
  * The setup wizard's MCP connector step: installing inflow.mcpb in Claude
@@ -235,9 +236,14 @@ export function ConnectorGuide({ onBack, onSkip, onFinish }: Props) {
           onToggle={() => setOpen(open === 'allow' ? null : 'allow')}
           onDone={() => complete('allow')}
         >
-          <p className="mb-3">
+          <p className="mb-2">
             So Claude doesn't ask before every lookup: in Claude, open <B>Settings › Extensions › inflow</B>, and under{' '}
             <B>Tool permissions</B> set <B>Other tools</B> to <B>Always allow</B>.
+          </p>
+          <p className="mb-3">
+            That also covers the actions you allow in inflow's <B>Settings › AI › Claude</B>, like archiving or
+            sending: Claude won't ask before doing them. They're all off until you turn them on there, and sending is
+            capped at {SEND_LIMIT_PER_HOUR} messages an hour.
           </p>
           <Drawing>
             <PermissionsAnimation />
